@@ -31,6 +31,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6
+        with:
+          path: src-tauri/binaries/.download
+          key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
       - run: pnpm fetch:runtime
       - run: pnpm check
 
@@ -58,7 +62,14 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6
+        with:
+          path: src-tauri/binaries/.download
+          key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
       - run: pnpm fetch:runtime
+      - name: Smoke-test the bundled sidecar
+        if: runner.os != 'Linux'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib smoke_
       - run: pnpm build --debug
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/binaries/llama

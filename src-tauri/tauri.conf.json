@@ -31,8 +31,12 @@
     "shortDescription": "Lokale KI-Korrektur von Schülerarbeiten",
     "license": "GPL-3.0-or-later",
     "licenseFile": "../LICENSE",
-    "externalBin": ["binaries/llama-server"],
+    "externalBin": ["binaries/rotstift-llama-server"],
     "resources": { "binaries/llama/*": "llama/" },
+    "linux": {
+      "deb": { "depends": ["libgomp1", "libssl3", "libstdc++6 (>= 12)"] },
+      "rpm": { "depends": ["libgomp", "openssl-libs >= 3", "libstdc++ >= 12"] }
+    },
     "publisher": "Simon Gehring",
     "icon": [
       "icons/32x32.png",
