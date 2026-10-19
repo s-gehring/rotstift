@@ -60,3 +60,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm fetch:runtime
       - run: pnpm build --debug
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/binaries/llama
