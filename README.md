@@ -8,16 +8,25 @@ Lehrkräfte erzielen mit Cloud-KI gute Ergebnisse beim Korrigieren, dürfen Sch�
 
 ## Stand
 
-Projektgerüst: Leeres Fenster, Wortzählung für die Statistik, CI und Release-Builds. Geplant:
+Version 0.1 zählt die Wörter handschriftlicher Texte, komplett offline:
 
-- Bilder und PDFs per Drag and drop laden, Seiten drehen und sortieren.
-- Korrekturprofile je Fach und Sprache, mit einem zur Hardware passenden Modellvorschlag.
-- Korrektur-Pipeline: Handschrift transkribieren, als HTML mit standardisierten Korrekturzeichen annotieren, Anmerkungen in roter Schrift auf das Original übertragen.
+- Bilder (PNG, JPEG, WebP) und PDFs per Drag and drop laden, Seiten drehen, sortieren und entfernen.
+- „Wörter zählen“ liest jede Seite mit einem lokalen KI-Modell (GLM-OCR) und zeigt die Wortzahl je Seite und gesamt. Der erkannte Text lässt sich korrigieren, die Zahlen passen sich sofort an.
+- Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Datei. Leere Seiten zählen mit 0 Wörtern.
+
+Genauigkeit: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag die Wortzahl im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Durchgestrichenes behandelt Rotstift noch nicht gesondert.
+
+Geschwindigkeit: Nur auf der CPU eines schnellen Rechners (Apple M4 Pro, 4 Threads) rund 12 Sekunden pro Seite, auf einfachen Laptops entsprechend länger. Mit der Grafikeinheit von Apple Silicon 2 bis 4 Sekunden.
+
+Geplant:
+
+- Korrekturprofile je Fach und Sprache, mit einem zur Hardware passenden Modellvorschlag und stärkeren Modellen zur Wahl.
+- Korrektur-Pipeline: Text als HTML mit standardisierten Korrekturzeichen annotieren, Anmerkungen in roter Schrift auf das Original übertragen.
 - Export: Korrigiertes PDF und Statistik (Wörter, Fehler nach Art und Schwere).
 
 ## Erster Start
 
-Zum Wörterzählen liest Rotstift die Handschrift mit einem KI-Modell, das auf dem eigenen Rechner läuft. Das Modell (rund 1,6 GB) wird beim ersten Mal heruntergeladen:
+Zum Wörterzählen liest Rotstift die Handschrift mit einem KI-Modell, das auf dem eigenen Rechner läuft. Das Modell (rund 1,4 GB) wird beim ersten Mal heruntergeladen:
 
 1. Seiten laden und auf „Texterkennung einrichten“ klicken. Solange das Modell fehlt, ist „Wörter zählen“ ausgegraut.
 2. Im Dialog stehen Größe und Quelle. Der Download ist einmalig, danach arbeitet Rotstift komplett offline, und es werden keine Schülerdaten übertragen.
