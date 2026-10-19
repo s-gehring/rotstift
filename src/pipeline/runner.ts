@@ -45,6 +45,14 @@ const EMPTY: RunState = { entries: {}, batch: null, durationsMs: [], runningSinc
 
 const CANCELLED: TranscribeResult = { ok: false, error: { kind: 'cancelled' } };
 
+const MAX_CRASHES_PER_BATCH = 2;
+
+const CRASH_LIMIT_ERROR: TranscribeError = {
+  kind: 'failed',
+  message:
+    'Die Texterkennung wurde in diesem Durchgang mehrfach unerwartet beendet. Vermutlich reicht der freie Arbeitsspeicher nicht aus. Bitte andere Programme schließen und die übrigen Seiten erneut erkennen lassen.',
+};
+
 const isQueued = (entry: PageEntry) => entry.status === 'waiting' || entry.status === 'running';
 
 function errorMessage(error: unknown): string {
@@ -155,7 +163,10 @@ export function createRunner(deps: RunnerDeps) {
       : { ...entry, status: 'error', rotation: run.rotation, error: result.error };
   };
 
-  const runPage = async (active: PageTranscriber, page: ImportPage) => {
+  const runPage = async (
+    active: PageTranscriber,
+    page: ImportPage,
+  ): Promise<TranscribeResult | undefined> => {
     const run: Current = {
       id: page.id,
       rotation: page.rotation,
@@ -167,16 +178,37 @@ export function createRunner(deps: RunnerDeps) {
     patchEntry(page.id, { status: 'running', error: null }, { runningSince: started });
     const result = await attempt(active, page, run.abort.signal);
     if (current === run) current = null;
-    if (run.reason !== undefined) return;
+    if (run.reason !== undefined) return undefined;
     const entry = state.entries[page.id];
-    if (entry === undefined) return;
+    if (entry === undefined) return undefined;
     const batch = state.batch;
     commit({
       ...state,
       entries: { ...state.entries, [page.id]: settle(entry, run, result) },
       batch: batch && { ...batch, finished: batch.finished + 1 },
-      durationsMs: result.ok ? [...state.durationsMs, now() - started] : state.durationsMs,
+      durationsMs: result.ok
+        ? [...state.durationsMs, Math.max(0, now() - started - (result.startupMs ?? 0))]
+        : state.durationsMs,
       runningSince: null,
+    });
+    return result;
+  };
+
+  const failWaiting = (error: TranscribeError) => {
+    const entries = { ...state.entries };
+    let failed = 0;
+    for (const [id, entry] of Object.entries(entries)) {
+      if (entry.status !== 'waiting') continue;
+      failed += 1;
+      entries[id] = entry.hasTranscript
+        ? { ...entry, status: 'done', error }
+        : { ...entry, status: 'error', error };
+    }
+    const batch = state.batch;
+    commit({
+      ...state,
+      entries,
+      batch: batch && { ...batch, finished: batch.finished + failed },
     });
   };
 
@@ -184,11 +216,19 @@ export function createRunner(deps: RunnerDeps) {
     const active = transcriber;
     if (looping || active === null) return;
     looping = true;
+    let crashes = 0;
     try {
       for (;;) {
         const next = pages.find((page) => state.entries[page.id]?.status === 'waiting');
         if (next === undefined) break;
-        await runPage(active, next);
+        const result = await runPage(active, next);
+        if (result && !result.ok && result.error.kind === 'failed' && result.error.crashed) {
+          crashes += 1;
+          if (crashes >= MAX_CRASHES_PER_BATCH) {
+            failWaiting(CRASH_LIMIT_ERROR);
+            break;
+          }
+        }
       }
     } finally {
       looping = false;

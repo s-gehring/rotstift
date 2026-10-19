@@ -12,21 +12,21 @@ function fakeInvoke(result: unknown, fail = false) {
   return { calls, invoke };
 }
 
-const response = (content: string | null): ChatResponse => ({
-  choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }],
+const response = (content: string | null, finishReason: string | null = 'stop'): ChatResponse => ({
+  choices: [{ index: 0, finish_reason: finishReason, message: { role: 'assistant', content } }],
 });
 
 describe('createLlmClient', () => {
-  it('starts the runtime with the given options', async () => {
+  it('starts the runtime with a registry model id only', async () => {
     const { calls, invoke } = fakeInvoke({ state: 'ready', model: 'm.gguf', port: 1 });
-    const status = await createLlmClient(invoke).start({ model: 'm.gguf', contextSize: 4096 });
+    const status = await createLlmClient(invoke).startModel('qwen');
     expect(status).toEqual({ state: 'ready', model: 'm.gguf', port: 1 });
-    expect(calls).toEqual([['llm_start', { options: { model: 'm.gguf', contextSize: 4096 } }]]);
+    expect(calls).toEqual([['llm_start_model', { modelId: 'qwen' }]]);
   });
 
   it('wraps runtime errors in LlmCallError', async () => {
     const { invoke } = fakeInvoke({ kind: 'modelNotFound', detail: 'm.gguf' }, true);
-    const result = createLlmClient(invoke).start({ model: 'm.gguf' });
+    const result = createLlmClient(invoke).startModel('qwen');
     await expect(result).rejects.toBeInstanceOf(LlmCallError);
     await expect(result).rejects.toMatchObject({
       error: { kind: 'modelNotFound', detail: 'm.gguf' },
@@ -38,11 +38,27 @@ describe('createLlmClient', () => {
     await expect(createLlmClient(invoke).status()).rejects.toBe('command llm_status not found');
   });
 
-  it('returns the text of the first choice', async () => {
+  it('returns the text and the finish reason of the first choice', async () => {
     const { calls, invoke } = fakeInvoke(response('Hallo'));
     const request = { messages: [{ role: 'user' as const, content: 'Sag Hallo' }] };
-    await expect(createLlmClient(invoke).complete(request)).resolves.toBe('Hallo');
+    await expect(createLlmClient(invoke).complete(request)).resolves.toEqual({
+      text: 'Hallo',
+      finishReason: 'stop',
+    });
     expect(calls).toEqual([['llm_chat', { request }]]);
+  });
+
+  it('reports a truncated answer through its finish reason', async () => {
+    const { invoke } = fakeInvoke(response('Abgeschnitten', 'length'));
+    await expect(createLlmClient(invoke).complete({ messages: [] })).resolves.toEqual({
+      text: 'Abgeschnitten',
+      finishReason: 'length',
+    });
+    const missing = fakeInvoke(response('Text', null));
+    await expect(createLlmClient(missing.invoke).complete({ messages: [] })).resolves.toEqual({
+      text: 'Text',
+      finishReason: null,
+    });
   });
 
   it('cancels the request in the runtime when the signal aborts', async () => {

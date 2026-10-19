@@ -1,0 +1,36 @@
+{
+  "models": [
+    {
+      "id": "qwen3-vl-2b-q4",
+      "displayName": "Qwen3-VL 2B Instruct (Q4_K_M)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 8,
+      "files": {
+        "model": {
+          "name": "Qwen3VL-2B-Instruct-Q4_K_M.gguf",
+          "url": "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/52d6c8ffea26cc873ac5ad116f8631268d7eb503/Qwen3VL-2B-Instruct-Q4_K_M.gguf",
+          "sha256": "089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae",
+          "bytes": 1107409952
+        },
+        "mmproj": {
+          "name": "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
+          "url": "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/52d6c8ffea26cc873ac5ad116f8631268d7eb503/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
+          "sha256": "f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82",
+          "bytes": 445053216
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": 2048,
+        "threads": null,
+        "gpuLayers": null
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536
+      },
+      "prompt": "Transkribiere den handschriftlichen Text auf dem Bild buchstabengetreu. Korrigiere nichts: Rechtschreibung, Groß- und Kleinschreibung, Grammatik und Zeichensetzung bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar."
+    }
+  ]
+}

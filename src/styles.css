@@ -375,3 +375,108 @@ button.primary:disabled {
   flex-basis: 100%;
   margin: 0;
 }
+
+.notice.warn {
+  border-color: var(--accent);
+}
+
+button.danger:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-dialog {
+  width: min(36rem, calc(100vw - 2rem));
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.model-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.model-dialog p {
+  margin: 0.75rem 0 0;
+}
+
+.model-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 1rem 0 0;
+}
+
+.model-facts dt {
+  font-weight: 600;
+}
+
+.model-facts dd {
+  margin: 0;
+}
+
+.privacy-note {
+  padding: 0.5rem 0.9rem;
+  border-left: 4px solid var(--accent);
+  background: var(--surface);
+}
+
+.download-progress progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.model-management {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.model-management summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.offline-setup {
+  margin-top: 1rem;
+}
+
+.offline-setup summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.offline-setup ul {
+  padding-left: 1.25rem;
+}
+
+.offline-setup li {
+  margin-bottom: 0.75rem;
+}
+
+.download-url {
+  display: block;
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
