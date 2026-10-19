@@ -14,7 +14,7 @@ node eval/run.ts
 
 - `render.py` setzt die Texte aus `samples/texts/` mit vier OFL-Handschriften auf liniertes Papier und speichert sie als JPEG unter `samples/rendered/`. Die Schriften kommen gepinnt aus `github.com/google/fonts` nach `~/.cache/rotstift/fonts`.
 - `download-models.ts` lädt die Kandidaten aus `models.ts` von Hugging Face nach `~/.cache/rotstift/models` (oder `ROTSTIFT_MODELS_DIR`) und prüft die SHA256. `--verify` prüft auch vorhandene Dateien, `--models a,b` wählt aus.
-- `run.ts` startet je Modell den llama-server aus `src-tauri/binaries` mit `-ngl 0`, `--device none` und 4 Threads, schickt jede Seite mit dem Transkriptionsauftrag und schreibt pro Modell eine JSON-Datei und `summary.md` nach `eval/results/<Zeitstempel>/`. Optionen: `--models`, `--samples` (Teile von Dateinamen), `--threads`, `--ctx-size`, `--max-tokens`, `--image-max-tokens`, `--prompt` (`standard`, `strict` oder `strict-en`, nur für die allgemeinen Modelle), `--out` (vorhandene Modell-Ergebnisse darin werden übernommen).
+- `run.ts` startet je Modell den llama-server aus `src-tauri/binaries` mit `-ngl 0`, `--device none` und 4 Threads, schickt jede Seite mit dem Transkriptionsauftrag und schreibt pro Modell eine JSON-Datei und `summary.md` nach `eval/results/<Zeitstempel>/`. Optionen: `--models`, `--samples` (Teile von Dateinamen), `--threads`, `--ctx-size`, `--max-tokens`, `--image-max-tokens`, `--prompt` (`standard`, `strict` oder `strict-en`, nur für die allgemeinen Modelle), `--dataset` (siehe unten), `--out` (vorhandene Modell-Ergebnisse darin werden übernommen).
 - `summarize.ts <Ordner …>` fasst mehrere Ergebnisordner in einer Tabelle zusammen, etwa Varianten mit anderem Kontext oder Prompt.
 
 ## Proben
@@ -22,6 +22,8 @@ node eval/run.ts
 Die Texte sind selbst geschrieben und enthalten eingebaute Schülerfehler in der Form `{geschrieben|richtig|Art}`, Art ist `R` (Rechtschreibung), `Z` (Zeichensetzung) oder `G` (Grammatik). Gemessen wird gegen den Text, wie er geschrieben steht, denn Rotstift muss die Fehler sehen, nicht verbessern.
 
 Echte Scans gehören nach [`samples/scans/`](samples/scans): Bild (`.jpg`, `.jpeg`, `.png`) und daneben eine gleichnamige `.txt` mit dem Text im selben Format. Nur selbst geschriebene Seiten, nie Arbeiten von Schülerinnen und Schülern.
+
+Fremde Datensätze bleiben außerhalb des Repos. `--dataset <Ordner>` liest stattdessen `images/<name>.jpg` und `ground_truth/<name>.txt` (Klartext ohne Fehlermarken), etwa den [ScaDS.AI German Handwriting Full-Page Dataset](https://doi.org/10.5281/zenodo.18283705) (CC BY 4.0) nach dem Entpacken.
 
 ## Kennzahlen
 

@@ -44,7 +44,27 @@ const IMAGE_TYPES: Record<string, string> = {
   '.png': 'image/png',
 };
 
-function discoverPages(filter: string[] | undefined): Page[] {
+function datasetPages(dir: string): Page[] {
+  const imagesDir = join(dir, 'images');
+  return readdirSync(imagesDir)
+    .toSorted()
+    .flatMap((name): Page[] => {
+      const text = basename(name, extname(name));
+      const truth = join(dir, 'ground_truth', `${text}.txt`);
+      if (!IMAGE_TYPES[extname(name).toLowerCase()] || !existsSync(truth)) return [];
+      const written = readFileSync(truth, 'utf8').trim();
+      return [
+        {
+          image: join(imagesDir, name),
+          text,
+          font: 'handschrift',
+          sample: { written, corrected: written, errors: [] },
+        },
+      ];
+    });
+}
+
+function samplePages(): Page[] {
   const pages: Page[] = [];
   const renderedDir = join(samplesDir, 'rendered');
   if (existsSync(renderedDir)) {
@@ -72,6 +92,10 @@ function discoverPages(filter: string[] | undefined): Page[] {
       sample: parseSample(readFileSync(truth, 'utf8').trim()),
     });
   }
+  return pages;
+}
+
+function selectPages(pages: Page[], filter: string[] | undefined): Page[] {
   return filter
     ? pages.filter((page) => filter.some((part) => basename(page.image).includes(part)))
     : pages;
@@ -316,6 +340,7 @@ async function main() {
     options: {
       models: { type: 'string' },
       samples: { type: 'string' },
+      dataset: { type: 'string' },
       threads: { type: 'string', default: '4' },
       'ctx-size': { type: 'string', default: '8192' },
       'max-tokens': { type: 'string', default: '1536' },
@@ -336,7 +361,10 @@ async function main() {
       `Unknown prompt ${options.prompt}, use one of ${Object.keys(PROMPTS).join(', ')}`,
     );
   }
-  const pages = discoverPages(values.samples?.split(','));
+  const pages = selectPages(
+    values.dataset ? datasetPages(values.dataset) : samplePages(),
+    values.samples?.split(','),
+  );
   if (pages.length === 0) throw new Error('No samples found, run eval/samples/render.py first');
   const wanted = values.models?.split(',');
   const candidates = wanted
