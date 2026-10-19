@@ -6,11 +6,16 @@ use tauri::{Manager, RunEvent};
 pub fn run() {
     tauri::Builder::default()
         .manage(llm::LlmRuntime::new())
+        .setup(|app| {
+            llm::commands::stop_orphaned_sidecars(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             llm::commands::llm_start,
             llm::commands::llm_stop,
             llm::commands::llm_status,
             llm::commands::llm_chat,
+            llm::commands::llm_cancel,
             llm::commands::llm_models,
         ])
         .build(tauri::generate_context!())

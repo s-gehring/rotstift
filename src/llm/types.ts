@@ -6,6 +6,11 @@ export interface StartOptions {
   gpuLayers?: number;
 }
 
+export interface ExitReport {
+  code: number | null;
+  log: string;
+}
+
 export type LlmError =
   | {
       kind:
@@ -14,12 +19,12 @@ export type LlmError =
         | 'sidecarMissing'
         | 'environment'
         | 'spawnFailed'
-        | 'exitedDuringStartup'
-        | 'exitedUnexpectedly'
+        | 'invalidRequest'
         | 'request';
       detail: string;
     }
-  | { kind: 'startupTimeout' | 'notReady' }
+  | { kind: 'exitedDuringStartup' | 'exitedUnexpectedly'; detail: ExitReport }
+  | { kind: 'startupTimeout' | 'notReady' | 'cancelled' | 'timeout' }
   | { kind: 'server'; detail: { status: number; body: string } };
 
 export type RuntimeStatus =

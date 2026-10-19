@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LlmCallError, createLlmClient, imageDataUrl, visionMessage } from './client.ts';
+import { LlmCallError, createLlmClient, visionMessage } from './client.ts';
 import type { Invoke } from './client.ts';
 import type { ChatResponse } from './types.ts';
 
@@ -45,27 +45,42 @@ describe('createLlmClient', () => {
     expect(calls).toEqual([['llm_chat', { request }]]);
   });
 
+  it('cancels the request in the runtime when the signal aborts', async () => {
+    const calls: [string, Record<string, unknown> | undefined][] = [];
+    const invoke: Invoke = (command, args) => {
+      calls.push([command, args]);
+      if (command === 'llm_cancel') return Promise.resolve(JSON.parse('true'));
+      return new Promise<never>((_, reject) => {
+        controller.signal.addEventListener('abort', () => {
+          reject({ kind: 'cancelled' });
+        });
+      });
+    };
+    const controller = new AbortController();
+    const request = { messages: [{ role: 'user' as const, content: 'x' }] };
+    const result = createLlmClient(invoke).chat(request, { signal: controller.signal });
+    controller.abort();
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    const [chat, cancel] = calls;
+    expect(chat?.[0]).toBe('llm_chat');
+    expect(cancel).toEqual(['llm_cancel', { requestId: chat?.[1]?.['requestId'] }]);
+    expect(typeof chat?.[1]?.['requestId']).toBe('string');
+  });
+
+  it('does not call the runtime when the signal is already aborted', async () => {
+    const { calls, invoke } = fakeInvoke(response('Hallo'));
+    const signal = AbortSignal.abort();
+    await expect(createLlmClient(invoke).chat({ messages: [] }, { signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(calls).toEqual([]);
+  });
+
   it('fails when the response has no message text', async () => {
     const { invoke } = fakeInvoke(response(null));
     await expect(createLlmClient(invoke).complete({ messages: [] })).rejects.toBeInstanceOf(
       LlmCallError,
     );
-  });
-});
-
-describe('imageDataUrl', () => {
-  it('encodes bytes as a base64 data URL', () => {
-    expect(imageDataUrl(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), 'image/png')).toBe(
-      'data:image/png;base64,iVBORw==',
-    );
-  });
-
-  it('encodes images larger than one chunk', () => {
-    const bytes = Uint8Array.from({ length: 100_000 }, (_, index) => index % 256);
-    const url = imageDataUrl(bytes, 'image/jpeg');
-    expect(url.startsWith('data:image/jpeg;base64,')).toBe(true);
-    const decoded = atob(url.slice(url.indexOf(',') + 1));
-    expect(Uint8Array.from(decoded, (char) => char.charCodeAt(0))).toEqual(bytes);
   });
 });
 

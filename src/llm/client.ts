@@ -11,6 +11,10 @@ import type {
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
+export interface ChatOptions {
+  signal?: AbortSignal;
+}
+
 export class LlmCallError extends Error {
   readonly error: LlmError;
 
@@ -34,8 +38,23 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
     }
   }
 
-  async function chat(request: ChatRequest): Promise<ChatResponse> {
-    return call<ChatResponse>('llm_chat', { request });
+  async function chat(request: ChatRequest, options: ChatOptions = {}): Promise<ChatResponse> {
+    const { signal } = options;
+    if (!signal) return call<ChatResponse>('llm_chat', { request });
+    signal.throwIfAborted();
+    const requestId = crypto.randomUUID();
+    const cancel = () => {
+      invoke('llm_cancel', { requestId }).catch(() => undefined);
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+    try {
+      return await call<ChatResponse>('llm_chat', { requestId, request });
+    } catch (error) {
+      signal.throwIfAborted();
+      throw error;
+    } finally {
+      signal.removeEventListener('abort', cancel);
+    }
   }
 
   return {
@@ -44,8 +63,8 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
     status: () => call<RuntimeStatus>('llm_status'),
     models: () => call<ModelDirectory>('llm_models'),
     chat,
-    async complete(request: ChatRequest): Promise<string> {
-      const response = await chat(request);
+    async complete(request: ChatRequest, options: ChatOptions = {}): Promise<string> {
+      const response = await chat(request, options);
       const content = response.choices[0]?.message.content;
       if (typeof content !== 'string') {
         throw new LlmCallError({ kind: 'request', detail: 'response contains no message' });
@@ -56,16 +75,6 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
 }
 
 export type LlmClient = ReturnType<typeof createLlmClient>;
-
-const BASE64_CHUNK = 0x8000;
-
-export function imageDataUrl(bytes: Uint8Array, mimeType: string): string {
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK));
-  }
-  return `data:${mimeType};base64,${btoa(binary)}`;
-}
 
 export function visionMessage(prompt: string, imageUrls: readonly string[]): ChatMessage {
   return {
