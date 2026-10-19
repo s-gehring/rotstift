@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { ACCEPT_ATTRIBUTE } from './file-kind.ts';
 import { PageCard } from './PageCard.tsx';
 import type { PagesAction } from './pages.ts';
 import { useFileDrop } from './use-file-drop.ts';
-import { useImportPages } from './use-import-pages.ts';
+import type { useImportPages } from './use-import-pages.ts';
 
 type FocusRequest =
   | {
@@ -18,8 +18,14 @@ function pageCountText(count: number): string {
   return `${count} ${count === 1 ? 'Seite' : 'Seiten'}`;
 }
 
-export function ImportView() {
-  const { pages, dispatch, addFiles, busy, notices, dismissNotices } = useImportPages();
+interface ImportViewProps {
+  readonly importState: ReturnType<typeof useImportPages>;
+  readonly actions?: ReactNode;
+  readonly footer?: ReactNode;
+}
+
+export function ImportView({ importState, actions, footer }: ImportViewProps) {
+  const { pages, dispatch, addFiles, busy, notices, dismissNotices } = importState;
   const [announcement, setAnnouncement] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const pickButton = useRef<HTMLButtonElement>(null);
@@ -164,6 +170,7 @@ export function ImportView() {
       )}
 
       <div className="submit-bar">
+        {actions}
         <button type="button" className="primary" disabled aria-describedby="submit-hint">
           Berichtigen
         </button>
@@ -171,6 +178,7 @@ export function ImportView() {
           Die Korrektur folgt in einer späteren Version.
         </p>
       </div>
+      {footer}
 
       <p className="sr-only" role="status">
         {announcement}
