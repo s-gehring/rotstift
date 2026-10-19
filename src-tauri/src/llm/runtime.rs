@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Read};
 use std::net::Ipv4Addr;
@@ -22,6 +22,7 @@ const CHAT_TIMEOUT: Duration = Duration::from_secs(900);
 const HEALTH_INTERVAL: Duration = Duration::from_millis(250);
 const CRASH_GRACE: Duration = Duration::from_secs(1);
 const LOG_TAIL_LINES: usize = 40;
+const LOG_DRAIN_TIMEOUT: Duration = Duration::from_millis(500);
 const LISTENING_MARKER: &str = "listening on http://";
 const MAX_EARLY_CANCELS: usize = 32;
 
@@ -102,24 +103,75 @@ impl Server {
         lock_log(&self.log).port
     }
 
-    fn exit_report(&mut self) -> Option<ExitReport> {
-        let code = match self.child.try_wait() {
-            Ok(None) => return None,
-            Ok(Some(status)) => status.code(),
-            Err(_) => None,
-        };
-        let deadline = Instant::now() + Duration::from_millis(500);
-        while !lock_log(&self.log).closed && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
+    fn exit_code(&mut self) -> Option<Option<i32>> {
+        match self.child.try_wait() {
+            Ok(None) => None,
+            Ok(Some(status)) => Some(status.code()),
+            Err(_) => Some(None),
         }
-        let log = lock_log(&self.log)
-            .lines
-            .iter()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n");
-        Some(ExitReport { code, log })
     }
+}
+
+struct Exit {
+    generation: u64,
+    code: Option<i32>,
+    log: SharedLog,
+    during_startup: bool,
+}
+
+impl Exit {
+    fn error(&self, report: ExitReport) -> LlmError {
+        if self.during_startup {
+            LlmError::ExitedDuringStartup(report)
+        } else {
+            LlmError::ExitedUnexpectedly(report)
+        }
+    }
+}
+
+fn log_tail(log: &SharedLog) -> String {
+    lock_log(log)
+        .lines
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+async fn exit_report(code: Option<i32>, log: &SharedLog) -> ExitReport {
+    let deadline = Instant::now() + LOG_DRAIN_TIMEOUT;
+    while !lock_log(log).closed && Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    ExitReport {
+        code,
+        log: log_tail(log),
+    }
+}
+
+fn take_exited(state: &mut State) -> Option<Exit> {
+    let during_startup = match state.status {
+        RuntimeStatus::Starting { .. } => true,
+        RuntimeStatus::Ready { .. } => false,
+        _ => return None,
+    };
+    let code = state.server.as_mut()?.exit_code()?;
+    let server = state.server.take()?;
+    let exit = Exit {
+        generation: state.generation,
+        code,
+        log: Arc::clone(&server.log),
+        during_startup,
+    };
+    drop(server);
+    let provisional = ExitReport {
+        code,
+        log: String::new(),
+    };
+    state.status = RuntimeStatus::Failed {
+        error: exit.error(provisional),
+    };
+    Some(exit)
 }
 
 impl Drop for Server {
@@ -138,7 +190,7 @@ struct State {
 #[derive(Default)]
 struct Requests {
     pending: HashMap<String, oneshot::Sender<()>>,
-    cancelled_early: HashSet<String>,
+    cancelled_early: VecDeque<String>,
 }
 
 enum Startup {
@@ -203,10 +255,33 @@ impl LlmRuntime {
         self.requests.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub fn status(&self) -> RuntimeStatus {
+    async fn check_exit(&self) -> Option<LlmError> {
+        let exit = take_exited(&mut self.lock())?;
+        let error = exit.error(exit_report(exit.code, &exit.log).await);
         let mut state = self.lock();
-        detect_crash(&mut state);
-        state.status.clone()
+        if state.generation == exit.generation
+            && matches!(state.status, RuntimeStatus::Failed { .. })
+        {
+            state.status = RuntimeStatus::Failed {
+                error: error.clone(),
+            };
+        }
+        Some(error)
+    }
+
+    pub async fn status(&self) -> RuntimeStatus {
+        self.check_exit().await;
+        self.lock().status.clone()
+    }
+
+    fn abort_start(&self, generation: u64, error: LlmError) -> LlmError {
+        let mut state = self.lock();
+        if state.generation == generation {
+            state.status = RuntimeStatus::Failed {
+                error: error.clone(),
+            };
+        }
+        error
     }
 
     pub fn stop(&self) -> RuntimeStatus {
@@ -241,38 +316,58 @@ impl LlmRuntime {
         process::stop_orphans(&paths.records_dir);
 
         let api_key = random_key()?;
+        let generation = {
+            let mut state = self.lock();
+            state.generation += 1;
+            state.status = RuntimeStatus::Starting {
+                model: options.model.clone(),
+            };
+            state.generation
+        };
         let mut command = process::sidecar_command(
             &paths.sidecar,
             &paths.library_dir,
             server_args(&model, mmproj.as_deref(), &options),
         );
         command.env("LLAMA_API_KEY", &api_key);
-        let spawn_failed = |error: std::io::Error| LlmError::SpawnFailed(error.to_string());
-        let mut child = process::spawn(command).map_err(spawn_failed)?;
-        let record = match process::record(&paths.records_dir, &child, &paths.sidecar) {
-            Ok(record) => record,
+        let mut child = match process::spawn(command) {
+            Ok(child) => child,
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(spawn_failed(error));
+                let error = LlmError::SpawnFailed(error.to_string());
+                return Err(self.abort_start(generation, error));
             }
         };
         let log = read_log(child.stderr.take());
-
-        let generation = {
-            let mut state = self.lock();
-            state.generation += 1;
-            state.server = Some(Server {
-                child,
-                api_key,
-                log,
-                _record: record,
-            });
-            state.status = RuntimeStatus::Starting {
-                model: options.model.clone(),
-            };
-            state.generation
+        let record = match process::record(&paths.records_dir, &child, &paths.sidecar) {
+            Ok(record) => record,
+            Err(error) => {
+                let error = match child.try_wait() {
+                    Ok(Some(status)) => {
+                        LlmError::ExitedDuringStartup(exit_report(status.code(), &log).await)
+                    }
+                    _ => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        LlmError::SpawnFailed(error.to_string())
+                    }
+                };
+                return Err(self.abort_start(generation, error));
+            }
         };
+        let server = Server {
+            child,
+            api_key,
+            log,
+            _record: record,
+        };
+        {
+            let mut state = self.lock();
+            if state.generation != generation {
+                drop(server);
+                return Ok(state.status.clone());
+            }
+            state.server = Some(server);
+        }
         self.wait_until_ready(generation, options.model).await
     }
 
@@ -283,6 +378,9 @@ impl LlmRuntime {
     ) -> Result<RuntimeStatus, LlmError> {
         let deadline = Instant::now() + self.startup_timeout;
         loop {
+            if let Some(error) = self.check_exit().await {
+                return Err(error);
+            }
             let port = match self.startup_progress(generation, deadline) {
                 Startup::Finished(outcome) => return outcome,
                 Startup::Waiting(port) => port,
@@ -308,14 +406,14 @@ impl LlmRuntime {
         if state.generation != generation {
             return Startup::Finished(Ok(state.status.clone()));
         }
-        let Some(server) = state.server.as_mut() else {
+        match &state.status {
+            RuntimeStatus::Starting { .. } => {}
+            RuntimeStatus::Failed { error } => return Startup::Finished(Err(error.clone())),
+            status => return Startup::Finished(Ok(status.clone())),
+        }
+        let Some(port) = state.server.as_ref().map(Server::listening_port) else {
             return Startup::Finished(Ok(state.status.clone()));
         };
-        let (report, port) = (server.exit_report(), server.listening_port());
-        if let Some(report) = report {
-            let error = LlmError::ExitedDuringStartup(report);
-            return Startup::Finished(Err(fail(&mut state, error)));
-        }
         if Instant::now() >= deadline {
             return Startup::Finished(Err(fail(&mut state, LlmError::StartupTimeout)));
         }
@@ -330,11 +428,11 @@ impl LlmRuntime {
         state.status.clone()
     }
 
-    fn ready_server(&self) -> Result<(u16, String), LlmError> {
-        let mut state = self.lock();
-        if let Some(error) = detect_crash(&mut state) {
+    async fn ready_server(&self) -> Result<(u16, String), LlmError> {
+        if let Some(error) = self.check_exit().await {
             return Err(error);
         }
+        let state = self.lock();
         match (&state.status, &state.server) {
             (RuntimeStatus::Ready { port, .. }, Some(server)) => {
                 Ok((*port, server.api_key.clone()))
@@ -349,7 +447,12 @@ impl LlmRuntime {
         id: String,
     ) -> Result<(PendingRequest<'_>, oneshot::Receiver<()>), LlmError> {
         let mut requests = self.requests();
-        if requests.cancelled_early.remove(&id) {
+        if let Some(index) = requests
+            .cancelled_early
+            .iter()
+            .position(|early| *early == id)
+        {
+            requests.cancelled_early.remove(index);
             return Err(LlmError::Cancelled);
         }
         if requests.pending.contains_key(&id) {
@@ -367,10 +470,10 @@ impl LlmRuntime {
         if let Some(sender) = requests.pending.remove(id) {
             return sender.send(()).is_ok();
         }
-        if requests.cancelled_early.len() >= MAX_EARLY_CANCELS {
-            requests.cancelled_early.clear();
+        if requests.cancelled_early.len() == MAX_EARLY_CANCELS {
+            requests.cancelled_early.pop_front();
         }
-        requests.cancelled_early.insert(id.to_owned());
+        requests.cancelled_early.push_back(id.to_owned());
         false
     }
 
@@ -380,8 +483,13 @@ impl LlmRuntime {
         request: Value,
     ) -> Result<Value, LlmError> {
         let request = ChatRequest::parse(request)?;
-        let (port, api_key) = self.ready_server()?;
-        let send = self.post_chat(port, api_key, request);
+        let body = serde_json::to_value(request).map_err(|e| LlmError::Request(e.to_string()))?;
+        self.send_chat(request_id, body).await
+    }
+
+    async fn send_chat(&self, request_id: Option<String>, body: Value) -> Result<Value, LlmError> {
+        let (port, api_key) = self.ready_server().await?;
+        let send = self.post_chat(port, api_key, &body);
         let result = match request_id {
             None => send.await,
             Some(id) => {
@@ -398,18 +506,13 @@ impl LlmRuntime {
         }
     }
 
-    async fn post_chat(
-        &self,
-        port: u16,
-        api_key: String,
-        request: ChatRequest,
-    ) -> Result<Value, LlmError> {
+    async fn post_chat(&self, port: u16, api_key: String, body: &Value) -> Result<Value, LlmError> {
         let response = self
             .http
             .post(format!("http://{HOST}:{port}/v1/chat/completions"))
             .bearer_auth(api_key)
             .timeout(CHAT_TIMEOUT)
-            .json(&request)
+            .json(body)
             .send()
             .await
             .map_err(request_error)?;
@@ -427,7 +530,7 @@ impl LlmRuntime {
     async fn explain_failure(&self, error: LlmError) -> LlmError {
         let deadline = Instant::now() + CRASH_GRACE;
         loop {
-            if let Some(crash) = detect_crash(&mut self.lock()) {
+            if let Some(crash) = self.check_exit().await {
                 return crash;
             }
             if Instant::now() >= deadline {
@@ -446,20 +549,23 @@ fn request_error(error: reqwest::Error) -> LlmError {
     }
 }
 
-fn detect_crash(state: &mut State) -> Option<LlmError> {
-    if !matches!(state.status, RuntimeStatus::Ready { .. }) {
-        return None;
-    }
-    let report = state.server.as_mut()?.exit_report()?;
-    Some(fail(state, LlmError::ExitedUnexpectedly(report)))
-}
-
 fn fail(state: &mut State, error: LlmError) -> LlmError {
     state.server = None;
     state.status = RuntimeStatus::Failed {
         error: error.clone(),
     };
     error
+}
+
+pub fn installed_layout(executable_dir: &Path, resource_dir: &Path) -> (PathBuf, PathBuf) {
+    let sidecar = executable_dir.join(format!("{SIDECAR_NAME}{}", std::env::consts::EXE_SUFFIX));
+    // Windows searches System32 before PATH, so the bundled MSVC runtime only wins next to the exe.
+    let library_dir = if cfg!(windows) {
+        resource_dir.to_path_buf()
+    } else {
+        resource_dir.join("llama")
+    };
+    (sidecar, library_dir)
 }
 
 pub fn resolve_model_file(models_dir: &Path, name: &str) -> Result<PathBuf, LlmError> {
@@ -745,6 +851,19 @@ mod tests {
         assert!(runtime.register("a".into()).is_ok());
     }
 
+    #[test]
+    fn forgets_the_oldest_early_cancellations_first() {
+        let runtime = LlmRuntime::new();
+        for id in 0..=MAX_EARLY_CANCELS {
+            runtime.cancel(&id.to_string());
+        }
+        assert!(runtime.register("0".into()).is_ok());
+        assert!(matches!(
+            runtime.register("1".into()),
+            Err(LlmError::Cancelled)
+        ));
+    }
+
     #[tokio::test]
     async fn start_reports_a_missing_sidecar() {
         let dir = temp_dir("sidecar");
@@ -761,7 +880,33 @@ mod tests {
 
     #[test]
     fn smoke_bundled_sidecar_starts() {
-        let (sidecar, library_dir) = bundled_sidecar();
+        let installed = std::env::var_os("ROTSTIFT_BUNDLE_EXE_DIR")
+            .zip(std::env::var_os("ROTSTIFT_BUNDLE_RESOURCE_DIR"));
+        let (sidecar, library_dir) = match &installed {
+            Some((exe_dir, resource_dir)) => {
+                installed_layout(Path::new(exe_dir), Path::new(resource_dir))
+            }
+            None => bundled_sidecar(),
+        };
+        if installed.is_some() && cfg!(windows) {
+            let neighbours: Vec<String> = std::fs::read_dir(sidecar.parent().unwrap())
+                .unwrap()
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .map(|name| name.to_lowercase())
+                .collect();
+            for dll in ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"] {
+                assert!(
+                    neighbours.iter().any(|name| name == dll),
+                    "{dll} is not next to the sidecar"
+                );
+            }
+            assert!(
+                neighbours
+                    .iter()
+                    .any(|name| name.starts_with("ggml") && name.ends_with(".dll")),
+                "ggml is not next to the sidecar"
+            );
+        }
         let mut command = process::sidecar_command(&sidecar, &library_dir, ["--version".into()]);
         command.stdout(Stdio::piped());
         let output = process::spawn(command).unwrap().wait_with_output().unwrap();
@@ -863,7 +1008,10 @@ mod tests {
                 tokio::spawn(async move { runtime.start(&paths, options("model.gguf")).await })
             };
             let pid = pid_of(&paths);
-            assert!(matches!(runtime.status(), RuntimeStatus::Starting { .. }));
+            assert!(matches!(
+                runtime.status().await,
+                RuntimeStatus::Starting { .. }
+            ));
             runtime.stop();
             assert_eq!(starting.await.unwrap(), Ok(RuntimeStatus::Stopped));
             assert!(!is_running(pid));
@@ -880,7 +1028,10 @@ mod tests {
                 log: "cannot load model".into(),
             });
             assert_eq!(result, Err(expected.clone()));
-            assert_eq!(runtime.status(), RuntimeStatus::Failed { error: expected });
+            assert_eq!(
+                runtime.status().await,
+                RuntimeStatus::Failed { error: expected }
+            );
         }
 
         #[tokio::test]
@@ -918,7 +1069,10 @@ mod tests {
                 }
                 other => panic!("expected a crash report, got {other:?}"),
             }
-            assert!(matches!(runtime.status(), RuntimeStatus::Failed { .. }));
+            assert!(matches!(
+                runtime.status().await,
+                RuntimeStatus::Failed { .. }
+            ));
             assert_eq!(records(&paths), 0);
         }
 
@@ -975,7 +1129,7 @@ mod tests {
         };
         let runtime = Arc::new(LlmRuntime::new());
         let mut start = options(&model);
-        start.context_size = Some(2048);
+        start.context_size = Some(4096);
         start.threads = Some(1);
         let status = runtime.start(&paths, start).await.unwrap();
         assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
@@ -983,18 +1137,18 @@ mod tests {
         let long = {
             let runtime = Arc::clone(&runtime);
             tokio::spawn(async move {
-                let request = json!({
-                    "messages": [
-                        { "role": "user", "content": "Count from 1 to 5000." },
-                        { "role": "assistant", "content": "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12," },
-                    ],
+                let request = ChatRequest::parse(json!({
+                    "messages": [{ "role": "user", "content": "Erzähle eine lange Geschichte." }],
                     "max_tokens": MAX_OUTPUT_TOKENS,
-                });
-                runtime.chat(Some("long".into()), request).await
+                }))
+                .unwrap();
+                let mut body = serde_json::to_value(request).unwrap();
+                body["ignore_eos"] = json!(true);
+                runtime.send_chat(Some("long".into()), body).await
             })
         };
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        assert!(runtime.cancel("long"), "{:?}", long.await);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        runtime.cancel("long");
         assert_eq!(long.await.unwrap(), Err(LlmError::Cancelled));
 
         let started = Instant::now();
@@ -1016,6 +1170,6 @@ mod tests {
         );
 
         assert_eq!(runtime.stop(), RuntimeStatus::Stopped);
-        assert_eq!(runtime.status(), RuntimeStatus::Stopped);
+        assert_eq!(runtime.status().await, RuntimeStatus::Stopped);
     }
 }

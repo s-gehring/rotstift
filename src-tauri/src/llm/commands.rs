@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use super::process;
 use super::runtime::{
-    LlmError, LlmRuntime, RuntimePaths, RuntimeStatus, SIDECAR_NAME, StartOptions,
+    LlmError, LlmRuntime, RuntimePaths, RuntimeStatus, StartOptions, installed_layout,
 };
 
 #[derive(Debug, Serialize)]
@@ -32,12 +32,11 @@ fn runtime_paths<R: Runtime>(app: &AppHandle<R>) -> Result<RuntimePaths, LlmErro
         .ok_or_else(|| environment_error("executable has no parent directory"))?;
     let resolver = app.path();
     let data_dir = resolver.app_data_dir().map_err(environment_error)?;
+    let resource_dir = resolver.resource_dir().map_err(environment_error)?;
+    let (sidecar, library_dir) = installed_layout(executable_dir, &resource_dir);
     Ok(RuntimePaths {
-        sidecar: executable_dir.join(format!("{SIDECAR_NAME}{}", std::env::consts::EXE_SUFFIX)),
-        library_dir: resolver
-            .resource_dir()
-            .map_err(environment_error)?
-            .join("llama"),
+        sidecar,
+        library_dir,
         models_dir: data_dir.join("models"),
         records_dir: data_dir.join("runtime"),
     })
@@ -65,8 +64,8 @@ pub fn llm_stop(runtime: State<'_, LlmRuntime>) -> RuntimeStatus {
 }
 
 #[tauri::command]
-pub fn llm_status(runtime: State<'_, LlmRuntime>) -> RuntimeStatus {
-    runtime.status()
+pub async fn llm_status(runtime: State<'_, LlmRuntime>) -> Result<RuntimeStatus, LlmError> {
+    Ok(runtime.status().await)
 }
 
 #[tauri::command]
