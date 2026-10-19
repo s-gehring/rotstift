@@ -14,6 +14,7 @@
     "build": "tauri build",
     "build:web": "tsc -b && vite build",
     "tauri": "tauri",
+    "fetch:runtime": "node scripts/fetch-runtime.ts",
     "typecheck": "tsc -b",
     "lint": "oxlint --deny-warnings",
     "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",

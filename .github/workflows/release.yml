@@ -48,9 +48,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6
+        with:
+          path: src-tauri/binaries/.download
+          key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
+      - run: pnpm fetch:runtime ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/binaries/llama
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: Rotstift v__VERSION__

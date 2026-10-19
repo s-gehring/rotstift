@@ -5,6 +5,7 @@ Cross-platform desktop app (Tauri 2, React, TypeScript) that corrects student wo
 ## Commands
 
 ```bash
+pnpm fetch:runtime  # download the pinned llama-server sidecar, needed before any Rust build
 pnpm dev            # Tauri app with hot reload
 pnpm dev:web        # frontend only in the browser, port 1420
 pnpm build          # installers for the current OS (pnpm build --debug is faster)
