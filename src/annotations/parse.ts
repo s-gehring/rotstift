@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { findErrorKind } from './catalog.ts';
+import { clip } from './clip.ts';
 import type { CorrectionProfile } from './profile.ts';
 import { bboxSchema, transcriptSchema } from './transcript.ts';
 import type { Mark, Transcript, TranscriptLine } from './transcript.ts';
@@ -13,14 +14,21 @@ export type ParseResult =
   { ok: true; transcript: Transcript } | { ok: false; issues: ParseIssue[] };
 
 export interface ParseOptions {
-  profile?: CorrectionProfile;
+  profile: CorrectionProfile;
+  source?: Transcript;
 }
+
+export const MAX_ISSUES = 20;
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 
 function isElement(node: Node): node is Element {
   return node.nodeType === ELEMENT_NODE;
+}
+
+function normalizeSpace(text: string): string {
+  return text.replaceAll(/\s+/g, ' ').trim();
 }
 
 const BBOX_PATTERN = /^\s*-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?){3}\s*$/;
@@ -49,7 +57,9 @@ const markAttributes = z.object({
     .string({ error: 'Pflichtattribut type fehlt.' })
     .trim()
     .min(1, 'Das Attribut type darf nicht leer sein.'),
-  fix: z.string({ error: 'Pflichtattribut fix fehlt (eine leere Korrektur ist fix="").' }),
+  fix: z
+    .string({ error: 'Pflichtattribut fix fehlt (eine leere Korrektur ist fix="").' })
+    .transform(normalizeSpace),
 });
 
 interface LineState {
@@ -62,7 +72,7 @@ interface LineState {
 class Collector {
   readonly issues: ParseIssue[] = [];
 
-  constructor(private readonly profile: CorrectionProfile | undefined) {}
+  constructor(private readonly profile: CorrectionProfile) {}
 
   report(line: LineState | undefined, message: string): void {
     if (!line) {
@@ -76,13 +86,13 @@ class Collector {
 
   resolveType(line: LineState, tag: string, raw: string): string | undefined {
     const profile = this.profile;
-    if (!profile) {
-      return raw;
-    }
     const kind = findErrorKind(profile.language, raw);
     const allowed = profile.allowedTypes.join(', ');
     if (!kind) {
-      this.report(line, `<${tag}>: Unbekannter Fehlertyp „${raw}“. Erlaubt sind: ${allowed}.`);
+      this.report(
+        line,
+        `<${tag}>: Unbekannter Fehlertyp „${clip(raw)}“. Erlaubt sind: ${allowed}.`,
+      );
       return undefined;
     }
     if (!profile.allowedTypes.includes(kind.code)) {
@@ -102,6 +112,14 @@ class Collector {
     element: Element,
     names: string[],
   ): z.output<T> | undefined {
+    for (const { name } of Array.from(element.attributes)) {
+      if (!names.includes(name)) {
+        this.report(
+          line,
+          `<${tag}>: Unbekanntes Attribut „${clip(name)}“. Erlaubt sind: ${names.join(', ')}.`,
+        );
+      }
+    }
     const input = Object.fromEntries(
       names.map((name) => [name, element.getAttribute(name) ?? undefined]),
     );
@@ -134,7 +152,7 @@ function collectMarkText(collector: Collector, line: LineState, tag: string, nod
           `<${name}> darf nicht in <${tag}> verschachtelt sein. Markierungen dürfen sich nicht überlappen oder enthalten.`,
         );
       } else {
-        collector.report(line, `Unbekanntes Element <${name}> in <${tag}>.`);
+        collector.report(line, `Unbekanntes Element <${clip(name)}> in <${tag}>.`);
       }
       text += collectMarkText(collector, line, tag, child);
     }
@@ -159,7 +177,7 @@ function parseError(collector: Collector, line: LineState, element: Element): vo
   } else if (attributes && attributes.fix === original) {
     collector.report(
       line,
-      `<rs-error>: Die Korrektur „${attributes.fix}“ ist identisch mit dem Originaltext.`,
+      `<rs-error>: Die Korrektur „${clip(attributes.fix)}“ ist identisch mit dem Originaltext.`,
     );
   }
 
@@ -229,7 +247,7 @@ function walkLine(collector: Collector, line: LineState, parent: Node): void {
           walkLine(collector, line, element);
           break;
         default:
-          collector.report(line, `Unbekanntes Element <${element.localName}> in der Zeile.`);
+          collector.report(line, `Unbekanntes Element <${clip(element.localName)}> in der Zeile.`);
           walkLine(collector, line, element);
       }
     }
@@ -242,8 +260,9 @@ function parseLine(
   position: number,
 ): TranscriptLine | undefined {
   const line: LineState = { position, number: undefined, text: '', marks: [] };
+  const rawNumber = element.getAttribute('n') ?? '';
+  line.number = /^[1-9]\d*$/.test(rawNumber) ? Number(rawNumber) : undefined;
   const attributes = collector.attributes(line, 'rs-line', lineAttributes, element, ['n', 'bbox']);
-  line.number = attributes?.n;
 
   walkLine(collector, line, element);
 
@@ -264,14 +283,133 @@ function parseLine(
   };
 }
 
+const TAG_PATTERN = /<(\/?)(rs-line|rs-error|rs-missing)((?:"[^"]*"|'[^']*'|[^>"'])*)>/gi;
+
+function checkTagBalance(html: string): ParseIssue[] {
+  const issues: ParseIssue[] = [];
+  let lineDepth = 0;
+  let lineNumber: number | undefined;
+  let errorDepth = 0;
+
+  const report = (message: string): void => {
+    issues.push(lineNumber === undefined ? { message } : { message, line: lineNumber });
+  };
+  const unclosed = (before: string): void => {
+    report(
+      `<rs-error> wurde nicht geschlossen, bevor ${before} kommt. Jede Markierung muss in derselben Zeile mit </rs-error> enden.`,
+    );
+    errorDepth = 0;
+  };
+
+  for (const match of html.matchAll(TAG_PATTERN)) {
+    const closing = match[1] === '/';
+    const tag = (match[2] ?? '').toLowerCase();
+    if (tag === 'rs-line' && !closing) {
+      if (errorDepth > 0) {
+        unclosed('die nächste <rs-line>');
+      }
+      lineDepth += 1;
+      const number = /\bn\s*=\s*["']?(\d+)/i.exec(match[3] ?? '')?.[1];
+      lineNumber = number === undefined ? undefined : Number(number);
+    } else if (tag === 'rs-line') {
+      if (errorDepth > 0) {
+        unclosed('</rs-line>');
+      }
+      if (lineDepth === 0) {
+        report('</rs-line> ohne öffnendes <rs-line>.');
+      } else {
+        lineDepth -= 1;
+      }
+    } else if (tag === 'rs-error' && !closing) {
+      errorDepth += 1;
+    } else if (tag === 'rs-error') {
+      if (errorDepth === 0) {
+        report('</rs-error> ohne öffnendes <rs-error> in dieser Zeile.');
+      } else {
+        errorDepth -= 1;
+      }
+    }
+  }
+
+  if (errorDepth > 0) {
+    unclosed('die Ausgabe endet');
+  }
+  if (lineDepth > 0) {
+    report('<rs-line> wurde nicht mit </rs-line> geschlossen.');
+  }
+  return issues;
+}
+
+function excerpt(text: string, index: number): string {
+  const start = Math.max(0, index - 20);
+  return `${start > 0 ? '…' : ''}${clip(text.slice(start), 60)}`;
+}
+
+function firstDifference(a: string, b: string): number {
+  let index = 0;
+  while (index < a.length && index < b.length && a[index] === b[index]) {
+    index += 1;
+  }
+  return index;
+}
+
+function applySource(collector: Collector, lines: TranscriptLine[], source: Transcript): void {
+  const parsed = new Map(lines.map((line) => [line.number, line]));
+  const expected = new Set(source.lines.map((line) => line.number));
+
+  for (const sourceLine of source.lines) {
+    const line = parsed.get(sourceLine.number);
+    if (!line) {
+      collector.issues.push({
+        message: 'Die Zeile fehlt in der Ausgabe. Alle Zeilen der Eingabe müssen wiederkehren.',
+        line: sourceLine.number,
+      });
+      continue;
+    }
+    const sourceText = normalizeSpace(sourceLine.text);
+    if (line.text !== sourceText) {
+      const at = firstDifference(line.text, sourceText);
+      collector.issues.push({
+        message: `Der Text der Zeile wurde verändert. Erwartet: „${excerpt(sourceText, at)}“, gefunden: „${excerpt(line.text, at)}“. Der Text darf nur markiert, nicht geändert werden.`,
+        line: line.number,
+      });
+    }
+    if (sourceLine.bbox) {
+      line.bbox = sourceLine.bbox;
+    } else {
+      delete line.bbox;
+    }
+  }
+  for (const line of lines) {
+    if (!expected.has(line.number)) {
+      collector.issues.push({
+        message: 'Diese Zeile gibt es in der Eingabe nicht. Es dürfen keine Zeilen hinzukommen.',
+        line: line.number,
+      });
+    }
+  }
+}
+
 function stripCodeFence(html: string): string {
   const match = /^\s*```[a-z]*[ \t]*\r?\n([\s\S]*?)\r?\n?```\s*$/i.exec(html);
   return match?.[1] ?? html;
 }
 
-export function parseTranscript(html: string, options: ParseOptions = {}): ParseResult {
+function capIssues(issues: ParseIssue[]): ParseIssue[] {
+  if (issues.length <= MAX_ISSUES) {
+    return issues;
+  }
+  return [
+    ...issues.slice(0, MAX_ISSUES),
+    { message: `… und ${issues.length - MAX_ISSUES} weitere Meldungen.` },
+  ];
+}
+
+export function parseTranscript(html: string, options: ParseOptions): ParseResult {
   const collector = new Collector(options.profile);
-  const document = new DOMParser().parseFromString(stripCodeFence(html), 'text/html');
+  const body = stripCodeFence(html);
+  collector.issues.push(...checkTagBalance(body));
+  const document = new DOMParser().parseFromString(body, 'text/html');
   const lines: TranscriptLine[] = [];
   let position = 0;
 
@@ -281,7 +419,7 @@ export function parseTranscript(html: string, options: ParseOptions = {}): Parse
       if (text !== '') {
         collector.report(
           undefined,
-          `Text außerhalb einer Zeile: „${text.slice(0, 60)}“. Der gesamte Text muss in <rs-line>-Elementen stehen.`,
+          `Text außerhalb einer Zeile: „${clip(text)}“. Der gesamte Text muss in <rs-line>-Elementen stehen.`,
         );
       }
     } else if (isElement(node)) {
@@ -295,7 +433,7 @@ export function parseTranscript(html: string, options: ParseOptions = {}): Parse
       } else {
         collector.report(
           undefined,
-          `<${element.localName}> steht außerhalb einer <rs-line>. Auf oberster Ebene sind nur <rs-line>-Elemente erlaubt.`,
+          `<${clip(element.localName)}> steht außerhalb einer <rs-line>. Auf oberster Ebene sind nur <rs-line>-Elemente erlaubt.`,
         );
       }
     }
@@ -304,12 +442,15 @@ export function parseTranscript(html: string, options: ParseOptions = {}): Parse
   if (position === 0 && collector.issues.length === 0) {
     collector.report(undefined, 'Die Ausgabe enthält keine <rs-line>-Zeile.');
   }
+  if (options.source) {
+    applySource(collector, lines, options.source);
+  }
 
   const checked = transcriptSchema.safeParse({ lines });
   if (checked.success) {
     return collector.issues.length === 0
       ? { ok: true, transcript: checked.data }
-      : { ok: false, issues: collector.issues };
+      : { ok: false, issues: capIssues(collector.issues) };
   }
   for (const issue of checked.error.issues) {
     const index = issue.path[1];
@@ -319,7 +460,7 @@ export function parseTranscript(html: string, options: ParseOptions = {}): Parse
       ...(number === undefined ? {} : { line: number }),
     });
   }
-  return { ok: false, issues: collector.issues };
+  return { ok: false, issues: capIssues(collector.issues) };
 }
 
 export function formatIssues(issues: readonly ParseIssue[]): string {

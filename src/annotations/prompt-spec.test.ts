@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { CATALOG, LANGUAGE_CODES } from './catalog.ts';
+import { CATALOG } from './catalog.ts';
 import { parseTranscript } from './parse.ts';
 import { BUILT_IN_PROFILES, DEUTSCH, ENGLISCH, profileSchema } from './profile.ts';
 import { buildSpecification, renderExample } from './prompt-spec.ts';
@@ -50,11 +50,10 @@ describe('buildSpecification', () => {
 });
 
 describe('renderExample', () => {
-  it.each(LANGUAGE_CODES)('renders examples for %s that the parser accepts', (language) => {
-    const profile = BUILT_IN_PROFILES.find((candidate) => candidate.language === language);
-    for (const kind of CATALOG[language].kinds) {
+  it.each(BUILT_IN_PROFILES)('renders examples for $id that the parser accepts', (profile) => {
+    for (const kind of CATALOG[profile.language].kinds) {
       const result = parseTranscript(renderExample(kind), { profile });
-      expect(result.ok, `${language}/${kind.code}`).toBe(true);
+      expect(result.ok, `${profile.id}/${kind.code}`).toBe(true);
     }
   });
 });

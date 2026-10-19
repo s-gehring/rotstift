@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { formatIssues, parseTranscript } from './parse.ts';
+import { MAX_ISSUES, formatIssues, parseTranscript } from './parse.ts';
 import type { ParseResult } from './parse.ts';
 import { DEUTSCH, ENGLISCH, profileSchema } from './profile.ts';
 import { serializeTranscript } from './serialize.ts';
 import { listErrors } from './transcript.ts';
+import type { Transcript } from './transcript.ts';
 
 const WEEKEND_ESSAY = `
 <rs-line n="1" bbox="40,60,720,34">Am Wochenende <rs-error type="Sb" fix="war ich">ich war</rs-error> mit meiner Familie im <rs-error type="R" fix="Schwimmbad">Schwimbad</rs-error>.</rs-line>
@@ -107,12 +108,14 @@ describe('parseTranscript tolerance', () => {
 
   it('decodes character references', () => {
     const html = '<rs-line n="1">Tom &amp; Anna lachen &lt;laut&gt;.</rs-line>';
-    expect(expectOk(parseTranscript(html)).lines[0]?.text).toBe('Tom & Anna lachen <laut>.');
+    expect(expectOk(parseTranscript(html, { profile: DEUTSCH })).lines[0]?.text).toBe(
+      'Tom & Anna lachen <laut>.',
+    );
   });
 
   it('strips a markdown code fence around the output', () => {
     const html = '```html\n<rs-line n="1">Hallo Welt</rs-line>\n```';
-    expect(expectOk(parseTranscript(html)).lines[0]?.text).toBe('Hallo Welt');
+    expect(expectOk(parseTranscript(html, { profile: DEUTSCH })).lines[0]?.text).toBe('Hallo Welt');
   });
 
   it('accepts an empty correction for a superfluous word', () => {
@@ -123,7 +126,7 @@ describe('parseTranscript tolerance', () => {
 
   it('accepts lines without a bounding box and with gaps in the numbering', () => {
     const html = '<rs-line n="2">Eins</rs-line><rs-line n="5">Zwei</rs-line>';
-    const transcript = expectOk(parseTranscript(html));
+    const transcript = expectOk(parseTranscript(html, { profile: DEUTSCH }));
     expect(transcript.lines.map((line) => line.number)).toEqual([2, 5]);
     expect(transcript.lines[0]?.bbox).toBeUndefined();
   });
@@ -133,11 +136,6 @@ describe('parseTranscript tolerance', () => {
     const line = expectOk(parseTranscript(html, { profile: DEUTSCH })).lines[0];
     expect(line?.text).toBe('Es regnet');
     expect(line?.marks[0]?.offset).toBe(9);
-  });
-
-  it('works without a profile and then only checks the structure', () => {
-    const html = '<rs-line n="1"><rs-error type="Xyz" fix="b">a</rs-error></rs-line>';
-    expect(expectOk(parseTranscript(html)).lines[0]?.marks[0]?.type).toBe('Xyz');
   });
 });
 
@@ -248,7 +246,9 @@ describe('parseTranscript rejects malformed output', () => {
   });
 
   it('rejects duplicate and descending line numbers', () => {
-    const result = parseTranscript('<rs-line n="2">a</rs-line><rs-line n="2">b</rs-line>');
+    const result = parseTranscript('<rs-line n="2">a</rs-line><rs-line n="2">b</rs-line>', {
+      profile: DEUTSCH,
+    });
     expect(result).toEqual({
       ok: false,
       issues: [{ line: 2, message: expect.stringContaining('müssen aufsteigen') }],
@@ -279,5 +279,194 @@ describe('formatIssues', () => {
     expect(formatIssues([{ line: 3, message: 'Kaputt.' }, { message: 'Auch kaputt.' }])).toBe(
       '- Zeile 3: Kaputt.\n- Auch kaputt.',
     );
+  });
+});
+
+describe('parseTranscript with unbalanced markings', () => {
+  it('rejects an error element that is not closed before the end of its line', () => {
+    const html = '<rs-line n="1">Der <rs-error type="R" fix="Hund">Hunt bellt laut</rs-line>';
+    expect(parseTranscript(html, { profile: DEUTSCH })).toEqual({
+      ok: false,
+      issues: [{ line: 1, message: expect.stringContaining('<rs-error> wurde nicht geschlossen') }],
+    });
+  });
+
+  it('rejects a marking that spans two lines and reports the stray closing tag', () => {
+    const html =
+      '<rs-line n="1">Der <rs-error type="R" fix="Hund">Hun</rs-line><rs-line n="2">d</rs-error> bellt</rs-line>';
+    const result = parseTranscript(html, { profile: DEUTSCH });
+    expect(result).toEqual({
+      ok: false,
+      issues: [
+        { line: 1, message: expect.stringContaining('nicht geschlossen, bevor </rs-line>') },
+        { line: 2, message: '</rs-error> ohne öffnendes <rs-error> in dieser Zeile.' },
+      ],
+    });
+  });
+
+  it('rejects an error element that is open when the next line starts', () => {
+    const html = '<rs-line n="1">a <rs-error type="R" fix="b">c<rs-line n="2">d</rs-line>';
+    expect(issuesOf(html)[0]).toContain('bevor die nächste <rs-line> kommt');
+  });
+
+  it('rejects elements that are still open at the end of the output', () => {
+    expect(issuesOf('<rs-line n="1">a <rs-error type="R" fix="b">c')).toEqual([
+      expect.stringContaining('bevor die Ausgabe endet'),
+      '<rs-line> wurde nicht mit </rs-line> geschlossen.',
+    ]);
+  });
+
+  it('rejects a stray closing line tag', () => {
+    expect(issuesOf('<rs-line n="1">a</rs-line></rs-line>')).toEqual([
+      '</rs-line> ohne öffnendes <rs-line>.',
+    ]);
+  });
+
+  it('is not confused by a greater-than sign inside an attribute value', () => {
+    const html = '<rs-line n="1"><rs-error type="R" fix="a>b">x</rs-error></rs-line>';
+    expect(
+      expectOk(parseTranscript(html, { profile: DEUTSCH })).lines[0]?.marks[0]?.correction,
+    ).toBe('a>b');
+  });
+});
+
+describe('parseTranscript attribute checks', () => {
+  it('normalizes whitespace in the correction before comparing it', () => {
+    const html =
+      '<rs-line n="1">Wir <rs-error type="R" fix="  gehen   heim ">gehen heim</rs-error></rs-line>';
+    expect(issuesOf(html)[0]).toContain('identisch mit dem Originaltext');
+    const fixed =
+      '<rs-line n="1">Wir <rs-error type="R" fix="  gingen   heim ">gehen heim</rs-error></rs-line>';
+    const mark = expectOk(parseTranscript(fixed, { profile: DEUTSCH })).lines[0]?.marks[0];
+    expect(mark?.correction).toBe('gingen heim');
+  });
+
+  it('rejects unknown attributes such as correction instead of fix', () => {
+    const html = '<rs-line n="1"><rs-error type="R" correction="Hund">Hunt</rs-error></rs-line>';
+    expect(issuesOf(html)).toEqual([
+      '<rs-error>: Unbekanntes Attribut „correction“. Erlaubt sind: type, fix.',
+      expect.stringContaining('<rs-error>: Pflichtattribut fix fehlt'),
+    ]);
+  });
+
+  it('rejects unknown attributes on lines and omissions', () => {
+    const html =
+      '<rs-line n="1" id="a">Ich glaube<rs-missing type="Z" fix="," pos="3"></rs-missing> dass</rs-line>';
+    expect(issuesOf(html)).toEqual([
+      '<rs-line>: Unbekanntes Attribut „id“. Erlaubt sind: n, bbox.',
+      '<rs-missing>: Unbekanntes Attribut „pos“. Erlaubt sind: type, fix.',
+    ]);
+  });
+
+  it('rejects a negative bounding box position', () => {
+    expect(issuesOf('<rs-line n="1" bbox="-4,10,100,20">a</rs-line>')).toEqual([
+      '<rs-line>: Die Position x der Bounding Box darf nicht negativ sein.',
+    ]);
+  });
+});
+
+describe('parseTranscript issue list', () => {
+  it('clips model text in messages', () => {
+    const long = 'x'.repeat(200);
+    const [message] = issuesOf(
+      `<rs-line n="1"><rs-error type="${long}" fix="b">a</rs-error></rs-line>`,
+    );
+    expect(message?.length).toBeLessThan(160);
+    expect(message).toContain(`${'x'.repeat(60)}…`);
+    expect(issuesOf(`${long}<rs-line n="1">a</rs-line>`)[0]).not.toContain('x'.repeat(61));
+  });
+
+  it('caps the number of issues and counts the rest', () => {
+    const html = Array.from(
+      { length: 30 },
+      (_, index) => `<rs-line n="${index + 1}"><rs-error type="Q" fix="b">a</rs-error></rs-line>`,
+    ).join('\n');
+    const messages = issuesOf(html);
+    expect(messages).toHaveLength(MAX_ISSUES + 1);
+    expect(messages.at(-1)).toBe('… und 10 weitere Meldungen.');
+  });
+});
+
+describe('parseTranscript against the transcribed source', () => {
+  const source: Transcript = {
+    lines: [
+      {
+        number: 1,
+        bbox: { x: 40, y: 60, width: 700, height: 30 },
+        text: 'Der Hunt bellt.',
+        marks: [],
+      },
+      { number: 2, text: 'Es regnet', marks: [] },
+    ],
+  };
+
+  it('takes the bounding box from the source and drops one the source does not have', () => {
+    const html =
+      '<rs-line n="1" bbox="1,2,3,4">Der <rs-error type="R" fix="Hund">Hunt</rs-error> bellt.</rs-line><rs-line n="2" bbox="5,6,7,8">Es regnet</rs-line>';
+    const transcript = expectOk(parseTranscript(html, { profile: DEUTSCH, source }));
+    expect(transcript.lines[0]?.bbox).toEqual({ x: 40, y: 60, width: 700, height: 30 });
+    expect(transcript.lines[1]?.bbox).toBeUndefined();
+  });
+
+  it('accepts a different whitespace layout of the same text', () => {
+    const html = '<rs-line n="1">Der   Hunt\n bellt.</rs-line><rs-line n="2">Es regnet</rs-line>';
+    expect(parseTranscript(html, { profile: DEUTSCH, source }).ok).toBe(true);
+  });
+
+  it('rejects text that the model changed and shows where', () => {
+    const html = '<rs-line n="1">Der Hund bellt.</rs-line><rs-line n="2">Es regnet</rs-line>';
+    expect(parseTranscript(html, { profile: DEUTSCH, source })).toEqual({
+      ok: false,
+      issues: [
+        {
+          line: 1,
+          message: expect.stringMatching(
+            /Erwartet: „Der Hunt bellt\.“, gefunden: „Der Hund bellt\.“/,
+          ),
+        },
+      ],
+    });
+  });
+
+  it('rejects missing and additional lines', () => {
+    const html = '<rs-line n="1">Der Hunt bellt.</rs-line><rs-line n="3">Neu</rs-line>';
+    const result = parseTranscript(html, { profile: DEUTSCH, source });
+    expect(result).toEqual({
+      ok: false,
+      issues: [
+        { line: 2, message: expect.stringContaining('fehlt in der Ausgabe') },
+        { line: 3, message: expect.stringContaining('gibt es in der Eingabe nicht') },
+      ],
+    });
+  });
+});
+
+describe('round trip parse, serialize, parse', () => {
+  const cases: Record<string, string> = {
+    entities:
+      '<rs-line n="1">a &lt; b &amp; <rs-error type="R" fix="x&quot;y">c&amp;d</rs-error></rs-line>',
+    'mark at line start and end':
+      '<rs-line n="1"><rs-error type="R" fix="Hund">Hunt</rs-error> bellt <rs-error type="R" fix="laut">lat</rs-error></rs-line>',
+    'adjacent errors':
+      '<rs-line n="1"><rs-error type="R" fix="AB">ab</rs-error><rs-error type="G" fix="CD">cd</rs-error> ef</rs-line>',
+    'empty correction':
+      '<rs-line n="1">Das ist <rs-error type="W" fix="">ist</rs-error> gut.</rs-line>',
+    'omission at start and end':
+      '<rs-line n="1"><rs-missing type="Z" fix="„"></rs-missing>Hallo<rs-missing type="Z" fix="“"></rs-missing></rs-line>',
+    'two omissions at one position':
+      '<rs-line n="1">Ja<rs-missing type="Z" fix=","></rs-missing><rs-missing type="Z" fix="!"></rs-missing></rs-line>',
+    'omission next to an error':
+      '<rs-line n="1">Wir<rs-missing type="Z" fix=","></rs-missing><rs-error type="R" fix="dass">das</rs-error> es geht</rs-line>',
+    'decimal bounding box and gaps in numbering':
+      '<rs-line n="2" bbox="10.5,20,300.25,40">Eins</rs-line><rs-line n="7">Zwei</rs-line>',
+    'empty line': '<rs-line n="1"></rs-line>',
+  };
+
+  it.each(Object.entries(cases))('is stable for %s', (_name, html) => {
+    const first = expectOk(parseTranscript(html, { profile: DEUTSCH }));
+    const serialized = serializeTranscript(first);
+    const second = expectOk(parseTranscript(serialized, { profile: DEUTSCH }));
+    expect(second).toEqual(first);
+    expect(serializeTranscript(second)).toBe(serialized);
   });
 });

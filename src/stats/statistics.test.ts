@@ -82,4 +82,43 @@ describe('computeStatistics', () => {
     };
     expect(computeStatistics(transcript).words).toBe(4);
   });
+
+  it('counts a word that is hyphenated at the end of a line once', () => {
+    const transcript: Transcript = {
+      lines: [
+        { number: 1, text: 'Wir fahren zur großen Rut-', marks: [] },
+        { number: 2, text: 'sche und sind froh.', marks: [] },
+      ],
+    };
+    expect(computeStatistics(transcript).words).toBe(8);
+  });
+
+  it('keeps compounds and dashes at the end of a line apart', () => {
+    const transcript: Transcript = {
+      lines: [
+        { number: 1, text: 'Sie schrieb eine E-', marks: [] },
+        { number: 2, text: 'Mail an Anna -', marks: [] },
+        { number: 3, text: 'und ging.', marks: [] },
+      ],
+    };
+    expect(computeStatistics(transcript).words).toBe(9);
+  });
+
+  it('does not let a type name collide with object prototype members', () => {
+    const transcript: Transcript = {
+      lines: [
+        {
+          number: 1,
+          text: 'a b',
+          marks: [
+            { kind: 'error', type: 'constructor', original: 'a', correction: 'c', offset: 0 },
+          ],
+        },
+      ],
+    };
+    const { errorsByType } = computeStatistics(transcript);
+    expect(Object.keys(errorsByType)).toEqual(['constructor']);
+    expect(Object.hasOwn(errorsByType, 'constructor')).toBe(true);
+    expect(errorsByType['constructor']).toBe(1);
+  });
 });

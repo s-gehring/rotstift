@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { clip } from './clip.ts';
 
 export const bboxSchema = z.object({
-  x: z.number(),
-  y: z.number(),
+  x: z.number().min(0, 'Die Position x der Bounding Box darf nicht negativ sein.'),
+  y: z.number().min(0, 'Die Position y der Bounding Box darf nicht negativ sein.'),
   width: z.number().positive('Die Breite der Bounding Box muss größer als 0 sein.'),
   height: z.number().positive('Die Höhe der Bounding Box muss größer als 0 sein.'),
 });
@@ -50,7 +51,7 @@ export const lineSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['marks', index],
-          message: `Die Markierung „${mark.original}“ liegt nicht an Position ${mark.offset} der Zeile.`,
+          message: `Die Markierung „${clip(mark.original)}“ liegt nicht an Position ${mark.offset} der Zeile.`,
         });
       } else if (mark.offset < previousEnd) {
         ctx.addIssue({
