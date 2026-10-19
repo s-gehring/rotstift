@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { browserEnvironment } from './environment.ts';
-import { resolveTranscriber } from './provider.ts';
+import { resolveTranscriber, type ModelAvailability } from './provider.ts';
 import type { TranscriberStatus } from './transcriber.ts';
 
-export function useTranscriber(): TranscriberStatus | null {
+export function useTranscriber(availability: ModelAvailability | null): TranscriberStatus | null {
   const [status, setStatus] = useState<TranscriberStatus | null>(null);
 
   useEffect(() => {
     let current = true;
-    resolveTranscriber(browserEnvironment()).then(
+    resolveTranscriber(browserEnvironment(), availability).then(
       (resolved) => {
         if (current) setStatus(resolved);
       },
@@ -24,7 +24,7 @@ export function useTranscriber(): TranscriberStatus | null {
     return () => {
       current = false;
     };
-  }, []);
+  }, [availability]);
 
   return status;
 }

@@ -34,6 +34,7 @@ pub struct StartOptions {
     pub context_size: Option<u32>,
     pub threads: Option<u32>,
     pub gpu_layers: Option<u32>,
+    pub image_max_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -614,6 +615,9 @@ fn server_args(model: &Path, mmproj: Option<&Path>, options: &StartOptions) -> V
     if let Some(layers) = options.gpu_layers {
         args.extend(["--n-gpu-layers".into(), layers.to_string().into()]);
     }
+    if let Some(tokens) = options.image_max_tokens {
+        args.extend(["--image-max-tokens".into(), tokens.to_string().into()]);
+    }
     args
 }
 
@@ -674,6 +678,7 @@ mod tests {
             context_size: None,
             threads: None,
             gpu_layers: None,
+            image_max_tokens: None,
         }
     }
 
@@ -746,6 +751,7 @@ mod tests {
         options.context_size = Some(4096);
         options.threads = Some(4);
         options.gpu_layers = Some(0);
+        options.image_max_tokens = Some(1024);
         let args = arg_strings(&server_args(
             Path::new("m.gguf"),
             Some(Path::new("mmproj.gguf")),
@@ -756,6 +762,7 @@ mod tests {
             ["--ctx-size", "4096"],
             ["--threads", "4"],
             ["--n-gpu-layers", "0"],
+            ["--image-max-tokens", "1024"],
         ] {
             assert!(args.windows(2).any(|window| window == pair), "{pair:?}");
         }
@@ -1171,5 +1178,26 @@ mod tests {
 
         assert_eq!(runtime.stop(), RuntimeStatus::Stopped);
         assert_eq!(runtime.status().await, RuntimeStatus::Stopped);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "needs ROTSTIFT_TEST_MODELS_DIR with the registry model files"]
+    async fn starts_the_registry_model_with_its_server_params() {
+        let models_dir = PathBuf::from(std::env::var("ROTSTIFT_TEST_MODELS_DIR").unwrap());
+        let registry = crate::models::registry::registry().unwrap();
+        let (sidecar, library_dir) = bundled_sidecar();
+        let paths = RuntimePaths {
+            sidecar,
+            library_dir,
+            models_dir,
+            records_dir: temp_dir("registry-records"),
+        };
+        let runtime = LlmRuntime::new();
+        for entry in &registry.models {
+            let options = crate::llm::commands::start_options(entry);
+            let status = runtime.start(&paths, options).await.unwrap();
+            assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
+            runtime.stop();
+        }
     }
 }

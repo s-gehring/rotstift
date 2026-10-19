@@ -4,7 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ImportPage } from '../import/pages.ts';
 import { createRunner, type Runner } from '../pipeline/runner.ts';
-import type { PageTranscriber, TranscriberStatus } from '../pipeline/transcriber.ts';
+import type {
+  PageTranscriber,
+  TranscribeResult,
+  TranscriberStatus,
+} from '../pipeline/transcriber.ts';
 import { CountControls, CountHint } from './CountControls.tsx';
 import { ResultsView } from './ResultsView.tsx';
 
@@ -118,6 +122,91 @@ describe('without a transcriber', () => {
     mount(null);
     expect(button('Wörter zählen')?.disabled).toBe(true);
     expect(container.querySelector('#count-hint')?.textContent).toContain('wird geprüft');
+  });
+});
+
+describe('with a missing model', () => {
+  it('disables counting and offers the setup instead', () => {
+    const runner = createRunner({ render: () => Promise.resolve(new Blob()) });
+    const onSetup = vi.fn<() => void>();
+    runner.setPages(initialPages);
+    const status: TranscriberStatus = { state: 'needs-model', problem: 'missing' };
+    act(() =>
+      root.render(
+        <CountControls
+          count={{ runner, state: runner.getState() }}
+          status={status}
+          pages={initialPages}
+          onSetup={onSetup}
+        />,
+      ),
+    );
+    expect(button('Wörter zählen')?.disabled).toBe(true);
+    act(() => button('Texterkennung einrichten')?.click());
+    expect(onSetup).toHaveBeenCalledOnce();
+  });
+
+  it('explains the situation in German while the model downloads', () => {
+    const runner = createRunner({ render: () => Promise.resolve(new Blob()) });
+    const count = { runner, state: runner.getState() };
+    const download = {
+      modelId: 'm',
+      state: 'downloading',
+      downloadedBytes: 412_000_000,
+      totalBytes: 1_552_000_000,
+    } as const;
+    act(() =>
+      root.render(
+        <CountHint
+          count={count}
+          status={{ state: 'needs-model', problem: 'downloading' }}
+          pages={initialPages}
+          download={download}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain('412 MB von 1.552 MB');
+  });
+});
+
+function deferred<T>() {
+  const handle: { resolve: (value: T) => void } = { resolve: () => undefined };
+  const promise = new Promise<T>((resolve) => {
+    handle.resolve = resolve;
+  });
+  return {
+    promise,
+    resolve: (value: T) => {
+      handle.resolve(value);
+    },
+  };
+}
+
+describe('with a transcriber that is starting', () => {
+  it('shows that the recognition starts before the first page', async () => {
+    let phase: 'idle' | 'starting' | 'ready' = 'starting';
+    const listeners = new Set<() => void>();
+    const engine = {
+      getPhase: () => phase,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
+      },
+    };
+    const pending = deferred<TranscribeResult>();
+    const slow: PageTranscriber = { transcribe: () => pending.promise };
+    const runner = mount({ state: 'ready', transcriber: slow, demo: false, engine });
+    act(() => runner.start());
+    expect(container.querySelector('.progress')?.textContent).toBe('Texterkennung startet …');
+    act(() => {
+      phase = 'ready';
+      for (const listener of listeners) listener();
+    });
+    expect(container.querySelector('.progress')?.textContent).toContain('Seite 1 von 2');
+    await act(async () => {
+      pending.resolve({ ok: true, lines: ['eins'] });
+      await Promise.resolve();
+    });
   });
 });
 

@@ -1,13 +1,5 @@
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import type {
-  ChatMessage,
-  ChatRequest,
-  ChatResponse,
-  LlmError,
-  ModelDirectory,
-  RuntimeStatus,
-  StartOptions,
-} from './types.ts';
+import type { ChatMessage, ChatRequest, ChatResponse, LlmError, RuntimeStatus } from './types.ts';
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -58,10 +50,9 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
   }
 
   return {
-    start: (options: StartOptions) => call<RuntimeStatus>('llm_start', { options }),
+    startModel: (modelId: string) => call<RuntimeStatus>('llm_start_model', { modelId }),
     stop: () => call<RuntimeStatus>('llm_stop'),
     status: () => call<RuntimeStatus>('llm_status'),
-    models: () => call<ModelDirectory>('llm_models'),
     chat,
     async complete(request: ChatRequest, options: ChatOptions = {}): Promise<string> {
       const response = await chat(request, options);

@@ -15,9 +15,22 @@ Projektgerüst: Leeres Fenster, Wortzählung für die Statistik, CI und Release-
 - Korrektur-Pipeline: Handschrift transkribieren, als HTML mit standardisierten Korrekturzeichen annotieren, Anmerkungen in roter Schrift auf das Original übertragen.
 - Export: Korrigiertes PDF und Statistik (Wörter, Fehler nach Art und Schwere).
 
+## Erster Start
+
+Zum Wörterzählen liest Rotstift die Handschrift mit einem KI-Modell, das auf dem eigenen Rechner läuft. Das Modell (rund 1,6 GB) wird beim ersten Mal heruntergeladen:
+
+1. Seiten laden und auf „Texterkennung einrichten“ klicken. Solange das Modell fehlt, ist „Wörter zählen“ ausgegraut.
+2. Im Dialog stehen Größe und Quelle. Der Download ist einmalig, danach arbeitet Rotstift komplett offline, und es werden keine Schülerdaten übertragen.
+3. Der Download zeigt Fortschritt und Restzeit, lässt sich abbrechen und später an derselben Stelle fortsetzen. Rotstift prüft die Datei per SHA256, bevor sie benutzt wird.
+4. Unter „Texterkennung verwalten“ lässt sich das Modell wieder löschen.
+
+Rechner ohne Internet (etwa in Schulen): Beide Modelldateien (`.gguf`) auf einem anderen Rechner von Hugging Face herunterladen, per USB-Stick übertragen und im Dialog über „Modell aus Datei importieren“ auswählen. Rotstift erkennt die Dateien am Hash und übernimmt nur passende.
+
+Das Modell steckt in `src-tauri/models.json` (Quelle auf einen Commit festgelegt, SHA256 und Größe je Datei, Startparameter, Prompt). Dort wird auch das Modell getauscht, sonst ist keine Codeänderung nötig. Der Download akzeptiert nur `https` und Hugging Face als Host (samt deren CDN). Die Dateien liegen im App-Datenverzeichnis unter `models/`.
+
 ## Datenschutz
 
-- Keine Telemetrie, keine Cloud-Dienste. Netzwerkzugriff nur zum Herunterladen von Modellen.
+- Keine Telemetrie, keine Cloud-Dienste. Netzwerkzugriff nur zum einmaligen Herunterladen von Modellen von Hugging Face.
 - Die Modelle laufen über einen eingebetteten llama.cpp-Server auf dem eigenen Rechner. Er lauscht nur auf `127.0.0.1` und verlangt einen zufälligen Schlüssel, den nur die App kennt.
 - Der Quellcode ist offen, damit Schulen und Datenschutzbeauftragte das prüfen können.
 
@@ -45,17 +58,18 @@ pnpm fetch:runtime
 pnpm dev
 ```
 
-`pnpm fetch:runtime` lädt die gepinnte llama.cpp-Version samt SHA256-Prüfung nach `src-tauri/binaries/`. Ohne diesen Schritt bricht der Rust-Build ab. Modelle (GGUF) gehören in das App-Datenverzeichnis unter `models/`, nie ins Repo.
+`pnpm fetch:runtime` lädt die gepinnte llama.cpp-Version samt SHA256-Prüfung nach `src-tauri/binaries/`. Ohne diesen Schritt bricht der Rust-Build ab. Modelle (GGUF) lädt die App selbst (siehe „Erster Start“), sie gehören nie ins Repo.
 
-| Befehl               | Zweck                                                                            |
-| -------------------- | -------------------------------------------------------------------------------- |
-| `pnpm dev`           | App mit Hot Reload starten                                                       |
-| `pnpm fetch:runtime` | llama.cpp-Sidecar für das aktuelle System laden (`--target <triple>` für andere) |
-| `pnpm dev:web`       | Nur das Frontend im Browser (Port 1420)                                          |
-| `pnpm build`         | Installer für das aktuelle Betriebssystem bauen                                  |
-| `pnpm check`         | Typprüfung, Lint, Format, Tests, dazu `cargo fmt`, `clippy` und `cargo test`     |
-| `pnpm format`        | Prettier und `cargo fmt` anwenden                                                |
-| `pnpm test`          | Vitest einmal ausführen (`pnpm test:watch` beobachtet)                           |
+| Befehl                  | Zweck                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `pnpm dev`              | App mit Hot Reload starten                                                       |
+| `pnpm fetch:runtime`    | llama.cpp-Sidecar für das aktuelle System laden (`--target <triple>` für andere) |
+| `pnpm dev:web`          | Nur das Frontend im Browser (Port 1420)                                          |
+| `pnpm build`            | Installer für das aktuelle Betriebssystem bauen                                  |
+| `pnpm check`            | Typprüfung, Lint, Format, Tests, dazu `cargo fmt`, `clippy` und `cargo test`     |
+| `pnpm format`           | Prettier und `cargo fmt` anwenden                                                |
+| `pnpm test`             | Vitest einmal ausführen (`pnpm test:watch` beobachtet)                           |
+| `pnpm test:integration` | Echter Sidecar auf Beispielseiten (braucht Modell und Datensatz, siehe Test)     |
 
 Ein Tag `v*` baut über `.github/workflows/release.yml` Installer für alle Plattformen als Release-Entwurf.
 
@@ -65,6 +79,8 @@ Ein Tag `v*` baut über `.github/workflows/release.yml` Installer für alle Plat
 src/              Frontend (React, TypeScript)
 src/stats/        Statistik über korrigierte Texte
 src/llm/          Client für das lokale Modell (über Rust-Commands)
+src/models/       Modell-Registry, Einrichtungsdialog und Modellverwaltung
+src/pipeline/     Seiten erkennen: Adapter auf das lokale Modell, Fortschritt, Wiederholung
 scripts/          Werkzeuge, etwa der Download der llama.cpp-Runtime
 src-tauri/        Tauri-Hülle in Rust (Fenster, Dateizugriff, llama-server-Sidecar)
 docs/adr/         Architekturentscheidungen

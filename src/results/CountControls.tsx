@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ImportPage } from '../import/pages.ts';
+import { formatMegabytes } from '../models/format.ts';
+import type { ModelStatus } from '../models/types.ts';
 import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages } from '../pipeline/runner.ts';
-import type { TranscriberStatus } from '../pipeline/transcriber.ts';
+import type { EnginePhase, TranscriberStatus } from '../pipeline/transcriber.ts';
 import { buildRows, countedPages, pagesText, totalWords, wordsText } from './summary.ts';
 import type { WordCount } from './use-word-count.ts';
 
@@ -10,6 +12,24 @@ interface CountProps {
   readonly count: WordCount;
   readonly status: TranscriberStatus | null;
   readonly pages: readonly ImportPage[];
+}
+
+interface ControlProps extends CountProps {
+  readonly onSetup?: () => void;
+}
+
+interface HintProps extends CountProps {
+  readonly download?: ModelStatus | null;
+}
+
+const NO_ENGINE = {
+  getPhase: (): EnginePhase => 'idle',
+  subscribe: () => () => undefined,
+};
+
+function useEnginePhase(status: TranscriberStatus | null): EnginePhase {
+  const engine = (status?.state === 'ready' ? status.engine : undefined) ?? NO_ENGINE;
+  return useSyncExternalStore(engine.subscribe, engine.getPhase);
 }
 
 function useNow(active: boolean): number {
@@ -32,11 +52,12 @@ function finishedText(pages: readonly ImportPage[], count: WordCount): string {
   return parts.filter(Boolean).join(' ');
 }
 
-export function CountControls({ count, status, pages }: CountProps) {
+export function CountControls({ count, status, pages, onSetup }: ControlProps) {
   const { runner, state } = count;
   const running = state.batch !== null;
   const now = useNow(running);
   const progress = describeProgress(state, now);
+  const phase = useEnginePhase(status);
   const [announcement, setAnnouncement] = useState('');
   const wasRunning = useRef(false);
   const cancelled = useRef(false);
@@ -61,7 +82,9 @@ export function CountControls({ count, status, pages }: CountProps) {
   };
 
   let message = announcement;
-  if (progress !== null) {
+  if (progress !== null && phase === 'starting') {
+    message = 'Texterkennung startet …';
+  } else if (progress !== null) {
     const remaining =
       progress.remainingMs === null
         ? 'Restzeit wird geschätzt …'
@@ -80,6 +103,11 @@ export function CountControls({ count, status, pages }: CountProps) {
       >
         {running ? 'Abbrechen' : 'Wörter zählen'}
       </button>
+      {status?.state === 'needs-model' && (
+        <button type="button" onClick={onSetup}>
+          {status.problem === 'downloading' ? 'Download läuft …' : 'Texterkennung einrichten'}
+        </button>
+      )}
       <p className="progress" role="status">
         {message}
       </p>
@@ -87,10 +115,32 @@ export function CountControls({ count, status, pages }: CountProps) {
   );
 }
 
-export function CountHint({ count, status, pages }: CountProps) {
+function modelProblemText(
+  problem: 'missing' | 'downloading' | 'corrupt',
+  download: ModelStatus | null,
+): string {
+  switch (problem) {
+    case 'missing':
+      return 'Zum Wörterzählen muss einmalig die Texterkennung eingerichtet werden. Danach funktioniert alles offline.';
+    case 'downloading':
+      return download === null
+        ? 'Die Texterkennung wird heruntergeladen.'
+        : `Die Texterkennung wird heruntergeladen (${formatMegabytes(download.downloadedBytes)} von ${formatMegabytes(download.totalBytes)}).`;
+    case 'corrupt':
+      return 'Die Texterkennung ist beschädigt und muss neu eingerichtet werden.';
+    default: {
+      const unreachable: never = problem;
+      return unreachable;
+    }
+  }
+}
+
+export function CountHint({ count, status, pages, download }: HintProps) {
   const messages: { text: string; demo?: boolean }[] = [];
   if (status === null) {
     messages.push({ text: 'Texterkennung wird geprüft …' });
+  } else if (status.state === 'needs-model') {
+    messages.push({ text: modelProblemText(status.problem, download ?? null) });
   } else if (status.state === 'unavailable') {
     messages.push({ text: `Wörter zählen ist gerade nicht möglich. ${status.message}` });
   } else {

@@ -1,5 +1,9 @@
-import type { PageTranscriber } from './transcriber.ts';
+import { createLlmClient } from '../llm/client.ts';
+import { createModelClient, type ModelClient } from '../models/client.ts';
+import type { ModelInfo } from '../models/registry.ts';
+import { createLlmTranscriber } from './llm-transcriber.ts';
 import type { TranscriberEnvironment } from './provider.ts';
+import type { PageTranscriber } from './transcriber.ts';
 
 async function loadDemo(): Promise<PageTranscriber> {
   if (import.meta.env.DEV) {
@@ -9,10 +13,20 @@ async function loadDemo(): Promise<PageTranscriber> {
   throw new Error('Der Demo-Transkribierer ist nur im Entwicklungsmodus verfügbar.');
 }
 
+export function isTauri(): boolean {
+  return '__TAURI_INTERNALS__' in window;
+}
+
+export function browserModelClient(): ModelClient | null {
+  return isTauri() ? createModelClient() : null;
+}
+
 export function browserEnvironment(): TranscriberEnvironment {
   return {
     isDev: import.meta.env.DEV,
-    isTauri: '__TAURI_INTERNALS__' in window,
+    isTauri: isTauri(),
     loadDemo,
+    createModelTranscriber: (model: ModelInfo) =>
+      createLlmTranscriber({ client: createLlmClient(), model }),
   };
 }

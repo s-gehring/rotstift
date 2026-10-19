@@ -1,4 +1,3 @@
-use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
@@ -6,26 +5,13 @@ use super::process;
 use super::runtime::{
     LlmError, LlmRuntime, RuntimePaths, RuntimeStatus, StartOptions, installed_layout,
 };
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelFile {
-    name: String,
-    bytes: u64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelDirectory {
-    path: String,
-    files: Vec<ModelFile>,
-}
+use crate::models::{self, registry::ModelEntry};
 
 fn environment_error(error: impl ToString) -> LlmError {
     LlmError::Environment(error.to_string())
 }
 
-fn runtime_paths<R: Runtime>(app: &AppHandle<R>) -> Result<RuntimePaths, LlmError> {
+pub fn runtime_paths<R: Runtime>(app: &AppHandle<R>) -> Result<RuntimePaths, LlmError> {
     let executable = tauri::utils::platform::current_exe().map_err(environment_error)?;
     let executable_dir = executable
         .parent()
@@ -48,14 +34,29 @@ pub fn stop_orphaned_sidecars<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+pub fn start_options(entry: &ModelEntry) -> StartOptions {
+    StartOptions {
+        model: entry.files.model.name.clone(),
+        mmproj: Some(entry.files.mmproj.name.clone()),
+        context_size: Some(entry.server.context_size),
+        threads: entry.server.threads,
+        gpu_layers: entry.server.gpu_layers,
+        image_max_tokens: entry.server.image_max_tokens,
+    }
+}
+
 #[tauri::command]
-pub async fn llm_start<R: Runtime>(
+pub async fn llm_start_model<R: Runtime>(
     app: AppHandle<R>,
     runtime: State<'_, LlmRuntime>,
-    options: StartOptions,
+    model_id: String,
 ) -> Result<RuntimeStatus, LlmError> {
     let paths = runtime_paths(&app)?;
-    runtime.start(&paths, options).await
+    let entry = models::entry(&model_id).map_err(|_| LlmError::InvalidModelName(model_id))?;
+    if !models::is_ready(&paths.models_dir, entry).await {
+        return Err(LlmError::ModelNotFound(entry.files.model.name.clone()));
+    }
+    runtime.start(&paths, start_options(entry)).await
 }
 
 #[tauri::command]
@@ -80,27 +81,4 @@ pub async fn llm_chat(
 #[tauri::command]
 pub fn llm_cancel(runtime: State<'_, LlmRuntime>, request_id: String) -> bool {
     runtime.cancel(&request_id)
-}
-
-#[tauri::command]
-pub fn llm_models<R: Runtime>(app: AppHandle<R>) -> Result<ModelDirectory, LlmError> {
-    let dir = runtime_paths(&app)?.models_dir;
-    std::fs::create_dir_all(&dir).map_err(environment_error)?;
-    let mut files: Vec<ModelFile> = std::fs::read_dir(&dir)
-        .map_err(environment_error)?
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let name = entry.file_name().into_string().ok()?;
-            let metadata = entry.metadata().ok()?;
-            (metadata.is_file() && name.ends_with(".gguf")).then_some(ModelFile {
-                name,
-                bytes: metadata.len(),
-            })
-        })
-        .collect();
-    files.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(ModelDirectory {
-        path: dir.display().to_string(),
-        files,
-    })
 }

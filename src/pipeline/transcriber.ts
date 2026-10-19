@@ -11,8 +11,23 @@ export interface PageTranscriber {
   transcribe(png: Blob, signal: AbortSignal): Promise<TranscribeResult>;
 }
 
+export type EnginePhase = 'idle' | 'starting' | 'ready' | 'failed';
+
+export interface EngineMonitor {
+  readonly getPhase: () => EnginePhase;
+  readonly subscribe: (listener: () => void) => () => void;
+}
+
+export type ModelProblem = 'missing' | 'downloading' | 'corrupt';
+
 export type TranscriberStatus =
-  | { readonly state: 'ready'; readonly transcriber: PageTranscriber; readonly demo: boolean }
+  | {
+      readonly state: 'ready';
+      readonly transcriber: PageTranscriber;
+      readonly demo: boolean;
+      readonly engine?: EngineMonitor;
+    }
+  | { readonly state: 'needs-model'; readonly problem: ModelProblem }
   | { readonly state: 'unavailable'; readonly message: string };
 
 function detail(message: string): string {

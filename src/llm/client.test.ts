@@ -17,16 +17,16 @@ const response = (content: string | null): ChatResponse => ({
 });
 
 describe('createLlmClient', () => {
-  it('starts the runtime with the given options', async () => {
+  it('starts the runtime with a registry model id only', async () => {
     const { calls, invoke } = fakeInvoke({ state: 'ready', model: 'm.gguf', port: 1 });
-    const status = await createLlmClient(invoke).start({ model: 'm.gguf', contextSize: 4096 });
+    const status = await createLlmClient(invoke).startModel('qwen');
     expect(status).toEqual({ state: 'ready', model: 'm.gguf', port: 1 });
-    expect(calls).toEqual([['llm_start', { options: { model: 'm.gguf', contextSize: 4096 } }]]);
+    expect(calls).toEqual([['llm_start_model', { modelId: 'qwen' }]]);
   });
 
   it('wraps runtime errors in LlmCallError', async () => {
     const { invoke } = fakeInvoke({ kind: 'modelNotFound', detail: 'm.gguf' }, true);
-    const result = createLlmClient(invoke).start({ model: 'm.gguf' });
+    const result = createLlmClient(invoke).startModel('qwen');
     await expect(result).rejects.toBeInstanceOf(LlmCallError);
     await expect(result).rejects.toMatchObject({
       error: { kind: 'modelNotFound', detail: 'm.gguf' },
