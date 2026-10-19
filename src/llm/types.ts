@@ -1,11 +1,3 @@
-export interface StartOptions {
-  model: string;
-  mmproj?: string;
-  contextSize?: number;
-  threads?: number;
-  gpuLayers?: number;
-}
-
 export interface ExitReport {
   code: number | null;
   log: string;
@@ -32,11 +24,6 @@ export type RuntimeStatus =
   | { state: 'starting'; model: string }
   | { state: 'ready'; model: string; port: number }
   | { state: 'failed'; error: LlmError };
-
-export interface ModelDirectory {
-  path: string;
-  files: { name: string; bytes: number }[];
-}
 
 export type ContentPart =
   { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };

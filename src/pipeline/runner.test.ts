@@ -523,6 +523,82 @@ describe('runner', () => {
     expect(t.runner.getState().durationsMs).toEqual([4000, 6000]);
   });
 
+  it('leaves the sidecar startup out of the page duration', async () => {
+    const t = setup();
+    t.runner.setPages([page('a'), page('b')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.advance(25_000);
+    t.calls[0]?.resolve({ ok: true, lines: ['a'], startupMs: 20_000 });
+    await t.waitForCalls(2);
+    t.advance(5000);
+    t.calls[1]?.resolve(t.ok('b'));
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+    expect(t.runner.getState().durationsMs).toEqual([5000, 5000]);
+  });
+
+  describe('sidecar crashes', () => {
+    const crash: TranscribeResult = {
+      ok: false,
+      error: { kind: 'failed', message: 'beendet', crashed: true },
+    };
+
+    it('keeps going after the first crash and ends the batch after the second', async () => {
+      const t = setup();
+      t.runner.setPages([page('a'), page('b'), page('c'), page('d')]);
+      t.runner.start();
+      await t.waitForCalls(1);
+      t.calls[0]?.resolve(crash);
+      await t.waitForCalls(2);
+      expect(t.status('b')).toBe('running');
+      t.calls[1]?.resolve(crash);
+
+      await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+      expect(t.calls).toHaveLength(2);
+      const entries = t.runner.getState().entries;
+      expect(entries['a']?.status).toBe('error');
+      expect(entries['b']?.status).toBe('error');
+      for (const id of ['c', 'd']) {
+        expect(entries[id]).toMatchObject({
+          status: 'error',
+          error: { kind: 'failed', message: expect.stringContaining('Arbeitsspeicher') },
+        });
+      }
+    });
+
+    it('allows one restart in every new batch', async () => {
+      const t = setup();
+      t.runner.setPages([page('a'), page('b'), page('c')]);
+      t.runner.start();
+      await t.waitForCalls(1);
+      t.calls[0]?.resolve(crash);
+      await t.waitForCalls(2);
+      t.calls[1]?.resolve(t.ok('b'));
+      await t.waitForCalls(3);
+      t.calls[2]?.resolve(t.ok('c'));
+      await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+      expect(t.status('c')).toBe('done');
+
+      t.runner.retry('a');
+      await t.waitForCalls(4);
+      t.calls[3]?.resolve(t.ok('a'));
+      await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+      expect(t.status('a')).toBe('done');
+    });
+
+    it('does not end the batch for ordinary failures', async () => {
+      const t = setup();
+      t.runner.setPages([page('a'), page('b'), page('c')]);
+      t.runner.start();
+      for (let index = 0; index < 3; index += 1) {
+        await t.waitForCalls(index + 1);
+        t.calls[index]?.resolve({ ok: false, error: { kind: 'failed', message: 'x' } });
+      }
+      await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+      expect(t.calls).toHaveLength(3);
+    });
+  });
+
   it('notifies subscribers and stops after unsubscribe', async () => {
     const t = setup();
     let notifications = 0;

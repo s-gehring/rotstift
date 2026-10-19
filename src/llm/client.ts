@@ -1,18 +1,15 @@
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import type {
-  ChatMessage,
-  ChatRequest,
-  ChatResponse,
-  LlmError,
-  ModelDirectory,
-  RuntimeStatus,
-  StartOptions,
-} from './types.ts';
+import type { ChatMessage, ChatRequest, ChatResponse, LlmError, RuntimeStatus } from './types.ts';
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 export interface ChatOptions {
   signal?: AbortSignal;
+}
+
+export interface Completion {
+  text: string;
+  finishReason: string | null;
 }
 
 export class LlmCallError extends Error {
@@ -58,18 +55,18 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
   }
 
   return {
-    start: (options: StartOptions) => call<RuntimeStatus>('llm_start', { options }),
+    startModel: (modelId: string) => call<RuntimeStatus>('llm_start_model', { modelId }),
     stop: () => call<RuntimeStatus>('llm_stop'),
     status: () => call<RuntimeStatus>('llm_status'),
-    models: () => call<ModelDirectory>('llm_models'),
     chat,
-    async complete(request: ChatRequest, options: ChatOptions = {}): Promise<string> {
+    async complete(request: ChatRequest, options: ChatOptions = {}): Promise<Completion> {
       const response = await chat(request, options);
-      const content = response.choices[0]?.message.content;
+      const choice = response.choices[0];
+      const content = choice?.message.content;
       if (typeof content !== 'string') {
         throw new LlmCallError({ kind: 'request', detail: 'response contains no message' });
       }
-      return content;
+      return { text: content, finishReason: choice?.finish_reason ?? null };
     },
   };
 }
