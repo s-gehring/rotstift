@@ -12,6 +12,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio::sync::watch;
 
 use super::registry::{ModelFile, url_allowed};
+use super::verified::{has_valid_marker, remove_marker, verify_installed, write_marker};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const STALL_TIMEOUT: Duration = Duration::from_secs(45);
@@ -54,7 +55,36 @@ pub type ProgressSink<'a> = &'a (dyn Fn(Progress) + Send + Sync);
 pub type UrlPolicy = fn(&Url) -> bool;
 
 pub fn part_path(dir: &Path, file: &ModelFile) -> PathBuf {
-    dir.join(format!("{}.part", file.name))
+    let version = file.sha256.get(..16).unwrap_or(&file.sha256);
+    dir.join(format!("{}.{version}.part", file.name))
+}
+
+pub fn import_path(dir: &Path, file: &ModelFile) -> PathBuf {
+    dir.join(format!("{}.import", file.name))
+}
+
+fn is_part_of(candidate: &str, file: &ModelFile) -> bool {
+    candidate.strip_suffix(".part").is_some_and(|stem| {
+        stem == file.name
+            || stem
+                .strip_prefix(file.name.as_str())
+                .is_some_and(|rest| rest.starts_with('.'))
+    })
+}
+
+pub fn remove_stale_parts(dir: &Path, file: &ModelFile, keep_current: bool) -> std::io::Result<()> {
+    let current = part_path(dir, file);
+    for entry in std::fs::read_dir(dir)? {
+        let path = entry?.path();
+        let is_part = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| is_part_of(name, file));
+        if is_part && !(keep_current && path == current) {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn hex_digest(hasher: Sha256) -> String {
@@ -156,7 +186,9 @@ impl Downloader {
         fs::create_dir_all(dir).await?;
         let mut needed = DISK_RESERVE;
         for file in files {
-            if file_len(&dir.join(&file.name)).await == Some(file.bytes) {
+            if file_len(&dir.join(&file.name)).await == Some(file.bytes)
+                && has_valid_marker(dir, file)
+            {
                 continue;
             }
             let partial = file_len(&part_path(dir, file)).await.unwrap_or(0);
@@ -206,12 +238,48 @@ impl Downloader {
         finished: u64,
     ) -> Result<(), DownloadError> {
         let target = dir.join(&file.name);
-        let part = part_path(dir, file);
         match file_len(&target).await {
-            Some(len) if len == file.bytes => return Ok(()),
-            Some(_) => fs::remove_file(&target).await?,
+            Some(len) if len == file.bytes => {
+                if has_valid_marker(dir, file) || verify_installed(dir, file, cancel).await? {
+                    return Ok(());
+                }
+                remove_marker(dir, file);
+                fs::remove_file(&target).await?;
+            }
+            Some(_) => {
+                remove_marker(dir, file);
+                fs::remove_file(&target).await?;
+            }
             None => {}
         }
+        fs::create_dir_all(dir).await?;
+        remove_stale_parts(dir, file, true)?;
+
+        let mut resumed = false;
+        match self
+            .stream(file, dir, cancel, reporter, finished, &mut resumed)
+            .await
+        {
+            Err(DownloadError::HashMismatch { .. }) if resumed => {
+                self.stream(file, dir, cancel, reporter, finished, &mut resumed)
+                    .await?;
+            }
+            other => other?,
+        }
+        write_marker(dir, file)
+    }
+
+    async fn stream(
+        &self,
+        file: &ModelFile,
+        dir: &Path,
+        cancel: &mut watch::Receiver<bool>,
+        reporter: &mut Reporter<'_>,
+        finished: u64,
+        resumed: &mut bool,
+    ) -> Result<(), DownloadError> {
+        let target = dir.join(&file.name);
+        let part = part_path(dir, file);
         let mut offset = file_len(&part).await.unwrap_or(0);
         if offset > file.bytes {
             fs::remove_file(&part).await?;
@@ -219,10 +287,9 @@ impl Downloader {
         }
         let mut hasher = Sha256::new();
         if offset > 0 {
-            seed_hasher(&part, &mut hasher, cancel).await?;
             reporter.report(finished + offset, true);
+            seed_hasher(&part, &mut hasher, cancel).await?;
         }
-
         if offset < file.bytes {
             let mut response = self.open(file, offset, cancel).await?;
             if response.status() == StatusCode::RANGE_NOT_SATISFIABLE && offset > 0 {
@@ -278,6 +345,7 @@ impl Downloader {
             }
         }
 
+        *resumed = offset > 0;
         if hex_digest(hasher) != file.sha256 {
             fs::remove_file(&part).await?;
             return Err(DownloadError::HashMismatch {
@@ -343,7 +411,7 @@ fn check_response(
     }
 }
 
-async fn seed_hasher(
+pub(super) async fn seed_hasher(
     path: &Path,
     hasher: &mut Sha256,
     cancel: &mut watch::Receiver<bool>,

@@ -11,10 +11,11 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
 
 use super::download::{DownloadError, Downloader, FreeSpace, Progress, hex_digest, part_path};
-use super::manager::{DownloadEvent, ModelManager, State, Update};
+use super::manager::{DownloadEvent, ModelManager, State, Update, is_ready};
 use super::registry::{
     ModelEntry, ModelFile, ModelFiles, RequestParams, ServerParams, url_allowed,
 };
+use super::verified::{has_valid_marker, marker_path, write_marker};
 
 #[derive(Clone, Default)]
 struct Behavior {
@@ -226,11 +227,104 @@ async fn skips_files_that_are_already_complete() {
     let dir = temp_dir("skip");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("m.gguf"), &body).unwrap();
+    write_marker(&dir, &model).unwrap();
     downloader()
         .download(&[&model], &dir, &no_cancel(), &ignore)
         .await
         .unwrap();
     assert!(server.requests().is_empty());
+}
+
+#[tokio::test]
+async fn hashes_a_complete_file_without_marker_instead_of_trusting_its_size() {
+    let body = content(30, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let model = file(&server, "m.gguf", &body);
+    let dir = temp_dir("unmarked-good");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.gguf"), &body).unwrap();
+    downloader()
+        .download(&[&model], &dir, &no_cancel(), &ignore)
+        .await
+        .unwrap();
+    assert!(server.requests().is_empty());
+    assert!(has_valid_marker(&dir, &model));
+}
+
+#[tokio::test]
+async fn replaces_a_complete_file_with_the_right_size_but_wrong_content() {
+    let body = content(31, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let model = file(&server, "m.gguf", &body);
+    let dir = temp_dir("unmarked-bad");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.gguf"), vec![9u8; MODEL]).unwrap();
+    downloader()
+        .download(&[&model], &dir, &no_cancel(), &ignore)
+        .await
+        .unwrap();
+    assert_eq!(server.requests(), [None]);
+    assert_eq!(std::fs::read(dir.join("m.gguf")).unwrap(), body);
+    assert!(has_valid_marker(&dir, &model));
+}
+
+#[tokio::test]
+async fn a_marker_does_not_survive_a_change_of_the_file() {
+    let body = content(32, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let model = file(&server, "m.gguf", &body);
+    let dir = temp_dir("marker-stale");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.gguf"), &body).unwrap();
+    write_marker(&dir, &model).unwrap();
+    assert!(has_valid_marker(&dir, &model));
+    std::fs::write(marker_path(&dir, &model), "{}").unwrap();
+    assert!(!has_valid_marker(&dir, &model));
+    write_marker(&dir, &model).unwrap();
+    let handle = std::fs::OpenOptions::new()
+        .write(true)
+        .open(dir.join("m.gguf"))
+        .unwrap();
+    handle
+        .set_modified(std::time::SystemTime::now() + Duration::from_secs(60))
+        .unwrap();
+    assert!(!has_valid_marker(&dir, &model));
+}
+
+#[tokio::test]
+async fn a_finished_download_is_marked_as_verified() {
+    let body = content(33, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let model = file(&server, "m.gguf", &body);
+    let dir = temp_dir("marked");
+    downloader()
+        .download(&[&model], &dir, &no_cancel(), &ignore)
+        .await
+        .unwrap();
+    assert!(has_valid_marker(&dir, &model));
+}
+
+#[tokio::test]
+async fn part_files_are_bound_to_the_pinned_hash() {
+    let body = content(34, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let model = file(&server, "m.gguf", &body);
+    let mut older = model.clone();
+    older.sha256 = sha(b"previous version");
+    assert_ne!(
+        part_path(&PathBuf::new(), &model),
+        part_path(&PathBuf::new(), &older)
+    );
+    let dir = temp_dir("part-version");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(part_path(&dir, &older), &body[..100_000]).unwrap();
+    downloader()
+        .download(&[&model], &dir, &no_cancel(), &ignore)
+        .await
+        .unwrap();
+    assert_eq!(server.requests(), [None]);
+    assert_eq!(std::fs::read(dir.join("m.gguf")).unwrap(), body);
+    assert!(!part_path(&dir, &older).exists());
 }
 
 #[tokio::test]
@@ -322,13 +416,31 @@ async fn a_wrong_hash_deletes_the_download_and_never_installs_it() {
 }
 
 #[tokio::test]
-async fn a_corrupt_partial_file_fails_the_hash_check_on_resume() {
+async fn a_corrupt_partial_file_restarts_once_from_zero_after_the_hash_check() {
     let body = content(8, MODEL);
     let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
     let model = file(&server, "m.gguf", &body);
     let dir = temp_dir("corrupt-part");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(part_path(&dir, &model), vec![0u8; 100_000]).unwrap();
+    downloader()
+        .download(&[&model], &dir, &no_cancel(), &ignore)
+        .await
+        .unwrap();
+    assert_eq!(server.requests(), [Some("bytes=100000-".to_owned()), None]);
+    assert_eq!(std::fs::read(dir.join("m.gguf")).unwrap(), body);
+    assert!(!part_path(&dir, &model).exists());
+}
+
+#[tokio::test]
+async fn a_second_hash_mismatch_after_the_restart_is_final() {
+    let body = content(9, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let mut model = file(&server, "m.gguf", &body);
+    model.sha256 = sha(b"never matches");
+    let dir = temp_dir("corrupt-twice");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(part_path(&dir, &model), &body[..100_000]).unwrap();
     let error = downloader()
         .download(&[&model], &dir, &no_cancel(), &ignore)
         .await
@@ -339,8 +451,32 @@ async fn a_corrupt_partial_file_fails_the_hash_check_on_resume() {
             file: "m.gguf".into()
         }
     );
+    assert_eq!(server.requests().len(), 2);
     assert!(!dir.join("m.gguf").exists());
     assert!(!part_path(&dir, &model).exists());
+}
+
+#[tokio::test]
+async fn resuming_reports_the_existing_offset_before_hashing_it() {
+    let body = content(10, MODEL);
+    let server = TestServer::start(&[("m.gguf", body.clone())], Behavior::default()).await;
+    let model = file(&server, "m.gguf", &body);
+    let dir = temp_dir("early-progress");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(part_path(&dir, &model), &body[..100_000]).unwrap();
+    let (cancel, receiver) = watch::channel(false);
+    let seen = Mutex::new(Vec::new());
+    let sink = |progress: Progress| {
+        seen.lock().unwrap().push(progress.downloaded_bytes);
+        cancel.send(true).unwrap();
+    };
+    let error = downloader()
+        .download(&[&model], &dir, &receiver, &sink)
+        .await
+        .unwrap_err();
+    assert_eq!(error, DownloadError::Cancelled);
+    assert_eq!(*seen.lock().unwrap(), [100_000]);
+    assert!(server.requests().is_empty());
 }
 
 #[tokio::test]
@@ -541,7 +677,15 @@ async fn the_manager_tracks_status_through_download_cancel_and_delete() {
         Err(DownloadError::Busy)
     );
     assert_eq!(manager.status(&dir, entry).await.state, State::Downloading);
-    assert_eq!(manager.delete(&dir, entry).await, Err(DownloadError::Busy));
+    let stops = AtomicUsize::new(0);
+    let stop = || {
+        stops.fetch_add(1, Ordering::Relaxed);
+    };
+    assert_eq!(
+        manager.delete(&dir, entry, stop).await,
+        Err(DownloadError::Busy)
+    );
+    assert_eq!(stops.load(Ordering::Relaxed), 0);
     assert!(manager.cancel("test-model"));
     assert_eq!(next_final(&mut events).await, Update::Cancelled);
     let status = manager.status(&dir, entry).await;
@@ -557,7 +701,8 @@ async fn the_manager_tracks_status_through_download_cancel_and_delete() {
     std::fs::write(dir.join("p.gguf"), b"truncated").unwrap();
     assert_eq!(manager.status(&dir, entry).await.state, State::Corrupt);
 
-    manager.delete(&dir, entry).await.unwrap();
+    manager.delete(&dir, entry, stop).await.unwrap();
+    assert_eq!(stops.load(Ordering::Relaxed), 1);
     let status = manager.status(&dir, entry).await;
     assert_eq!((status.state, status.downloaded_bytes), (State::Missing, 0));
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
@@ -589,7 +734,106 @@ async fn the_manager_reports_failures_as_events() {
             }
         }
     );
-    assert!(!manager.is_downloading("test-model"));
+    assert!(!manager.is_busy("test-model"));
+}
+
+#[tokio::test]
+async fn installed_files_without_a_marker_are_unverified_until_they_are_hashed() {
+    let (model, projector) = (content(40, 5000), content(41, 3000));
+    let server = TestServer::start(&[], Behavior::default()).await;
+    let entry = leaked_entry(
+        file(&server, "m.gguf", &model),
+        file(&server, "p.gguf", &projector),
+    );
+    let dir = temp_dir("unverified");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.gguf"), &model).unwrap();
+    std::fs::write(dir.join("p.gguf"), &projector).unwrap();
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    assert_eq!(manager.status(&dir, entry).await.state, State::Unverified);
+
+    let status = manager.verify(&dir, entry).await.unwrap();
+    assert_eq!(status.state, State::Ready);
+    assert!(has_valid_marker(&dir, &entry.files.model));
+
+    std::fs::remove_file(marker_path(&dir, &entry.files.model)).unwrap();
+    std::fs::remove_file(marker_path(&dir, &entry.files.mmproj)).unwrap();
+    assert!(is_ready(&dir, entry).await);
+    assert_eq!(manager.status(&dir, entry).await.state, State::Ready);
+}
+
+#[tokio::test]
+async fn verification_removes_files_whose_content_does_not_match() {
+    let (model, projector) = (content(42, 5000), content(43, 3000));
+    let server = TestServer::start(&[], Behavior::default()).await;
+    let entry = leaked_entry(
+        file(&server, "m.gguf", &model),
+        file(&server, "p.gguf", &projector),
+    );
+    let dir = temp_dir("verify-bad");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.gguf"), &model).unwrap();
+    std::fs::write(dir.join("p.gguf"), vec![1u8; 3000]).unwrap();
+    assert!(!is_ready(&dir, entry).await);
+
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    let status = manager.verify(&dir, entry).await.unwrap();
+    assert_eq!(status.state, State::Missing);
+    assert!(dir.join("m.gguf").exists());
+    assert!(!dir.join("p.gguf").exists());
+    assert!(!is_ready(&dir, entry).await);
+}
+
+#[tokio::test]
+async fn import_and_verification_are_jobs_that_block_download_and_delete() {
+    let (model, projector) = (content(44, 400_000), content(45, 3000));
+    let slow = Behavior {
+        chunk_delay: Some(Duration::from_millis(15)),
+        ..Behavior::default()
+    };
+    let server = TestServer::start(
+        &[("m.gguf", model.clone()), ("p.gguf", projector.clone())],
+        slow,
+    )
+    .await;
+    let entry = leaked_entry(
+        file(&server, "m.gguf", &model),
+        file(&server, "p.gguf", &projector),
+    );
+    let dir = temp_dir("jobs");
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let emit = move |event: DownloadEvent| {
+        let _ = sender.send(event);
+    };
+    manager
+        .start(&dir, entry, Arc::new(emit.clone()))
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.import(&dir, entry, vec![]).await,
+        Err(DownloadError::Busy)
+    );
+    assert_eq!(manager.verify(&dir, entry).await, Err(DownloadError::Busy));
+    assert!(manager.cancel("test-model"));
+    assert_eq!(next_final(&mut events).await, Update::Cancelled);
+
+    let source = temp_dir("jobs-source");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("a.bin"), &model).unwrap();
+    std::fs::write(source.join("b.bin"), &projector).unwrap();
+    let outcome = manager
+        .import(
+            &dir,
+            entry,
+            vec![source.join("a.bin"), source.join("b.bin")],
+        )
+        .await
+        .unwrap();
+    assert_eq!(outcome.imported, ["m.gguf", "p.gguf"]);
+    assert!(!manager.is_busy("test-model"));
+    assert_eq!(manager.status(&dir, entry).await.state, State::Ready);
+    assert!(!dir.join("m.gguf.import").exists() && !part_path(&dir, &entry.files.model).exists());
 }
 
 #[test]

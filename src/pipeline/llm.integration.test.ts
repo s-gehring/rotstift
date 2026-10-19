@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { afterAll, describe, expect, it } from 'vitest';
-import { LlmCallError } from '../llm/client.ts';
+import { LlmCallError, type Completion } from '../llm/client.ts';
 import type { ChatRequest, RuntimeStatus } from '../llm/types.ts';
 import { recommendModel } from '../models/registry.ts';
 import { countWords } from '../stats/count-words.ts';
@@ -101,7 +101,7 @@ class RealSidecar implements EngineClient {
   complete = async (
     request: ChatRequest,
     options: { signal?: AbortSignal } = {},
-  ): Promise<string> => {
+  ): Promise<Completion> => {
     const response = await fetch(`http://127.0.0.1:${this.port}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.key}` },
@@ -109,8 +109,13 @@ class RealSidecar implements EngineClient {
       signal: options.signal ?? null,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-    const body: { choices: { message: { content: string } }[] } = await response.json();
-    return body.choices[0]?.message.content ?? '';
+    const body: {
+      choices: { finish_reason: string | null; message: { content: string } }[];
+    } = await response.json();
+    return {
+      text: body.choices[0]?.message.content ?? '',
+      finishReason: body.choices[0]?.finish_reason ?? null,
+    };
   };
 
   stop() {

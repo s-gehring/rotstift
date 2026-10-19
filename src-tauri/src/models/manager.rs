@@ -1,19 +1,25 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 use tokio::fs;
 use tokio::sync::watch;
 
-use super::download::{DownloadError, Downloader, Progress, part_path};
+use super::download::{
+    DownloadError, Downloader, Progress, import_path, part_path, remove_stale_parts,
+};
+use super::import::{ImportOutcome, import_files};
 use super::registry::{ModelEntry, ModelFile, registry};
+use super::verified::{has_valid_marker, marker_path, remove_marker, verify_uninterrupted};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum State {
     Missing,
     Downloading,
+    Verifying,
+    Unverified,
     Ready,
     Corrupt,
 }
@@ -46,9 +52,29 @@ pub struct DownloadEvent {
 
 pub type Emitter = Arc<dyn Fn(DownloadEvent) + Send + Sync>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JobKind {
+    Download,
+    Check,
+}
+
 struct Job {
+    kind: JobKind,
     cancel: watch::Sender<bool>,
     progress: Arc<Mutex<Progress>>,
+}
+
+struct Reservation {
+    manager: Arc<ModelManager>,
+    model_id: String,
+    cancel: watch::Receiver<bool>,
+    progress: Arc<Mutex<Progress>>,
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        self.manager.jobs().remove(&self.model_id);
+    }
 }
 
 pub struct ModelManager {
@@ -86,6 +112,11 @@ pub async fn is_ready(dir: &Path, entry: &ModelEntry) -> bool {
         if installed_bytes(dir, file).await != Some(file.bytes) {
             return false;
         }
+        if !has_valid_marker(dir, file)
+            && !matches!(verify_uninterrupted(dir, file).await, Ok(true))
+        {
+            return false;
+        }
     }
     true
 }
@@ -93,9 +124,13 @@ pub async fn is_ready(dir: &Path, entry: &ModelEntry) -> bool {
 async fn inspect(dir: &Path, entry: &ModelEntry) -> ModelStatus {
     let mut present = 0;
     let mut corrupt = false;
+    let mut unverified = false;
     for file in entry.file_list() {
         match installed_bytes(dir, file).await {
-            Some(len) if len == file.bytes => present += len,
+            Some(len) if len == file.bytes => {
+                present += len;
+                unverified |= !has_valid_marker(dir, file);
+            }
             Some(_) => corrupt = true,
             None => {
                 present += file_len(&part_path(dir, file))
@@ -106,6 +141,8 @@ async fn inspect(dir: &Path, entry: &ModelEntry) -> ModelStatus {
     }
     let state = if corrupt {
         State::Corrupt
+    } else if present == entry.total_bytes() && unverified {
+        State::Unverified
     } else if present == entry.total_bytes() {
         State::Ready
     } else {
@@ -155,23 +192,61 @@ impl ModelManager {
     }
 
     pub async fn status(&self, dir: &Path, entry: &ModelEntry) -> ModelStatus {
-        let running = self
-            .jobs()
-            .get(&entry.id)
-            .map(|job| *job.progress.lock().unwrap_or_else(|p| p.into_inner()));
+        let running = self.jobs().get(&entry.id).map(|job| {
+            (
+                job.kind,
+                *job.progress.lock().unwrap_or_else(|p| p.into_inner()),
+            )
+        });
         match running {
-            Some(progress) => ModelStatus {
+            Some((JobKind::Download, progress)) => ModelStatus {
                 model_id: entry.id.clone(),
                 state: State::Downloading,
                 downloaded_bytes: progress.downloaded_bytes,
+                total_bytes: progress.total_bytes,
+            },
+            Some((JobKind::Check, progress)) => ModelStatus {
+                model_id: entry.id.clone(),
+                state: State::Verifying,
+                downloaded_bytes: 0,
                 total_bytes: progress.total_bytes,
             },
             None => inspect(dir, entry).await,
         }
     }
 
-    pub fn is_downloading(&self, model_id: &str) -> bool {
+    pub fn is_busy(&self, model_id: &str) -> bool {
         self.jobs().contains_key(model_id)
+    }
+
+    fn reserve(
+        self: &Arc<Self>,
+        entry: &ModelEntry,
+        kind: JobKind,
+    ) -> Result<Reservation, DownloadError> {
+        let (cancel, receiver) = watch::channel(false);
+        let progress = Arc::new(Mutex::new(Progress {
+            downloaded_bytes: 0,
+            total_bytes: entry.total_bytes(),
+        }));
+        let mut jobs = self.jobs();
+        if jobs.contains_key(&entry.id) {
+            return Err(DownloadError::Busy);
+        }
+        jobs.insert(
+            entry.id.clone(),
+            Job {
+                kind,
+                cancel,
+                progress: Arc::clone(&progress),
+            },
+        );
+        Ok(Reservation {
+            manager: Arc::clone(self),
+            model_id: entry.id.clone(),
+            cancel: receiver,
+            progress,
+        })
     }
 
     pub async fn start(
@@ -182,32 +257,12 @@ impl ModelManager {
     ) -> Result<(), DownloadError> {
         let files: Vec<&'static ModelFile> = entry.file_list().to_vec();
         let downloader = self.downloader()?;
-        let (cancel, receiver) = watch::channel(false);
-        let progress = Arc::new(Mutex::new(Progress {
-            downloaded_bytes: 0,
-            total_bytes: entry.total_bytes(),
-        }));
-        {
-            let mut jobs = self.jobs();
-            if jobs.contains_key(&entry.id) {
-                return Err(DownloadError::Busy);
-            }
-            jobs.insert(
-                entry.id.clone(),
-                Job {
-                    cancel,
-                    progress: Arc::clone(&progress),
-                },
-            );
-        }
-        if let Err(error) = downloader.preflight(&files, dir).await {
-            self.jobs().remove(&entry.id);
-            return Err(error);
-        }
+        let reservation = self.reserve(entry, JobKind::Download)?;
+        downloader.preflight(&files, dir).await?;
 
-        let manager = Arc::clone(self);
         let dir = dir.to_path_buf();
         tokio::spawn(async move {
+            let progress = Arc::clone(&reservation.progress);
             let sink = |update: Progress| {
                 *progress.lock().unwrap_or_else(|p| p.into_inner()) = update;
                 emit(DownloadEvent {
@@ -215,8 +270,10 @@ impl ModelManager {
                     update: Update::Progress(update),
                 });
             };
-            let result = downloader.download(&files, &dir, &receiver, &sink).await;
-            manager.jobs().remove(&entry.id);
+            let result = downloader
+                .download(&files, &dir, &reservation.cancel, &sink)
+                .await;
+            drop(reservation);
             let update = match result {
                 Ok(()) => Update::Done,
                 Err(DownloadError::Cancelled) => Update::Cancelled,
@@ -230,24 +287,69 @@ impl ModelManager {
         Ok(())
     }
 
+    pub async fn verify(
+        self: &Arc<Self>,
+        dir: &Path,
+        entry: &'static ModelEntry,
+    ) -> Result<ModelStatus, DownloadError> {
+        let _reservation = self.reserve(entry, JobKind::Check)?;
+        for file in entry.file_list() {
+            let complete = installed_bytes(dir, file).await == Some(file.bytes);
+            if complete && !has_valid_marker(dir, file) && !verify_uninterrupted(dir, file).await? {
+                remove_marker(dir, file);
+                fs::remove_file(dir.join(&file.name)).await?;
+            }
+        }
+        Ok(inspect(dir, entry).await)
+    }
+
+    pub async fn import(
+        self: &Arc<Self>,
+        dir: &Path,
+        entry: &'static ModelEntry,
+        sources: Vec<PathBuf>,
+    ) -> Result<ImportOutcome, DownloadError> {
+        let reservation = self.reserve(entry, JobKind::Check)?;
+        let dir = dir.to_path_buf();
+        let outcome = tokio::task::spawn_blocking(move || import_files(&dir, entry, &sources))
+            .await
+            .map_err(|error| DownloadError::Io(error.to_string()))?;
+        drop(reservation);
+        outcome
+    }
+
     pub fn cancel(&self, model_id: &str) -> bool {
         self.jobs()
             .get(model_id)
-            .is_some_and(|job| job.cancel.send(true).is_ok())
+            .is_some_and(|job| job.kind == JobKind::Download && job.cancel.send(true).is_ok())
     }
 
-    pub async fn delete(&self, dir: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
-        if self.is_downloading(&entry.id) {
-            return Err(DownloadError::Busy);
-        }
+    pub async fn delete(
+        self: &Arc<Self>,
+        dir: &Path,
+        entry: &'static ModelEntry,
+        before_delete: impl FnOnce(),
+    ) -> Result<(), DownloadError> {
+        let _reservation = self.reserve(entry, JobKind::Check)?;
+        before_delete();
         for file in entry.file_list() {
-            for path in [dir.join(&file.name), part_path(dir, file)] {
+            for path in [
+                dir.join(&file.name),
+                marker_path(dir, file),
+                import_path(dir, file),
+            ] {
                 match fs::remove_file(&path).await {
                     Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                         return Err(error.into());
                     }
                     _ => {}
                 }
+            }
+            match remove_stale_parts(dir, file, false) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(error.into());
+                }
+                _ => {}
             }
         }
         Ok(())

@@ -1,4 +1,5 @@
-export type ModelState = 'missing' | 'downloading' | 'ready' | 'corrupt';
+export type ModelState =
+  'missing' | 'downloading' | 'verifying' | 'unverified' | 'ready' | 'corrupt';
 
 export interface ModelStatus {
   modelId: string;
@@ -28,7 +29,14 @@ export type DownloadEvent = { modelId: string } & (
   | { state: 'failed'; error: DownloadError }
 );
 
+export type UnmatchedReason = 'unknownFile' | 'wrongContent' | 'ioError' | 'duplicate';
+
+export interface UnmatchedFile {
+  name: string;
+  reason: UnmatchedReason;
+}
+
 export interface ImportOutcome {
   imported: string[];
-  unmatched: string[];
+  unmatched: UnmatchedFile[];
 }

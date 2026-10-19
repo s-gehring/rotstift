@@ -85,9 +85,26 @@ describe('describeDownloadError', () => {
 
 describe('describeImport', () => {
   it('says what happened with the chosen files', () => {
-    expect(describeImport([], ['x.gguf'], 2)).toContain('Keine der gewählten Dateien');
+    const unknown = { name: 'x.gguf', reason: 'unknownFile' } as const;
+    expect(describeImport([], [unknown], 2)).toContain('Keine der gewählten Dateien');
     expect(describeImport(['a.gguf'], [], 2)).toBe('Übernommen: 1 von 2 Dateien.');
     expect(describeImport(['a.gguf', 'b.gguf'], [], 2)).toBe('');
-    expect(describeImport(['a.gguf', 'b.gguf'], ['c.gguf'], 2)).toContain('c.gguf');
+    expect(describeImport(['a.gguf', 'b.gguf'], [unknown], 2)).toContain('x.gguf');
+  });
+
+  it('names the reason for every file that was not imported', () => {
+    const text = describeImport(
+      ['a.gguf'],
+      [
+        { name: 'one.gguf', reason: 'wrongContent' },
+        { name: 'two.gguf', reason: 'ioError' },
+        { name: 'three.gguf', reason: 'duplicate' },
+      ],
+      2,
+    );
+    expect(text).toContain('one.gguf (Inhalt stimmt nicht');
+    expect(text).toContain('two.gguf (konnte nicht gelesen oder gespeichert werden)');
+    expect(text).toContain('three.gguf (wurde schon übernommen)');
+    expect(text).toContain('Übernommen: 1 von 2 Dateien.');
   });
 });

@@ -4,27 +4,38 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use super::download::{DownloadError, hex_digest, part_path};
+use super::download::{DownloadError, hex_digest, import_path};
 use super::registry::{ModelEntry, ModelFile};
+use super::verified::write_marker;
 
 const COPY_BUFFER: usize = 1024 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UnmatchedReason {
+    UnknownFile,
+    WrongContent,
+    IoError,
+    Duplicate,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnmatchedFile {
+    pub name: String,
+    pub reason: UnmatchedReason,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportOutcome {
     pub imported: Vec<String>,
-    pub unmatched: Vec<String>,
+    pub unmatched: Vec<UnmatchedFile>,
 }
 
-fn copy_verified(
-    source: &Path,
-    target: &Path,
-    file: &ModelFile,
-    dir: &Path,
-) -> Result<bool, DownloadError> {
-    let part = part_path(dir, file);
+fn copy_to_temp(source: &Path, temp: &Path) -> std::io::Result<String> {
     let mut reader = std::fs::File::open(source)?;
-    let mut writer = std::fs::File::create(&part)?;
+    let mut writer = std::fs::File::create(temp)?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; COPY_BUFFER];
     loop {
@@ -36,14 +47,26 @@ fn copy_verified(
         writer.write_all(&buffer[..read])?;
     }
     writer.sync_all()?;
-    drop(writer);
-    if hex_digest(hasher) == file.sha256 {
-        std::fs::rename(&part, target)?;
-        Ok(true)
-    } else {
-        std::fs::remove_file(&part)?;
-        Ok(false)
+    Ok(hex_digest(hasher))
+}
+
+fn copy_verified(source: &Path, file: &ModelFile, dir: &Path) -> Result<bool, DownloadError> {
+    let temp = import_path(dir, file);
+    let target = dir.join(&file.name);
+    let result = copy_to_temp(source, &temp)
+        .map_err(DownloadError::from)
+        .and_then(|digest| {
+            if digest != file.sha256 {
+                return Ok(false);
+            }
+            std::fs::rename(&temp, &target)?;
+            write_marker(dir, file)?;
+            Ok(true)
+        });
+    if !matches!(result, Ok(true)) {
+        let _ = std::fs::remove_file(&temp);
     }
+    result
 }
 
 pub fn import_files(
@@ -54,23 +77,35 @@ pub fn import_files(
     std::fs::create_dir_all(dir)?;
     let mut outcome = ImportOutcome::default();
     for source in sources {
-        let label = source
+        let name = source
             .file_name()
             .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-        let size = std::fs::metadata(source)?.len();
-        let candidate = entry
+        let reject = |outcome: &mut ImportOutcome, reason| {
+            outcome.unmatched.push(UnmatchedFile {
+                name: name.clone(),
+                reason,
+            });
+        };
+        let Ok(meta) = std::fs::metadata(source) else {
+            reject(&mut outcome, UnmatchedReason::IoError);
+            continue;
+        };
+        let Some(file) = entry
             .file_list()
             .into_iter()
-            .find(|file| file.bytes == size);
-        let imported = match candidate {
-            Some(file) => {
-                copy_verified(source, &dir.join(&file.name), file, dir)?.then(|| file.name.clone())
-            }
-            None => None,
+            .find(|file| file.bytes == meta.len())
+        else {
+            reject(&mut outcome, UnmatchedReason::UnknownFile);
+            continue;
         };
-        match imported {
-            Some(name) => outcome.imported.push(name),
-            None => outcome.unmatched.push(label),
+        if outcome.imported.contains(&file.name) {
+            reject(&mut outcome, UnmatchedReason::Duplicate);
+            continue;
+        }
+        match copy_verified(source, file, dir) {
+            Ok(true) => outcome.imported.push(file.name.clone()),
+            Ok(false) => reject(&mut outcome, UnmatchedReason::WrongContent),
+            Err(_) => reject(&mut outcome, UnmatchedReason::IoError),
         }
     }
     Ok(outcome)
@@ -80,6 +115,7 @@ pub fn import_files(
 mod tests {
     use super::*;
     use crate::models::registry::{ModelFiles, RequestParams, ServerParams};
+    use crate::models::verified::has_valid_marker;
 
     fn sha(bytes: &[u8]) -> String {
         let mut hasher = Sha256::new();
@@ -129,6 +165,14 @@ mod tests {
         dir
     }
 
+    fn names(outcome: &ImportOutcome) -> Vec<(&str, UnmatchedReason)> {
+        outcome
+            .unmatched
+            .iter()
+            .map(|file| (file.name.as_str(), file.reason))
+            .collect()
+    }
+
     #[test]
     fn imports_files_that_match_the_registry_hashes() {
         let source = temp_dir("source");
@@ -143,7 +187,9 @@ mod tests {
             std::fs::read(target.join("model.gguf")).unwrap(),
             b"model bytes"
         );
-        assert!(!target.join("model.gguf.part").exists());
+        assert!(!import_path(&target, &entry().files.model).exists());
+        assert!(has_valid_marker(&target, &entry().files.model));
+        assert!(has_valid_marker(&target, &entry().files.mmproj));
     }
 
     #[test]
@@ -155,7 +201,49 @@ mod tests {
         let sources = [source.join("fake.gguf"), source.join("other.gguf")];
         let outcome = import_files(&target, &entry(), &sources).unwrap();
         assert!(outcome.imported.is_empty());
-        assert_eq!(outcome.unmatched, ["fake.gguf", "other.gguf"]);
+        assert_eq!(
+            names(&outcome),
+            [
+                ("fake.gguf", UnmatchedReason::WrongContent),
+                ("other.gguf", UnmatchedReason::UnknownFile)
+            ]
+        );
         assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn an_unreadable_file_does_not_abort_the_other_imports() {
+        let source = temp_dir("unreadable-source");
+        let target = temp_dir("unreadable-target");
+        std::fs::write(source.join("good.bin"), b"projector").unwrap();
+        let sources = [source.join("gone.gguf"), source.join("good.bin")];
+        let outcome = import_files(&target, &entry(), &sources).unwrap();
+        assert_eq!(outcome.imported, ["mmproj.gguf"]);
+        assert_eq!(names(&outcome), [("gone.gguf", UnmatchedReason::IoError)]);
+    }
+
+    #[test]
+    fn removes_the_temporary_file_when_installing_fails() {
+        let source = temp_dir("cleanup-source");
+        let target = temp_dir("cleanup-target");
+        std::fs::write(source.join("a.bin"), b"model bytes").unwrap();
+        std::fs::create_dir_all(target.join("model.gguf")).unwrap();
+        std::fs::write(target.join("model.gguf").join("blocker"), b"x").unwrap();
+        let outcome = import_files(&target, &entry(), &[source.join("a.bin")]).unwrap();
+        assert!(outcome.imported.is_empty());
+        assert_eq!(names(&outcome), [("a.bin", UnmatchedReason::IoError)]);
+        assert!(!import_path(&target, &entry().files.model).exists());
+    }
+
+    #[test]
+    fn ignores_the_same_file_picked_twice() {
+        let source = temp_dir("dup-source");
+        let target = temp_dir("dup-target");
+        std::fs::write(source.join("a.bin"), b"model bytes").unwrap();
+        std::fs::write(source.join("b.bin"), b"model bytes").unwrap();
+        let sources = [source.join("a.bin"), source.join("b.bin")];
+        let outcome = import_files(&target, &entry(), &sources).unwrap();
+        assert_eq!(outcome.imported, ["model.gguf"]);
+        assert_eq!(names(&outcome), [("b.bin", UnmatchedReason::Duplicate)]);
     }
 }

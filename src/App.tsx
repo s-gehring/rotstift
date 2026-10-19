@@ -23,7 +23,9 @@ export function App() {
     () => (modelState === undefined ? null : { model, state: modelState }),
     [model, modelState],
   );
-  const transcriber = useTranscriber(availability);
+  const transcriber = useTranscriber(availability, () => {
+    void setup.refresh();
+  });
   const count = useWordCount(importState.pages, transcriber);
   const openSetup = () => {
     setDialogOpen(true);

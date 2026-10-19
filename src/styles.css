@@ -445,3 +445,38 @@ button.danger:hover:not(:disabled) {
   cursor: pointer;
   font-weight: 600;
 }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.offline-setup {
+  margin-top: 1rem;
+}
+
+.offline-setup summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.offline-setup ul {
+  padding-left: 1.25rem;
+}
+
+.offline-setup li {
+  margin-bottom: 0.75rem;
+}
+
+.download-url {
+  display: block;
+  margin: 0.25rem 0;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

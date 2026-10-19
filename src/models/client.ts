@@ -48,6 +48,7 @@ export function createModelClient(
     startDownload: (modelId: string) => call<undefined>('model_download_start', { modelId }),
     cancelDownload: (modelId: string) => call<boolean>('model_download_cancel', { modelId }),
     remove: (modelId: string) => call<ModelStatus>('model_delete', { modelId }),
+    verify: (modelId: string) => call<ModelStatus>('model_verify', { modelId }),
     importFiles: (modelId: string) => call<ImportOutcome | null>('model_import', { modelId }),
     onDownload: (handler: (event: DownloadEvent) => void): Promise<() => void> =>
       listen(DOWNLOAD_EVENT, (event) => {

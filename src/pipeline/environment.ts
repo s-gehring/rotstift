@@ -26,7 +26,11 @@ export function browserEnvironment(): TranscriberEnvironment {
     isDev: import.meta.env.DEV,
     isTauri: isTauri(),
     loadDemo,
-    createModelTranscriber: (model: ModelInfo) =>
-      createLlmTranscriber({ client: createLlmClient(), model }),
+    createModelTranscriber: (model: ModelInfo, onUnavailable?: () => void) =>
+      createLlmTranscriber({
+        client: createLlmClient(),
+        model,
+        ...(onUnavailable && { onUnavailable }),
+      }),
   };
 }

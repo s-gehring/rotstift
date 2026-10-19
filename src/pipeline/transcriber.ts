@@ -1,10 +1,10 @@
 export type TranscribeError =
   | { readonly kind: 'unavailable'; readonly message: string }
   | { readonly kind: 'cancelled' }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed'; readonly message: string; readonly crashed?: boolean };
 
 export type TranscribeResult =
-  | { readonly ok: true; readonly lines: readonly string[] }
+  | { readonly ok: true; readonly lines: readonly string[]; readonly startupMs?: number }
   | { readonly ok: false; readonly error: TranscribeError };
 
 export interface PageTranscriber {
@@ -18,7 +18,7 @@ export interface EngineMonitor {
   readonly subscribe: (listener: () => void) => () => void;
 }
 
-export type ModelProblem = 'missing' | 'downloading' | 'corrupt';
+export type ModelProblem = 'missing' | 'downloading' | 'verifying' | 'corrupt';
 
 export type TranscriberStatus =
   | {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   describeDownloadError,
   formatMegabytes,
@@ -6,7 +6,7 @@ import {
   formatSize,
   remainingText,
 } from './format.ts';
-import { isLowOnMemory, modelSource, totalBytes } from './registry.ts';
+import { isLowOnMemory, modelSource, totalBytes, type ModelInfo } from './registry.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
 interface Props {
@@ -31,19 +31,78 @@ function useModalDialog(open: boolean) {
   return ref;
 }
 
+const MILESTONE_PERCENT = 10;
+
+export function progressMilestone(downloaded: number, total: number): number {
+  if (total <= 0) return 0;
+  const percent = Math.min(100, Math.floor((downloaded / total) * 100));
+  return Math.floor(percent / MILESTONE_PERCENT) * MILESTONE_PERCENT;
+}
+
 function Progress({ setup }: { readonly setup: ModelSetup }) {
   const { status, state } = setup;
   if (status === null) return null;
   const remaining = remainingText(state.samples, status.downloadedBytes, status.totalBytes);
+  const amount = `${formatMegabytes(status.downloadedBytes)} von ${formatMegabytes(status.totalBytes)}`;
+  const milestone = progressMilestone(status.downloadedBytes, status.totalBytes);
   return (
     <div className="download-progress">
-      <progress value={status.downloadedBytes} max={status.totalBytes} aria-label="Fortschritt" />
-      <p role="status">
-        {formatMegabytes(status.downloadedBytes)} von {formatMegabytes(status.totalBytes)}
+      <progress
+        value={status.downloadedBytes}
+        max={status.totalBytes}
+        aria-label="Download-Fortschritt"
+        aria-valuetext={amount}
+      />
+      <p>
+        {amount}
         {' · '}
         {remaining === null ? 'Restzeit wird geschätzt …' : `noch ${remaining}`}
       </p>
+      <p role="status" className="visually-hidden">
+        {`Download zu ${milestone} Prozent geladen`}
+      </p>
     </div>
+  );
+}
+
+function OfflineSetup({ model }: { readonly model: ModelInfo }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (name: string, url: string) => {
+    navigator.clipboard.writeText(url).then(
+      () => {
+        setCopied(name);
+      },
+      () => {
+        setCopied(null);
+      },
+    );
+  };
+  return (
+    <details className="offline-setup">
+      <summary>Ohne Internet einrichten</summary>
+      <p>
+        Auf einem Rechner mit Internet beide Dateien herunterladen und zum Beispiel per USB-Stick
+        hierher bringen. Danach „Modell aus Datei importieren …“ wählen und beide Dateien auswählen.
+        Rotstift prüft sie gegen die erwartete Prüfsumme.
+      </p>
+      <ul>
+        {[model.files.model, model.files.mmproj].map((file) => (
+          <li key={file.name}>
+            <strong>{file.name}</strong> ({formatSize(file.bytes)})
+            <code className="download-url">{file.url}</code>
+            <button
+              type="button"
+              aria-label={`Adresse von ${file.name} kopieren`}
+              onClick={() => {
+                copy(file.name, file.url);
+              }}
+            >
+              {copied === file.name ? 'Kopiert' : 'Adresse kopieren'}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -58,8 +117,10 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
   const lowDiskBytes =
     freeDisk !== null && status?.state !== 'downloading' && freeDisk < size ? freeDisk : null;
   const downloading = status?.state === 'downloading';
+  const verifying = status?.state === 'verifying' || status?.state === 'unverified';
   const ready = status?.state === 'ready';
-  const partial = status?.state !== 'ready' && (status?.downloadedBytes ?? 0) > 0 && !downloading;
+  const partial =
+    status?.state !== 'ready' && (status?.downloadedBytes ?? 0) > 0 && !downloading && !verifying;
 
   return (
     <dialog
@@ -121,6 +182,12 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
             </p>
           )}
           {downloading && <Progress setup={setup} />}
+          {verifying && (
+            <p role="status">
+              Die vorhandenen Modelldateien werden geprüft. Das dauert einen Moment.
+            </p>
+          )}
+          {!downloading && !verifying && <OfflineSetup model={model} />}
         </>
       )}
 
@@ -137,7 +204,7 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
             Download abbrechen
           </button>
         )}
-        {!downloading && !ready && (
+        {!downloading && !verifying && !ready && (
           <>
             <button
               type="button"

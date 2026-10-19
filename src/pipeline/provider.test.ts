@@ -53,6 +53,24 @@ describe('resolveTranscriber', () => {
     }
   });
 
+  it('treats a model that is being checked as a pending problem', async () => {
+    for (const state of ['verifying', 'unverified'] as const) {
+      const desktop = env(false, true);
+      expect(await resolveTranscriber(desktop, { model, state })).toEqual({
+        state: 'needs-model',
+        problem: 'verifying',
+      });
+      expect(desktop.createModelTranscriber).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes the unavailable callback on to the model transcriber', async () => {
+    const desktop = env(false, true);
+    const onUnavailable = vi.fn<() => void>();
+    await resolveTranscriber(desktop, { model, state: 'ready' }, onUnavailable);
+    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, onUnavailable);
+  });
+
   it('asks for the setup while the model is missing, downloading or corrupt', async () => {
     for (const state of ['missing', 'downloading', 'corrupt'] as const) {
       const desktop = env(false, true);
@@ -68,7 +86,7 @@ describe('resolveTranscriber', () => {
     const desktop = env(false, true);
     const status = await resolveTranscriber(desktop, { model, state: 'ready' });
     expect(status).toMatchObject({ state: 'ready', demo: false });
-    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model);
+    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, undefined);
     expect(desktop.loadDemo).not.toHaveBeenCalled();
     expect(status?.state === 'ready' && status.engine?.getPhase()).toBe('idle');
   });

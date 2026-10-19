@@ -4,7 +4,7 @@ import { formatMegabytes } from '../models/format.ts';
 import type { ModelStatus } from '../models/types.ts';
 import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages } from '../pipeline/runner.ts';
-import type { EnginePhase, TranscriberStatus } from '../pipeline/transcriber.ts';
+import type { EnginePhase, ModelProblem, TranscriberStatus } from '../pipeline/transcriber.ts';
 import { buildRows, countedPages, pagesText, totalWords, wordsText } from './summary.ts';
 import type { WordCount } from './use-word-count.ts';
 
@@ -105,7 +105,7 @@ export function CountControls({ count, status, pages, onSetup }: ControlProps) {
       </button>
       {status?.state === 'needs-model' && (
         <button type="button" onClick={onSetup}>
-          {status.problem === 'downloading' ? 'Download läuft …' : 'Texterkennung einrichten'}
+          {SETUP_BUTTON[status.problem]}
         </button>
       )}
       <p className="progress" role="status">
@@ -115,10 +115,14 @@ export function CountControls({ count, status, pages, onSetup }: ControlProps) {
   );
 }
 
-function modelProblemText(
-  problem: 'missing' | 'downloading' | 'corrupt',
-  download: ModelStatus | null,
-): string {
+const SETUP_BUTTON: Record<ModelProblem, string> = {
+  missing: 'Texterkennung einrichten',
+  downloading: 'Download läuft …',
+  verifying: 'Wird geprüft …',
+  corrupt: 'Texterkennung einrichten',
+};
+
+function modelProblemText(problem: ModelProblem, download: ModelStatus | null): string {
   switch (problem) {
     case 'missing':
       return 'Zum Wörterzählen muss einmalig die Texterkennung eingerichtet werden. Danach funktioniert alles offline.';
@@ -126,6 +130,8 @@ function modelProblemText(
       return download === null
         ? 'Die Texterkennung wird heruntergeladen.'
         : `Die Texterkennung wird heruntergeladen (${formatMegabytes(download.downloadedBytes)} von ${formatMegabytes(download.totalBytes)}).`;
+    case 'verifying':
+      return 'Die Texterkennung wird geprüft. Das dauert einen Moment.';
     case 'corrupt':
       return 'Die Texterkennung ist beschädigt und muss neu eingerichtet werden.';
     default: {

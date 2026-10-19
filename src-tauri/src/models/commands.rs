@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
 use super::download::DownloadError;
-use super::import::{ImportOutcome, import_files};
+use super::import::ImportOutcome;
 use super::manager::{self, DownloadEvent, ModelManager, ModelStatus};
 use super::system;
 use crate::llm::LlmRuntime;
@@ -76,8 +76,7 @@ pub async fn model_delete<R: Runtime>(
 ) -> Result<ModelStatus, DownloadError> {
     let entry = manager::entry(&model_id)?;
     let dir = models_dir(&app)?;
-    llm.stop();
-    models.delete(&dir, entry).await?;
+    models.delete(&dir, entry, || drop(llm.stop())).await?;
     Ok(models.status(&dir, entry).await)
 }
 
@@ -88,7 +87,7 @@ pub async fn model_import<R: Runtime>(
     model_id: String,
 ) -> Result<Option<ImportOutcome>, DownloadError> {
     let entry = manager::entry(&model_id)?;
-    if models.is_downloading(&model_id) {
+    if models.is_busy(&model_id) {
         return Err(DownloadError::Busy);
     }
     let dir = models_dir(&app)?;
@@ -110,8 +109,15 @@ pub async fn model_import<R: Runtime>(
         .into_iter()
         .filter_map(|file| file.into_path().ok())
         .collect();
-    let outcome = tokio::task::spawn_blocking(move || import_files(&dir, entry, &sources))
-        .await
-        .map_err(|error| DownloadError::Io(error.to_string()))??;
-    Ok(Some(outcome))
+    Ok(Some(models.import(&dir, entry, sources).await?))
+}
+
+#[tauri::command]
+pub async fn model_verify<R: Runtime>(
+    app: AppHandle<R>,
+    models: State<'_, Arc<ModelManager>>,
+    model_id: String,
+) -> Result<ModelStatus, DownloadError> {
+    let entry = manager::entry(&model_id)?;
+    models.verify(&models_dir(&app)?, entry).await
 }

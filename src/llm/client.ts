@@ -7,6 +7,11 @@ export interface ChatOptions {
   signal?: AbortSignal;
 }
 
+export interface Completion {
+  text: string;
+  finishReason: string | null;
+}
+
 export class LlmCallError extends Error {
   readonly error: LlmError;
 
@@ -54,13 +59,14 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
     stop: () => call<RuntimeStatus>('llm_stop'),
     status: () => call<RuntimeStatus>('llm_status'),
     chat,
-    async complete(request: ChatRequest, options: ChatOptions = {}): Promise<string> {
+    async complete(request: ChatRequest, options: ChatOptions = {}): Promise<Completion> {
       const response = await chat(request, options);
-      const content = response.choices[0]?.message.content;
+      const choice = response.choices[0];
+      const content = choice?.message.content;
       if (typeof content !== 'string') {
         throw new LlmCallError({ kind: 'request', detail: 'response contains no message' });
       }
-      return content;
+      return { text: content, finishReason: choice?.finish_reason ?? null };
     },
   };
 }

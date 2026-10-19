@@ -13,6 +13,8 @@ const STATE_TEXT = {
   ready: 'Eingerichtet',
   missing: 'Nicht eingerichtet',
   downloading: 'Wird heruntergeladen',
+  verifying: 'Wird geprüft',
+  unverified: 'Wird geprüft',
   corrupt: 'Beschädigt, bitte neu laden',
 } as const;
 
@@ -70,7 +72,7 @@ export function ModelManagement({ setup, onSetup, disabled }: Props) {
                 Texterkennung einrichten
               </button>
             )}
-            {hasFiles && status.state !== 'downloading' && (
+            {hasFiles && status.state !== 'downloading' && status.state !== 'verifying' && (
               <button
                 type="button"
                 className="danger"

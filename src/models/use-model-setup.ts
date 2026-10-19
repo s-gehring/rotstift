@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { ModelCallError, type ModelClient } from './client.ts';
 import { describeImport } from './format.ts';
 import { MODELS } from './registry.ts';
@@ -12,6 +12,24 @@ function toDownloadError(error: unknown): DownloadError {
 export function useModelSetup(client: ModelClient | null) {
   const [state, dispatch] = useReducer(setupReducer, INITIAL_SETUP);
 
+  const verifying = useRef(new Set<string>());
+
+  const verify = useCallback(
+    async (modelId: string) => {
+      if (client === null || verifying.current.has(modelId)) return;
+      verifying.current.add(modelId);
+      try {
+        dispatch({ type: 'status', status: await client.verify(modelId) });
+      } catch (error) {
+        const failure = toDownloadError(error);
+        if (failure.kind !== 'busy') dispatch({ type: 'error', error: failure });
+      } finally {
+        verifying.current.delete(modelId);
+      }
+    },
+    [client],
+  );
+
   const refresh = useCallback(async () => {
     if (client === null) return;
     try {
@@ -19,11 +37,20 @@ export function useModelSetup(client: ModelClient | null) {
         Promise.all(MODELS.map((model) => client.status(model.id))),
         client.hardware().catch(() => null),
       ]);
-      dispatch({ type: 'loaded', statuses, hardware });
+      dispatch({
+        type: 'loaded',
+        statuses: statuses.map((status) =>
+          status.state === 'unverified' ? { ...status, state: 'verifying' } : status,
+        ),
+        hardware,
+      });
+      for (const status of statuses) {
+        if (status.state === 'unverified') void verify(status.modelId);
+      }
     } catch (error) {
       dispatch({ type: 'error', error: toDownloadError(error) });
     }
-  }, [client]);
+  }, [client, verify]);
 
   useEffect(() => {
     if (client === null) return undefined;
@@ -110,6 +137,7 @@ export function useModelSetup(client: ModelClient | null) {
     cancel,
     remove,
     importFiles,
+    refresh,
     clearError: () => {
       dispatch({ type: 'error', error: null });
     },

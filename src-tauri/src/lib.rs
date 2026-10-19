@@ -27,6 +27,7 @@ pub fn run() {
             models::commands::model_download_cancel,
             models::commands::model_delete,
             models::commands::model_import,
+            models::commands::model_verify,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
