@@ -69,7 +69,7 @@ describe('summarize', () => {
   it('renders one table row per model', () => {
     const table = overviewTable([summarize(run)]).split('\n');
     expect(table).toHaveLength(3);
-    expect(table[2]).toContain('| Modell | 2.50 | 4.20 |');
+    expect(table[2]).toContain('| Modell | 2 | 2.50 | 4.20 |');
     expect(table[2]).toContain('1.0 %');
   });
 });

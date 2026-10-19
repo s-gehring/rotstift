@@ -99,6 +99,7 @@ export function overviewTable(summaries: readonly ModelSummary[]): string {
   return table(
     [
       'Modell',
+      'Seiten',
       'Dateien (GB)',
       'Peak-RAM (GB)',
       'Laden (s)',
@@ -111,6 +112,7 @@ export function overviewTable(summaries: readonly ModelSummary[]): string {
     ],
     summaries.map((summary) => [
       summary.failure ? `${summary.label} (abgebrochen)` : summary.label,
+      String(summary.pages),
       fixed(summary.gigabytes, 2),
       fixed(summary.peakRamGigabytes, 2),
       fixed(summary.loadSeconds),
