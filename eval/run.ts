@@ -7,11 +7,18 @@ import { basename, extname, join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
+import { countWords } from '../src/stats/count-words.ts';
 import { characterEdits, classifyErrors, cleanTranscript, wordEdits } from './metrics.ts';
-import { CANDIDATES } from './models.ts';
+import { CANDIDATES, PROMPTS, TRANSCRIBE_PROMPT } from './models.ts';
 import type { Candidate } from './models.ts';
 import { evalDir, llamaServer, modelsDir, samplesDir } from './paths.ts';
-import { cerByFontTable, overviewTable, preservationByKindTable, summarize } from './report.ts';
+import {
+  cerByFontTable,
+  overviewTable,
+  preservationByKindTable,
+  summarize,
+  wordCountByPageTable,
+} from './report.ts';
 import type { ModelRun, PageResult } from './report.ts';
 import { parseSample } from './sample.ts';
 import type { Sample } from './sample.ts';
@@ -28,6 +35,7 @@ interface Options {
   contextSize: number;
   maxTokens: number;
   imageMaxTokens: number | undefined;
+  prompt: string;
 }
 
 const IMAGE_TYPES: Record<string, string> = {
@@ -136,7 +144,8 @@ async function transcribe(port: number, candidate: Candidate, page: Page, option
   const content: unknown[] = [
     { type: 'image_url', image_url: { url: `data:${type};base64,${image}` } },
   ];
-  if (candidate.prompt) content.push({ type: 'text', text: candidate.prompt });
+  const prompt = promptFor(candidate, options);
+  if (prompt) content.push({ type: 'text', text: prompt });
   const started = performance.now();
   const response = await postJson(port, '/v1/chat/completions', {
     messages: [{ role: 'user', content }],
@@ -148,6 +157,12 @@ async function transcribe(port: number, candidate: Candidate, page: Page, option
   if (response.status !== 200) throw new Error(`HTTP ${response.status}: ${response.body}`);
   const completion = readCompletion(JSON.parse(response.body));
   return { ...completion, seconds: (performance.now() - started) / 1000 };
+}
+
+function promptFor(candidate: Candidate, options: Options): string | null {
+  return candidate.prompt === TRANSCRIBE_PROMPT
+    ? (PROMPTS[options.prompt] ?? TRANSCRIBE_PROMPT)
+    : candidate.prompt;
 }
 
 function postJson(port: number, path: string, payload: unknown) {
@@ -227,6 +242,7 @@ async function evaluate(candidate: Candidate, pages: Page[], options: Options): 
     threads: options.threads,
     contextSize: options.contextSize,
     imageMaxTokens: options.imageMaxTokens,
+    prompt: candidate.prompt === TRANSCRIBE_PROMPT ? options.prompt : 'model',
     loadSeconds: 0,
     peakRssBytes: 0,
     pages: [],
@@ -253,6 +269,8 @@ async function evaluate(candidate: Candidate, pages: Page[], options: Options): 
         wordCount: words.total,
         errors: classifyErrors(page.sample, transcript),
         transcript,
+        expectedWords: countWords(page.sample.written),
+        transcribedWords: countWords(transcript),
       };
       run.pages.push(pageResult);
       console.log(
@@ -273,9 +291,14 @@ async function evaluate(candidate: Candidate, pages: Page[], options: Options): 
 function report(runs: ModelRun[], pages: Page[], options: Options): string {
   return [
     `Seiten: ${pages.length}, Threads: ${options.threads}, Kontext: ${options.contextSize}, ` +
-      `Bild-Token max.: ${options.imageMaxTokens ?? 'Modellstandard'}, nur CPU (-ngl 0, --device none)`,
+      `Bild-Token max.: ${options.imageMaxTokens ?? 'Modellstandard'}, Prompt: ${options.prompt}, ` +
+      'nur CPU (-ngl 0, --device none)',
     '',
     overviewTable(runs.map(summarize)),
+    '',
+    'Abweichung der Wortzahl je Seite:',
+    '',
+    wordCountByPageTable(runs),
     '',
     'CER je Schrift:',
     '',
@@ -297,6 +320,7 @@ async function main() {
       'ctx-size': { type: 'string', default: '8192' },
       'max-tokens': { type: 'string', default: '1536' },
       'image-max-tokens': { type: 'string' },
+      prompt: { type: 'string', default: 'standard' },
       out: { type: 'string' },
     },
   });
@@ -305,7 +329,13 @@ async function main() {
     contextSize: Number(values['ctx-size']),
     maxTokens: Number(values['max-tokens']),
     imageMaxTokens: values['image-max-tokens'] ? Number(values['image-max-tokens']) : undefined,
+    prompt: values.prompt,
   };
+  if (!PROMPTS[options.prompt]) {
+    throw new Error(
+      `Unknown prompt ${options.prompt}, use one of ${Object.keys(PROMPTS).join(', ')}`,
+    );
+  }
   const pages = discoverPages(values.samples?.split(','));
   if (pages.length === 0) throw new Error('No samples found, run eval/samples/render.py first');
   const wanted = values.models?.split(',');

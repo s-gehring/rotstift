@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { median, overviewTable, summarize } from './report.ts';
+import { median, overviewTable, summarize, wordCountByPageTable } from './report.ts';
 import type { ModelRun, PageResult } from './report.ts';
 
 const page = (overrides: Partial<PageResult>): PageResult => ({
@@ -29,7 +29,10 @@ const run: ModelRun = {
   peakRssBytes: 4.2e9,
   pages: [
     page({
+      image: 'brief--caveat.jpg',
       seconds: 10,
+      expectedWords: 100,
+      transcribedWords: 98,
       charEdits: 1,
       wordEdits: 1,
       errors: [
@@ -43,7 +46,16 @@ const run: ModelRun = {
         },
       ],
     }),
-    page({ seconds: 30, charEdits: 3, charCount: 300, wordEdits: 3, wordCount: 60 }),
+    page({
+      image: 'brief--grundschrift.jpg',
+      seconds: 30,
+      expectedWords: 50,
+      transcribedWords: 50,
+      charEdits: 3,
+      charCount: 300,
+      wordEdits: 3,
+      wordCount: 60,
+    }),
   ],
 };
 
@@ -66,10 +78,35 @@ describe('summarize', () => {
     expect(summary.peakRamGigabytes).toBeCloseTo(4.2);
   });
 
+  it('averages the word count deviation per page', () => {
+    const summary = summarize(run);
+    expect(summary.wordCountError).toBeCloseTo(0.01);
+    expect(summary.wordCountMaxError).toBeCloseTo(0.02);
+    expect(summary.wordCountExact).toBe(0.5);
+  });
+
+  it('marks missing word counts instead of guessing', () => {
+    const summary = summarize({ ...run, pages: [page({})] });
+    expect(summary.wordCountError).toBeNaN();
+    expect(overviewTable([summary])).toContain('n. v.');
+  });
+
   it('renders one table row per model', () => {
     const table = overviewTable([summarize(run)]).split('\n');
     expect(table).toHaveLength(3);
     expect(table[2]).toContain('| Modell | 2 | 2.50 | 4.20 |');
     expect(table[2]).toContain('1.0 %');
+  });
+});
+
+describe('wordCountByPageTable', () => {
+  it('shows the signed deviation per page and model', () => {
+    const rows = wordCountByPageTable([run, { ...run, label: 'Andere', pages: run.pages.slice(1) }])
+      .split('\n')
+      .slice(2);
+    expect(rows).toEqual([
+      '| brief--caveat | 100 | -2 | n. v. |',
+      '| brief--grundschrift | 50 | 0 | 0 |',
+    ]);
   });
 });

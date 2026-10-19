@@ -20,6 +20,25 @@ export const TRANSCRIBE_PROMPT =
   'bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. ' +
   'Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar.';
 
+export const STRICT_PROMPT =
+  'Schreibe den handschriftlichen Text auf dem Bild Wort für Wort und Zeichen für Zeichen ab. ' +
+  'Der Text stammt von einem Kind und enthält absichtlich Fehler, die erhalten bleiben müssen: ' +
+  'falsche Rechtschreibung, falsche Groß- und Kleinschreibung, falsche Grammatik und fehlende ' +
+  'oder falsche Satzzeichen. Verbessere kein einziges Wort, auch wenn es offensichtlich falsch ist. ' +
+  'Behalte die Absätze bei. Gib nur den abgeschriebenen Text aus.';
+
+export const STRICT_PROMPT_EN =
+  'Copy the handwritten German text in the image word by word and character by character. ' +
+  'It was written by a child and deliberately contains mistakes that must be kept: wrong spelling, ' +
+  'wrong capitalization, wrong grammar and missing or wrong punctuation. Do not correct a single ' +
+  'word, even if it is obviously wrong. Keep the paragraphs. Output only the copied text.';
+
+export const PROMPTS: Record<string, string> = {
+  standard: TRANSCRIBE_PROMPT,
+  strict: STRICT_PROMPT,
+  'strict-en': STRICT_PROMPT_EN,
+};
+
 const file = (name: string, sha256: string, bytes: number): ModelFile => ({ name, sha256, bytes });
 
 export const CANDIDATES: readonly Candidate[] = [
@@ -36,6 +55,23 @@ export const CANDIDATES: readonly Candidate[] = [
       'mmproj-Qwen3-VL-2B-Instruct-Q8_0.gguf',
       '69066c8f279ec85ff48ab4059f6ebba0d2932ca57667f2bbdac7d9805bca9e7b',
       445053056,
+    ),
+    license: 'Apache-2.0',
+    prompt: TRANSCRIBE_PROMPT,
+  },
+  {
+    id: 'qwen3-vl-2b-q4',
+    label: 'Qwen3-VL 2B Instruct (Q4_K_M)',
+    repo: 'Qwen/Qwen3-VL-2B-Instruct-GGUF',
+    model: file(
+      'Qwen3VL-2B-Instruct-Q4_K_M.gguf',
+      '089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae',
+      1107409952,
+    ),
+    mmproj: file(
+      'mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf',
+      'f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82',
+      445053216,
     ),
     license: 'Apache-2.0',
     prompt: TRANSCRIBE_PROMPT,
@@ -127,7 +163,7 @@ export const CANDIDATES: readonly Candidate[] = [
   },
   {
     id: 'paddleocr-vl-1.6',
-    label: 'PaddleOCR-VL 1.6',
+    label: 'PaddleOCR-VL 1.6 (BF16)',
     repo: 'PaddlePaddle/PaddleOCR-VL-1.6-GGUF',
     model: file(
       'PaddleOCR-VL-1.6-GGUF.gguf',

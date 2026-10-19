@@ -17,7 +17,7 @@ export function llamaServer(): { binary: string; libraryDir: string } {
     typeof stamp === 'object' && stamp !== null && 'target' in stamp ? String(stamp.target) : '';
   const suffix = target.includes('windows') ? '.exe' : '';
   return {
-    binary: join(binariesDir, `llama-server-${target}${suffix}`),
+    binary: join(binariesDir, `rotstift-llama-server-${target}${suffix}`),
     libraryDir: join(binariesDir, 'llama'),
   };
 }

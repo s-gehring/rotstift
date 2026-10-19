@@ -14,6 +14,8 @@ export interface PageResult {
   wordCount: number;
   errors: ErrorResult[];
   transcript: string;
+  expectedWords?: number;
+  transcribedWords?: number;
 }
 
 export interface ModelRun {
@@ -24,6 +26,7 @@ export interface ModelRun {
   threads: number;
   contextSize: number;
   imageMaxTokens?: number | undefined;
+  prompt?: string;
   loadSeconds: number;
   peakRssBytes: number;
   pages: PageResult[];
@@ -42,6 +45,9 @@ export interface ModelSummary {
   wer: number;
   preserved: number;
   corrected: number;
+  wordCountError: number;
+  wordCountMaxError: number;
+  wordCountExact: number;
   pages: number;
   failure?: string;
 }
@@ -63,8 +69,20 @@ function share(errors: readonly ErrorResult[], outcome: ErrorResult['outcome']):
     : errors.filter((error) => error.outcome === outcome).length / errors.length;
 }
 
+export function wordCountErrors(pages: readonly PageResult[]): number[] {
+  return pages.map((page) =>
+    page.expectedWords === undefined || page.transcribedWords === undefined
+      ? Number.NaN
+      : Math.abs(page.transcribedWords - page.expectedWords) / Math.max(page.expectedWords, 1),
+  );
+}
+
+const mean = (values: readonly number[]) =>
+  values.length === 0 ? Number.NaN : sum(values) / values.length;
+
 export function summarize(run: ModelRun): ModelSummary {
   const errors = run.pages.flatMap((page) => page.errors);
+  const wordErrors = wordCountErrors(run.pages);
   return {
     id: run.id,
     label: run.label,
@@ -81,13 +99,19 @@ export function summarize(run: ModelRun): ModelSummary {
       Math.max(sum(run.pages.map((page) => page.wordCount)), 1),
     preserved: share(errors, 'preserved'),
     corrected: share(errors, 'corrected'),
+    wordCountError: mean(wordErrors),
+    wordCountMaxError: wordErrors.length === 0 ? Number.NaN : Math.max(...wordErrors),
+    wordCountExact: mean(wordErrors.map((error) => (error === 0 ? 1 : 0))),
     pages: run.pages.length,
     failure: run.failure,
   };
 }
 
-const percent = (value: number) => (Number.isNaN(value) ? '–' : `${(value * 100).toFixed(1)} %`);
-const fixed = (value: number, digits = 1) => (Number.isNaN(value) ? '–' : value.toFixed(digits));
+const MISSING = 'n. v.';
+const percent = (value: number) =>
+  Number.isNaN(value) ? MISSING : `${(value * 100).toFixed(1)} %`;
+const fixed = (value: number, digits = 1) =>
+  Number.isNaN(value) ? MISSING : value.toFixed(digits);
 
 const line = (cells: readonly string[]) => `| ${cells.join(' | ')} |`;
 
@@ -102,12 +126,14 @@ export function overviewTable(summaries: readonly ModelSummary[]): string {
       'Seiten',
       'Dateien (GB)',
       'Peak-RAM (GB)',
-      'Laden (s)',
       's/Seite (Median)',
+      'Wortzahl-Abw. (Mittel)',
+      'Wortzahl-Abw. (Max)',
+      'Wortzahl exakt',
+      'Fehler korrigiert',
+      'Fehler erhalten',
       'CER',
       'WER',
-      'Fehler erhalten',
-      'Fehler korrigiert',
       'Lizenz',
     ],
     summaries.map((summary) => [
@@ -115,12 +141,14 @@ export function overviewTable(summaries: readonly ModelSummary[]): string {
       String(summary.pages),
       fixed(summary.gigabytes, 2),
       fixed(summary.peakRamGigabytes, 2),
-      fixed(summary.loadSeconds),
       fixed(summary.medianSecondsPerPage),
+      percent(summary.wordCountError),
+      percent(summary.wordCountMaxError),
+      percent(summary.wordCountExact),
+      percent(summary.corrected),
+      percent(summary.preserved),
       percent(summary.cer),
       percent(summary.wer),
-      percent(summary.preserved),
-      percent(summary.corrected),
       summary.license,
     ]),
   );
@@ -134,7 +162,7 @@ export function cerByFontTable(runs: readonly ModelRun[]): string {
       run.label,
       ...fonts.map((font) => {
         const pages = run.pages.filter((page) => page.font === font);
-        if (pages.length === 0) return '–';
+        if (pages.length === 0) return MISSING;
         return percent(
           sum(pages.map((page) => page.charEdits)) /
             Math.max(sum(pages.map((page) => page.charCount)), 1),
@@ -168,5 +196,28 @@ export function preservationByKindTable(runs: readonly ModelRun[]): string {
         ),
       ];
     }),
+  );
+}
+
+const signed = (value: number) => (value > 0 ? `+${value}` : String(value));
+
+export function wordCountByPageTable(runs: readonly ModelRun[]): string {
+  const images = [
+    ...new Set(runs.flatMap((run) => run.pages.map((page) => page.image))),
+  ].toSorted();
+  const expected = (image: string) =>
+    runs.flatMap((run) => run.pages).find((page) => page.image === image)?.expectedWords;
+  return table(
+    ['Seite', 'Wörter', ...runs.map((run) => run.label)],
+    images.map((image) => [
+      image.replace(/\.[^.]+$/, ''),
+      expected(image)?.toString() ?? MISSING,
+      ...runs.map((run) => {
+        const page = run.pages.find((entry) => entry.image === image);
+        return page?.expectedWords === undefined || page.transcribedWords === undefined
+          ? MISSING
+          : signed(page.transcribedWords - page.expectedWords);
+      }),
+    ]),
   );
 }
