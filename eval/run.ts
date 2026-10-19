@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
 import { createServer } from 'node:net';
 import { basename, extname, join } from 'node:path';
 import process from 'node:process';
@@ -137,21 +138,41 @@ async function transcribe(port: number, candidate: Candidate, page: Page, option
   ];
   if (candidate.prompt) content.push({ type: 'text', text: candidate.prompt });
   const started = performance.now();
-  const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      messages: [{ role: 'user', content }],
-      temperature: 0,
-      max_tokens: options.maxTokens,
-      cache_prompt: false,
-      chat_template_kwargs: { enable_thinking: false },
-    }),
-    signal: AbortSignal.timeout(30 * 60_000),
+  const response = await postJson(port, '/v1/chat/completions', {
+    messages: [{ role: 'user', content }],
+    temperature: 0,
+    max_tokens: options.maxTokens,
+    cache_prompt: false,
+    chat_template_kwargs: { enable_thinking: false },
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-  const completion = readCompletion(await response.json());
+  if (response.status !== 200) throw new Error(`HTTP ${response.status}: ${response.body}`);
+  const completion = readCompletion(JSON.parse(response.body));
   return { ...completion, seconds: (performance.now() - started) / 1000 };
+}
+
+function postJson(port: number, path: string, payload: unknown) {
+  const body = JSON.stringify(payload);
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const request = httpRequest(
+      {
+        host: '127.0.0.1',
+        port,
+        path,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString() });
+        });
+        response.on('error', reject);
+      },
+    );
+    request.on('error', reject);
+    request.end(body);
+  });
 }
 
 async function evaluate(candidate: Candidate, pages: Page[], options: Options): Promise<ModelRun> {
