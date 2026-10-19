@@ -4,14 +4,21 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelManagement } from './ModelManagement.tsx';
 import { ModelSetupDialog, progressMilestone } from './ModelSetupDialog.tsx';
-import { recommendModel } from './registry.ts';
+import { recommendModel, type ModelInfo } from './registry.ts';
 import { INITIAL_SETUP, type SetupState } from './setup-state.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 import type { ModelState } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const model = recommendModel(null);
+const registered = recommendModel(null);
+const model: ModelInfo = {
+  ...registered,
+  files: {
+    model: { ...registered.files.model, bytes: 1_107_409_952 },
+    mmproj: { ...registered.files.mmproj, bytes: 445_053_216 },
+  },
+};
 const GIB = 1024 ** 3;
 
 function fakeSetup(state: ModelState, downloaded = 0, extra: Partial<SetupState> = {}): ModelSetup {
