@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ImportPage, Rotation } from '../import/pages.ts';
-import { createRunner, isOutdated } from './runner.ts';
+import { createRunner, isOutdated, startablePages } from './runner.ts';
 import type { PageTranscriber, TranscribeResult } from './transcriber.ts';
 
 function page(id: string, rotation: Rotation = 0): ImportPage {
@@ -22,7 +22,7 @@ interface Call {
   readonly resolve: (result: TranscribeResult) => void;
 }
 
-function setup() {
+function setup({ ignoreAbort = false } = {}) {
   const calls: Call[] = [];
   let active = 0;
   let maxActive = 0;
@@ -40,9 +40,11 @@ function setup() {
             resolve(result);
           },
         };
-        signal.addEventListener('abort', () =>
-          call.resolve({ ok: false, error: { kind: 'cancelled' } }),
-        );
+        if (!ignoreAbort) {
+          signal.addEventListener('abort', () =>
+            call.resolve({ ok: false, error: { kind: 'cancelled' } }),
+          );
+        }
         calls.push(call);
       }),
   };
@@ -56,7 +58,7 @@ function setup() {
   });
   runner.setTranscriber(transcriber);
   const waitForCalls = async (count: number) => {
-    await vi_waitFor(() => expect(calls.length).toBe(count));
+    await vi.waitFor(() => expect(calls.length).toBe(count));
   };
   return {
     runner,
@@ -71,9 +73,6 @@ function setup() {
     status: (id: string) => runner.getState().entries[id]?.status,
   };
 }
-
-import { vi } from 'vitest';
-const vi_waitFor = vi.waitFor;
 
 describe('runner', () => {
   it('processes pages one at a time in page order', async () => {
@@ -148,6 +147,142 @@ describe('runner', () => {
       text: 'von Hand korrigiert',
       edited: true,
     });
+  });
+
+  it('keeps the old transcript visible while a page is recognised again', async () => {
+    const t = setup();
+    t.runner.setPages([page('a')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.calls[0]?.resolve(t.ok('erkannt'));
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+
+    t.runner.retry('a');
+    await t.waitForCalls(2);
+    expect(t.runner.getState().entries['a']).toMatchObject({ status: 'running', text: 'erkannt' });
+    t.runner.edit('a', 'während des Laufs');
+    expect(t.runner.getState().entries['a']?.text).toBe('erkannt');
+  });
+
+  it('falls back to the edited transcript when recognising it again fails', async () => {
+    const t = setup();
+    t.runner.setPages([page('a')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.calls[0]?.resolve(t.ok('erkannt'));
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+    t.runner.edit('a', 'von Hand korrigiert');
+
+    t.runner.retry('a');
+    await t.waitForCalls(2);
+    t.calls[1]?.resolve({ ok: false, error: { kind: 'failed', message: 'kaputt' } });
+    await vi.waitFor(() => expect(t.status('a')).toBe('done'));
+
+    expect(t.runner.getState().entries['a']).toMatchObject({
+      text: 'von Hand korrigiert',
+      edited: true,
+      error: { kind: 'failed', message: 'kaputt' },
+    });
+    t.runner.edit('a', 'weiter bearbeitet');
+    expect(t.runner.getState().entries['a']?.text).toBe('weiter bearbeitet');
+  });
+
+  it('clears the failure hint once a later attempt succeeds', async () => {
+    const t = setup();
+    t.runner.setPages([page('a')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.calls[0]?.resolve(t.ok('erkannt'));
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+    t.runner.retry('a');
+    await t.waitForCalls(2);
+    t.calls[1]?.resolve({ ok: false, error: { kind: 'failed', message: 'x' } });
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+    t.runner.retry('a');
+    await t.waitForCalls(3);
+    t.calls[2]?.resolve(t.ok('neu'));
+    await vi.waitFor(() => expect(t.status('a')).toBe('done'));
+    expect(t.runner.getState().entries['a']).toMatchObject({ text: 'neu', error: null });
+  });
+
+  describe('a transcriber that ignores the abort signal', () => {
+    it('does not hang the run after cancelling', async () => {
+      const t = setup({ ignoreAbort: true });
+      t.runner.setPages([page('a'), page('b')]);
+      t.runner.start();
+      await t.waitForCalls(1);
+
+      t.runner.cancel();
+      t.runner.start();
+
+      await t.waitForCalls(2);
+      expect(t.rendered).toEqual(['a:0', 'a:0']);
+      expect(t.runner.getState().batch).toEqual({ total: 2, finished: 0 });
+    });
+
+    it('discards the late result of the cancelled attempt', async () => {
+      const t = setup({ ignoreAbort: true });
+      t.runner.setPages([page('a')]);
+      t.runner.start();
+      await t.waitForCalls(1);
+      t.runner.cancel();
+      t.runner.start();
+      await t.waitForCalls(2);
+
+      t.calls[0]?.resolve(t.ok('veraltet'));
+      expect(t.runner.getState().entries['a']?.status).toBe('running');
+      t.calls[1]?.resolve(t.ok('aktuell'));
+      await vi.waitFor(() => expect(t.status('a')).toBe('done'));
+      expect(t.runner.getState().entries['a']?.text).toBe('aktuell');
+    });
+
+    it('moves on when a page is removed while it is running', async () => {
+      const t = setup({ ignoreAbort: true });
+      t.runner.setPages([page('a'), page('b')]);
+      t.runner.start();
+      await t.waitForCalls(1);
+      t.runner.setPages([page('b')]);
+      await t.waitForCalls(2);
+      expect(t.rendered).toEqual(['a:0', 'b:0']);
+    });
+  });
+
+  it('swallows a late rejection of an abandoned attempt', async () => {
+    const runner = createRunner({ render: () => Promise.resolve(new Blob()) });
+    const pending: { reject: (reason: Error) => void } = { reject: () => undefined };
+    runner.setTranscriber({
+      transcribe: () =>
+        new Promise<TranscribeResult>((_resolve, reject) => {
+          pending.reject = reject;
+        }),
+    });
+    runner.setPages([page('a')]);
+    runner.start();
+    await vi.waitFor(() => expect(runner.getState().entries['a']?.status).toBe('running'));
+    runner.cancel();
+    pending.reject(new Error('zu spät'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runner.getState().entries).toEqual({});
+  });
+
+  it('reports which pages a new start would pick up', async () => {
+    const t = setup();
+    const a = page('a');
+    const b = page('b');
+    t.runner.setPages([a, b]);
+    expect(startablePages([a, b], t.runner.getState()).queue).toEqual([a, b]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.calls[0]?.resolve(t.ok('a'));
+    await t.waitForCalls(2);
+    t.calls[1]?.resolve(t.ok('b'));
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+    t.runner.edit('b', 'bearbeitet');
+
+    const rotatedB = page('b', 90);
+    const startable = startablePages([a, rotatedB], t.runner.getState());
+    expect(startable.queue).toEqual([]);
+    expect(startable.skippedEdited).toEqual([rotatedB]);
   });
 
   it('can start again after cancelling', async () => {

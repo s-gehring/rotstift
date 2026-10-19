@@ -54,7 +54,7 @@ export function createDemoTranscriber(options: DemoOptions = {}): PageTranscribe
       if (failEvery > 0 && calls % failEvery === 0) {
         return {
           ok: false,
-          error: { kind: 'failed', message: `${DEMO_MARKER}: simulierter Fehler zum Testen.` },
+          error: { kind: 'failed', message: `${DEMO_MARKER}: Simulierter Fehler zum Testen.` },
         };
       }
       return { ok: true, lines: SAMPLES[(calls - 1) % SAMPLES.length] ?? [] };

@@ -7,7 +7,7 @@ export interface TranscriberEnvironment {
 }
 
 export const NOT_CONFIGURED_MESSAGE =
-  'Das lokale Erkennungsmodell ist noch nicht eingerichtet oder die Runtime läuft nicht.';
+  'Die Texterkennung ist auf diesem Rechner noch nicht eingerichtet.';
 
 export const DESKTOP_ONLY_MESSAGE = 'Die Texterkennung steht nur in der Desktop-App zur Verfügung.';
 

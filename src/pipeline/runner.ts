@@ -6,10 +6,10 @@ export type PageStatus = 'waiting' | 'running' | 'done' | 'error';
 export interface PageEntry {
   readonly status: PageStatus;
   readonly text: string;
+  readonly hasTranscript: boolean;
   readonly edited: boolean;
   readonly rotation: Rotation;
   readonly error: TranscribeError | null;
-  readonly previous: PageEntry | null;
 }
 
 export interface Batch {
@@ -21,6 +21,7 @@ export interface RunState {
   readonly entries: Readonly<Record<string, PageEntry>>;
   readonly batch: Batch | null;
   readonly durationsMs: readonly number[];
+  readonly runningSince: number | null;
 }
 
 export interface RunnerDeps {
@@ -35,7 +36,14 @@ interface Current {
   reason: 'cancel' | 'removed' | 'rotated' | undefined;
 }
 
-const EMPTY: RunState = { entries: {}, batch: null, durationsMs: [] };
+export interface Startable {
+  readonly queue: readonly ImportPage[];
+  readonly skippedEdited: readonly ImportPage[];
+}
+
+const EMPTY: RunState = { entries: {}, batch: null, durationsMs: [], runningSince: null };
+
+const CANCELLED: TranscribeResult = { ok: false, error: { kind: 'cancelled' } };
 
 const isQueued = (entry: PageEntry) => entry.status === 'waiting' || entry.status === 'running';
 
@@ -45,6 +53,27 @@ function errorMessage(error: unknown): string {
 
 export function isOutdated(entry: PageEntry, page: Pick<ImportPage, 'rotation'>): boolean {
   return (entry.status === 'done' || entry.status === 'error') && entry.rotation !== page.rotation;
+}
+
+export function startablePages(pages: readonly ImportPage[], state: RunState): Startable {
+  const queue: ImportPage[] = [];
+  const skippedEdited: ImportPage[] = [];
+  for (const page of pages) {
+    const entry = state.entries[page.id];
+    if (entry === undefined || (entry.status === 'error' && !entry.hasTranscript)) {
+      queue.push(page);
+    } else if (isOutdated(entry, page)) {
+      (entry.edited ? skippedEdited : queue).push(page);
+    }
+  }
+  return { queue, skippedEdited };
+}
+
+function abortedResult(signal: AbortSignal): Promise<TranscribeResult> {
+  return new Promise((resolve) => {
+    if (signal.aborted) resolve(CANCELLED);
+    else signal.addEventListener('abort', () => resolve(CANCELLED), { once: true });
+  });
 }
 
 export function createRunner(deps: RunnerDeps) {
@@ -62,32 +91,31 @@ export function createRunner(deps: RunnerDeps) {
     for (const listener of listeners) listener();
   };
 
-  const patchEntry = (id: string, patch: Partial<PageEntry>) => {
+  const patchEntry = (id: string, patch: Partial<PageEntry>, extra: Partial<RunState> = {}) => {
     const entry = state.entries[id];
     if (entry === undefined) return;
-    commit({ ...state, entries: { ...state.entries, [id]: { ...entry, ...patch } } });
+    commit({ ...state, ...extra, entries: { ...state.entries, [id]: { ...entry, ...patch } } });
   };
 
-  const enqueue = (ids: readonly string[]) => {
-    if (ids.length === 0) return;
+  const enqueue = (targets: readonly ImportPage[]) => {
+    if (targets.length === 0) return;
     const entries = { ...state.entries };
-    for (const id of ids) {
-      const page = pages.find((candidate) => candidate.id === id);
-      if (page === undefined) continue;
-      entries[id] = {
+    for (const page of targets) {
+      const existing = entries[page.id];
+      entries[page.id] = {
         status: 'waiting',
-        text: '',
-        edited: false,
-        rotation: page.rotation,
+        text: existing?.text ?? '',
+        hasTranscript: existing?.hasTranscript ?? false,
+        edited: existing?.edited ?? false,
+        rotation: existing?.hasTranscript ? existing.rotation : page.rotation,
         error: null,
-        previous: state.entries[id] ?? null,
       };
     }
     commit({
       ...state,
       entries,
       batch: {
-        total: (state.batch?.total ?? 0) + ids.length,
+        total: (state.batch?.total ?? 0) + targets.length,
         finished: state.batch?.finished ?? 0,
       },
     });
@@ -98,14 +126,33 @@ export function createRunner(deps: RunnerDeps) {
     page: ImportPage,
     signal: AbortSignal,
   ): Promise<TranscribeResult> => {
-    try {
-      const png = await deps.render(page);
-      signal.throwIfAborted();
-      return await active.transcribe(png, signal);
-    } catch (error) {
-      if (signal.aborted) return { ok: false, error: { kind: 'cancelled' } };
-      return { ok: false, error: { kind: 'failed', message: errorMessage(error) } };
+    const work = async (): Promise<TranscribeResult> => {
+      try {
+        const png = await deps.render(page);
+        signal.throwIfAborted();
+        return await active.transcribe(png, signal);
+      } catch (error) {
+        if (signal.aborted) return CANCELLED;
+        return { ok: false, error: { kind: 'failed', message: errorMessage(error) } };
+      }
+    };
+    return Promise.race([work(), abortedResult(signal)]);
+  };
+
+  const settle = (entry: PageEntry, run: Current, result: TranscribeResult): PageEntry => {
+    if (result.ok) {
+      return {
+        status: 'done',
+        text: result.lines.join('\n'),
+        hasTranscript: true,
+        edited: false,
+        rotation: run.rotation,
+        error: null,
+      };
     }
+    return entry.hasTranscript
+      ? { ...entry, status: 'done', error: result.error }
+      : { ...entry, status: 'error', rotation: run.rotation, error: result.error };
   };
 
   const runPage = async (active: PageTranscriber, page: ImportPage) => {
@@ -116,28 +163,20 @@ export function createRunner(deps: RunnerDeps) {
       reason: undefined,
     };
     current = run;
-    patchEntry(page.id, { status: 'running', rotation: page.rotation, error: null });
     const started = now();
+    patchEntry(page.id, { status: 'running', error: null }, { runningSince: started });
     const result = await attempt(active, page, run.abort.signal);
-    current = null;
+    if (current === run) current = null;
     if (run.reason !== undefined) return;
     const entry = state.entries[page.id];
     if (entry === undefined) return;
-    const settled: PageEntry = result.ok
-      ? {
-          ...entry,
-          status: 'done',
-          text: result.lines.join('\n'),
-          edited: false,
-          error: null,
-          previous: null,
-        }
-      : { ...entry, status: 'error', text: '', edited: false, error: result.error, previous: null };
     const batch = state.batch;
     commit({
-      entries: { ...state.entries, [page.id]: settled },
+      ...state,
+      entries: { ...state.entries, [page.id]: settle(entry, run, result) },
       batch: batch && { ...batch, finished: batch.finished + 1 },
       durationsMs: result.ok ? [...state.durationsMs, now() - started] : state.durationsMs,
+      runningSince: null,
     });
   };
 
@@ -153,7 +192,7 @@ export function createRunner(deps: RunnerDeps) {
       }
     } finally {
       looping = false;
-      commit({ ...state, batch: null });
+      commit({ ...state, batch: null, runningSince: null });
     }
   };
 
@@ -200,31 +239,23 @@ export function createRunner(deps: RunnerDeps) {
       if (running && page && running.reason === undefined && page.rotation !== running.rotation) {
         running.reason = 'rotated';
         running.abort.abort();
-        patchEntry(page.id, { status: 'waiting', rotation: page.rotation });
+        patchEntry(page.id, { status: 'waiting' });
       }
     },
 
     start: () => {
       if (transcriber === null) return;
-      enqueue(
-        pages
-          .filter((page) => {
-            const entry = state.entries[page.id];
-            return (
-              entry === undefined ||
-              entry.status === 'error' ||
-              (isOutdated(entry, page) && !entry.edited)
-            );
-          })
-          .map((page) => page.id),
-      );
+      enqueue(startablePages(pages, state).queue);
       void pump();
     },
 
     retry: (id: string) => {
       const entry = state.entries[id];
-      if (transcriber === null || entry === undefined || isQueued(entry)) return;
-      enqueue([id]);
+      const page = pages.find((candidate) => candidate.id === id);
+      if (transcriber === null || entry === undefined || page === undefined || isQueued(entry)) {
+        return;
+      }
+      enqueue([page]);
       void pump();
     },
 
@@ -233,13 +264,12 @@ export function createRunner(deps: RunnerDeps) {
         current.reason = 'cancel';
         current.abort.abort();
       }
-      const entries = { ...state.entries };
-      for (const [id, entry] of Object.entries(entries)) {
-        if (!isQueued(entry)) continue;
-        if (entry.previous === null) delete entries[id];
-        else entries[id] = entry.previous;
+      const entries: Record<string, PageEntry> = {};
+      for (const [id, entry] of Object.entries(state.entries)) {
+        if (!isQueued(entry)) entries[id] = entry;
+        else if (entry.hasTranscript) entries[id] = { ...entry, status: 'done' };
       }
-      commit({ ...state, entries, batch: null });
+      commit({ ...state, entries, batch: null, runningSince: null });
     },
 
     edit: (id: string, text: string) => {

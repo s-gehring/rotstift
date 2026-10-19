@@ -2,7 +2,7 @@ import process from 'node:process';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
-const MODULE_MARKERS = ['simulierter Fehler zum Testen', 'Platzhalter für die Entwicklung'];
+const MODULE_MARKERS = ['Simulierter Fehler zum Testen', 'Platzhalter für die Entwicklung'];
 
 async function bundleCode(nodeEnv: 'production' | 'development'): Promise<string> {
   const previous = process.env['NODE_ENV'];

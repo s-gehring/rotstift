@@ -6,18 +6,17 @@ export interface Progress {
   readonly remainingMs: number | null;
 }
 
-export function describeProgress(state: RunState): Progress | null {
-  const { batch, durationsMs } = state;
+export function describeProgress(state: RunState, now: number): Progress | null {
+  const { batch, durationsMs, runningSince } = state;
   if (batch === null) return null;
-  const average =
-    durationsMs.length === 0
-      ? null
-      : durationsMs.reduce((sum, duration) => sum + duration, 0) / durationsMs.length;
-  return {
-    current: Math.min(batch.finished + 1, batch.total),
-    total: batch.total,
-    remainingMs: average === null ? null : average * (batch.total - batch.finished),
-  };
+  const left = batch.total - batch.finished;
+  let remainingMs: number | null = null;
+  if (durationsMs.length > 0) {
+    const average = durationsMs.reduce((sum, duration) => sum + duration, 0) / durationsMs.length;
+    const elapsed = runningSince === null ? 0 : Math.max(0, now - runningSince);
+    remainingMs = Math.max(average * Math.max(0, left - 1), average * left - elapsed);
+  }
+  return { current: Math.min(batch.finished + 1, batch.total), total: batch.total, remainingMs };
 }
 
 export function formatRemaining(ms: number): string {

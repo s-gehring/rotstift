@@ -171,7 +171,7 @@ export function ImportView({ importState, actions, footer }: ImportViewProps) {
 
       <div className="submit-bar">
         {actions}
-        <button type="button" className="primary" disabled aria-describedby="submit-hint">
+        <button type="button" disabled aria-describedby="submit-hint">
           Berichtigen
         </button>
         <p id="submit-hint" className="hint">

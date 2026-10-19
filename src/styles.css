@@ -363,3 +363,15 @@ button.primary:disabled {
     flex-direction: column;
   }
 }
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.confirm p {
+  flex-basis: 100%;
+  margin: 0;
+}

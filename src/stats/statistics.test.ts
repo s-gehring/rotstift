@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Transcript } from '../annotations/transcript.ts';
-import { computeStatistics } from './statistics.ts';
+import { computeStatistics, continuesHyphenation } from './statistics.ts';
 
 const essay: Transcript = {
   lines: [
@@ -120,5 +120,16 @@ describe('computeStatistics', () => {
     expect(Object.keys(errorsByType)).toEqual(['constructor']);
     expect(Object.hasOwn(errorsByType, 'constructor')).toBe(true);
     expect(errorsByType['constructor']).toBe(1);
+  });
+});
+
+describe('continuesHyphenation', () => {
+  it('continues a word split after a letter and a hyphen with a lowercase line', () => {
+    expect(continuesHyphenation('Wir sind ge-', 'gangen')).toBe(true);
+  });
+
+  it('does not continue before a capital letter or after a standalone dash', () => {
+    expect(continuesHyphenation('Wir sind ge-', 'Gangen')).toBe(false);
+    expect(continuesHyphenation('Wir sind -', 'gangen')).toBe(false);
   });
 });
