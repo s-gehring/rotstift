@@ -198,8 +198,22 @@ describe('incomplete answers', () => {
     });
   });
 
-  it('fails when nothing is left after cleaning the answer', async () => {
-    for (const text of ['', '  \n\n', '<think>\nnur gedacht', '```\n\n```']) {
+  it('treats an empty answer that ended normally as a valid blank page', async () => {
+    for (const text of ['', '  \n\n', '```\n\n```']) {
+      expect(await run(answer(text))).toEqual({
+        ok: true,
+        lines: [],
+        startupMs: expect.any(Number),
+      });
+    }
+  });
+
+  it('fails when only reasoning text was removed and nothing is left', async () => {
+    for (const text of [
+      '<think>\nnur gedacht',
+      '<think>\nhm\n</think>\n',
+      'ich überlege\n</think>',
+    ]) {
       const result = await run(answer(text));
       expect(result).toMatchObject({
         ok: false,

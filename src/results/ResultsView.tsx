@@ -101,6 +101,13 @@ function ResultCard({ page, row, entry, canRetry, onEdit, onRetry }: ResultCardP
             onChange={(event) => onEdit(event.target.value)}
           />
         )}
+        {entry.hasTranscript &&
+          entry.status === 'done' &&
+          entry.error === null &&
+          !entry.edited &&
+          entry.text.trim() === '' && (
+            <p className="hint">Keine Schrift erkannt. Die Seite scheint leer zu sein.</p>
+          )}
         {entry.error !== null && (
           <p className="error-text">
             {describeError(entry.error)}

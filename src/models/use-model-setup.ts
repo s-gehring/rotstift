@@ -22,7 +22,14 @@ export function useModelSetup(client: ModelClient | null) {
         dispatch({ type: 'status', status: await client.verify(modelId) });
       } catch (error) {
         const failure = toDownloadError(error);
-        if (failure.kind !== 'busy') dispatch({ type: 'error', error: failure });
+        if (failure.kind !== 'busy') {
+          dispatch({ type: 'error', error: failure });
+          try {
+            dispatch({ type: 'status', status: await client.status(modelId) });
+          } catch {
+            dispatch({ type: 'mark', modelId, state: 'unverified' });
+          }
+        }
       } finally {
         verifying.current.delete(modelId);
       }
@@ -86,6 +93,12 @@ export function useModelSetup(client: ModelClient | null) {
     }
   }, []);
 
+  const verifyAgain = useCallback(async () => {
+    dispatch({ type: 'error', error: null });
+    dispatch({ type: 'mark', modelId: model.id, state: 'verifying' });
+    await verify(model.id);
+  }, [model.id, verify]);
+
   const download = useCallback(async () => {
     if (client === null) return;
     dispatch({ type: 'error', error: null });
@@ -138,6 +151,7 @@ export function useModelSetup(client: ModelClient | null) {
     remove,
     importFiles,
     refresh,
+    verifyAgain,
     clearError: () => {
       dispatch({ type: 'error', error: null });
     },

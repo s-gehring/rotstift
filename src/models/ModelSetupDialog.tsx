@@ -117,10 +117,19 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
   const lowDiskBytes =
     freeDisk !== null && status?.state !== 'downloading' && freeDisk < size ? freeDisk : null;
   const downloading = status?.state === 'downloading';
-  const verifying = status?.state === 'verifying' || status?.state === 'unverified';
+  const verifying = status?.state === 'verifying';
+  const unverified = status?.state === 'unverified';
+  const importing = status?.state === 'importing';
+  const busyElsewhere = importing || status?.state === 'deleting';
+  const idle = !downloading && !verifying && !busyElsewhere;
   const ready = status?.state === 'ready';
   const partial =
-    status?.state !== 'ready' && (status?.downloadedBytes ?? 0) > 0 && !downloading && !verifying;
+    status?.state !== 'ready' &&
+    (status?.downloadedBytes ?? 0) > 0 &&
+    !downloading &&
+    !verifying &&
+    !unverified &&
+    !busyElsewhere;
 
   return (
     <dialog
@@ -187,7 +196,22 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
               Die vorhandenen Modelldateien werden geprüft. Das dauert einen Moment.
             </p>
           )}
-          {!downloading && !verifying && <OfflineSetup model={model} />}
+          {busyElsewhere && (
+            <p role="status">
+              {importing
+                ? 'Die Modelldateien werden gerade importiert. Das dauert einen Moment.'
+                : 'Das Modell wird gerade gelöscht.'}
+            </p>
+          )}
+          {unverified && (
+            <p className="notice warn" role="alert">
+              Die vorhandenen Modelldateien konnten nicht geprüft werden.{' '}
+              <button type="button" onClick={() => void setup.verifyAgain()}>
+                Erneut prüfen
+              </button>
+            </p>
+          )}
+          {idle && <OfflineSetup model={model} />}
         </>
       )}
 
@@ -204,7 +228,7 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
             Download abbrechen
           </button>
         )}
-        {!downloading && !verifying && !ready && (
+        {idle && !ready && (
           <>
             <button
               type="button"

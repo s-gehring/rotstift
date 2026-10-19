@@ -15,6 +15,7 @@ export interface SetupState {
 export type SetupAction =
   | { type: 'loaded'; statuses: readonly ModelStatus[]; hardware: HardwareInfo | null }
   | { type: 'status'; status: ModelStatus }
+  | { type: 'mark'; modelId: string; state: ModelStatus['state'] }
   | { type: 'event'; event: DownloadEvent; at: number }
   | { type: 'error'; error: DownloadError | null }
   | { type: 'note'; note: string | null }
@@ -94,6 +95,12 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
       };
     case 'status':
       return { ...state, statuses: withStatus(state, action.status) };
+    case 'mark': {
+      const known = state.statuses[action.modelId];
+      return known
+        ? { ...state, statuses: withStatus(state, { ...known, state: action.state }) }
+        : state;
+    }
     case 'event':
       return applyEvent(state, action.event, action.at);
     case 'error':

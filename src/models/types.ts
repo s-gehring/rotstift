@@ -1,5 +1,12 @@
 export type ModelState =
-  'missing' | 'downloading' | 'verifying' | 'unverified' | 'ready' | 'corrupt';
+  | 'missing'
+  | 'downloading'
+  | 'verifying'
+  | 'importing'
+  | 'deleting'
+  | 'unverified'
+  | 'ready'
+  | 'corrupt';
 
 export interface ModelStatus {
   modelId: string;

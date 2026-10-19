@@ -19,6 +19,8 @@ pub enum State {
     Missing,
     Downloading,
     Verifying,
+    Importing,
+    Deleting,
     Unverified,
     Ready,
     Corrupt,
@@ -55,7 +57,20 @@ pub type Emitter = Arc<dyn Fn(DownloadEvent) + Send + Sync>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum JobKind {
     Download,
-    Check,
+    Verify,
+    Import,
+    Delete,
+}
+
+impl JobKind {
+    fn state(self) -> State {
+        match self {
+            Self::Download => State::Downloading,
+            Self::Verify => State::Verifying,
+            Self::Import => State::Importing,
+            Self::Delete => State::Deleting,
+        }
+    }
 }
 
 struct Job {
@@ -205,9 +220,9 @@ impl ModelManager {
                 downloaded_bytes: progress.downloaded_bytes,
                 total_bytes: progress.total_bytes,
             },
-            Some((JobKind::Check, progress)) => ModelStatus {
+            Some((kind, progress)) => ModelStatus {
                 model_id: entry.id.clone(),
-                state: State::Verifying,
+                state: kind.state(),
                 downloaded_bytes: 0,
                 total_bytes: progress.total_bytes,
             },
@@ -215,8 +230,17 @@ impl ModelManager {
         }
     }
 
+    #[cfg(test)]
+    pub fn running_state(&self, model_id: &str) -> Option<State> {
+        self.jobs().get(model_id).map(|job| job.kind.state())
+    }
+
     pub fn is_busy(&self, model_id: &str) -> bool {
         self.jobs().contains_key(model_id)
+    }
+
+    pub async fn startable(&self, dir: &Path, entry: &ModelEntry) -> bool {
+        !self.is_busy(&entry.id) && is_ready(dir, entry).await
     }
 
     fn reserve(
@@ -292,7 +316,7 @@ impl ModelManager {
         dir: &Path,
         entry: &'static ModelEntry,
     ) -> Result<ModelStatus, DownloadError> {
-        let _reservation = self.reserve(entry, JobKind::Check)?;
+        let _reservation = self.reserve(entry, JobKind::Verify)?;
         for file in entry.file_list() {
             let complete = installed_bytes(dir, file).await == Some(file.bytes);
             if complete && !has_valid_marker(dir, file) && !verify_uninterrupted(dir, file).await? {
@@ -308,8 +332,10 @@ impl ModelManager {
         dir: &Path,
         entry: &'static ModelEntry,
         sources: Vec<PathBuf>,
+        before_import: impl FnOnce(),
     ) -> Result<ImportOutcome, DownloadError> {
-        let reservation = self.reserve(entry, JobKind::Check)?;
+        let reservation = self.reserve(entry, JobKind::Import)?;
+        before_import();
         let dir = dir.to_path_buf();
         let outcome = tokio::task::spawn_blocking(move || import_files(&dir, entry, &sources))
             .await
@@ -330,7 +356,7 @@ impl ModelManager {
         entry: &'static ModelEntry,
         before_delete: impl FnOnce(),
     ) -> Result<(), DownloadError> {
-        let _reservation = self.reserve(entry, JobKind::Check)?;
+        let _reservation = self.reserve(entry, JobKind::Delete)?;
         before_delete();
         for file in entry.file_list() {
             for path in [

@@ -84,6 +84,7 @@ pub async fn model_delete<R: Runtime>(
 pub async fn model_import<R: Runtime>(
     app: AppHandle<R>,
     models: State<'_, Arc<ModelManager>>,
+    llm: State<'_, LlmRuntime>,
     model_id: String,
 ) -> Result<Option<ImportOutcome>, DownloadError> {
     let entry = manager::entry(&model_id)?;
@@ -109,7 +110,11 @@ pub async fn model_import<R: Runtime>(
         .into_iter()
         .filter_map(|file| file.into_path().ok())
         .collect();
-    Ok(Some(models.import(&dir, entry, sources).await?))
+    Ok(Some(
+        models
+            .import(&dir, entry, sources, || drop(llm.stop()))
+            .await?,
+    ))
 }
 
 #[tauri::command]

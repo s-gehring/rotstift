@@ -18,7 +18,8 @@ export interface EngineMonitor {
   readonly subscribe: (listener: () => void) => () => void;
 }
 
-export type ModelProblem = 'missing' | 'downloading' | 'verifying' | 'corrupt';
+export type ModelProblem =
+  'missing' | 'downloading' | 'verifying' | 'importing' | 'deleting' | 'corrupt';
 
 export type TranscriberStatus =
   | {

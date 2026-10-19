@@ -26,6 +26,7 @@ function fakeSetup(state: ModelState, downloaded = 0, extra: Partial<SetupState>
     remove: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     importFiles: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     refresh: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    verifyAgain: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     clearError: vi.fn<() => void>(),
   };
 }
@@ -150,13 +151,31 @@ describe('ModelSetupDialog', () => {
   });
 
   it('shows a check in progress instead of the download buttons', () => {
-    for (const state of ['verifying', 'unverified'] as const) {
-      renderDialog(fakeSetup(state, 1_552_000_000));
-      expect(container.textContent).toContain('werden geprüft');
-      expect(button('Herunterladen')).toBeUndefined();
-      expect(button('Download fortsetzen')).toBeUndefined();
-      expect(button('Modell aus Datei importieren')).toBeUndefined();
-    }
+    renderDialog(fakeSetup('verifying', 1_552_000_000));
+    expect(container.textContent).toContain('werden geprüft');
+    expect(button('Herunterladen')).toBeUndefined();
+    expect(button('Download fortsetzen')).toBeUndefined();
+    expect(button('Modell aus Datei importieren')).toBeUndefined();
+    expect(button('Erneut prüfen')).toBeUndefined();
+  });
+
+  it('offers to check again when the files could not be checked', () => {
+    const setup = fakeSetup('unverified', 1_552_000_000);
+    renderDialog(setup);
+    expect(container.textContent).toContain('konnten nicht geprüft werden');
+    act(() => button('Erneut prüfen')?.click());
+    expect(setup.verifyAgain).toHaveBeenCalledOnce();
+    expect(button('Herunterladen')).toBeDefined();
+  });
+
+  it('says what is going on while the files are imported or deleted', () => {
+    renderDialog(fakeSetup('importing', 0));
+    expect(container.textContent).toContain('gerade importiert');
+    expect(button('Herunterladen')).toBeUndefined();
+    renderDialog(fakeSetup('deleting', 0));
+    expect(container.textContent).toContain('gerade gelöscht');
+    expect(button('Herunterladen')).toBeUndefined();
+    expect(button('Modell aus Datei importieren')).toBeUndefined();
   });
 
   it('resumes partial downloads and shows understandable errors', () => {
@@ -186,6 +205,28 @@ describe('ModelManagement', () => {
     act(() => button('Modell löschen')?.click());
     act(() => button('Modell löschen')?.click());
     expect(setup.remove).toHaveBeenCalledOnce();
+  });
+
+  it('offers to check again and hides the delete button while busy', () => {
+    const setup = fakeSetup('unverified', 1_552_000_000);
+    act(() =>
+      root.render(<ModelManagement setup={setup} onSetup={() => undefined} disabled={false} />),
+    );
+    expect(container.textContent).toContain('Noch nicht geprüft');
+    act(() => button('Erneut prüfen')?.click());
+    expect(setup.verifyAgain).toHaveBeenCalledOnce();
+    for (const state of ['importing', 'deleting', 'verifying'] as const) {
+      act(() =>
+        root.render(
+          <ModelManagement
+            setup={fakeSetup(state, 1000)}
+            onSetup={() => undefined}
+            disabled={false}
+          />,
+        ),
+      );
+      expect(button('Modell löschen')).toBeUndefined();
+    }
   });
 
   it('is hidden outside the desktop app and offers the setup when missing', () => {

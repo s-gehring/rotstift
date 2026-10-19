@@ -298,4 +298,23 @@ describe('with a transcriber', () => {
     expect(container.querySelector('[role=alert]')).toBeNull();
     expect(button('Erneut versuchen')).toBeDefined();
   });
+
+  it('shows a neutral hint for a page without any writing', async () => {
+    const blank: TranscriberStatus = {
+      state: 'ready',
+      demo: false,
+      transcriber: { transcribe: () => Promise.resolve({ ok: true, lines: [] }) },
+    };
+    const runner = mount(blank);
+    await countWords(runner);
+    expect(container.textContent).toContain('Keine Schrift erkannt');
+    expect(container.querySelector('.error-text')).toBeNull();
+    expect(container.querySelector('.progress')?.textContent).toContain('0 Wörter');
+  });
+
+  it('does not show the blank hint for pages with text', async () => {
+    const runner = mount(ready);
+    await countWords(runner);
+    expect(container.textContent).not.toContain('Keine Schrift erkannt');
+  });
 });

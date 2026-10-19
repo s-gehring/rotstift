@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { countWords } from '../stats/count-words.ts';
-import { hasRepetitionLoop, splitTranscript } from './transcript-lines.ts';
+import { hasRepetitionLoop, parseTranscript, splitTranscript } from './transcript-lines.ts';
 
 describe('splitTranscript', () => {
   it('splits plain answers into lines and trims the edges', () => {
@@ -150,5 +150,18 @@ describe('hasRepetitionLoop', () => {
     expect(hasRepetitionLoop(Array.from({ length: 10 }, () => 'Ich darf nicht schwatzen.'))).toBe(
       false,
     );
+  });
+});
+
+describe('parseTranscript', () => {
+  it('reports whether reasoning text was removed', () => {
+    expect(parseTranscript('Hallo')).toEqual({ lines: ['Hallo'], removedThinking: false });
+    expect(parseTranscript('')).toEqual({ lines: [], removedThinking: false });
+    expect(parseTranscript('<think>hm</think>\nHallo')).toEqual({
+      lines: ['Hallo'],
+      removedThinking: true,
+    });
+    expect(parseTranscript('<think>endlos')).toEqual({ lines: [], removedThinking: true });
+    expect(parseTranscript('hm\n</think>\nHallo').removedThinking).toBe(true);
   });
 });

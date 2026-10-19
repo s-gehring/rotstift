@@ -9,4 +9,4 @@ mod verified;
 #[cfg(test)]
 mod download_tests;
 
-pub use manager::{ModelManager, entry, is_ready};
+pub use manager::{ModelManager, entry};

@@ -33,6 +33,11 @@ function dropEdgeBlanks(lines: string[]): string[] {
   return lines.slice(start, end);
 }
 
+export interface ParsedTranscript {
+  readonly lines: string[];
+  readonly removedThinking: boolean;
+}
+
 function stripThinking(text: string): string {
   return text
     .replace(THINKING_CLOSED, '')
@@ -60,8 +65,10 @@ function isPostscript(line: string): boolean {
   return POSTSCRIPT_BRACKETED.test(plain) || POSTSCRIPT_LABELLED.test(plain);
 }
 
-export function splitTranscript(answer: string): string[] {
-  let text = stripThinking(answer.replace(/\r\n?/gu, '\n'));
+export function parseTranscript(answer: string): ParsedTranscript {
+  const normalized = answer.replace(/\r\n?/gu, '\n');
+  const withoutThinking = stripThinking(normalized);
+  let text = withoutThinking;
   const fenced = FENCE.exec(text);
   if (fenced?.[1] !== undefined) text = fenced[1];
 
@@ -76,7 +83,11 @@ export function splitTranscript(answer: string): string[] {
       lines = dropEdgeBlanks(lines.slice(0, -1));
     }
   }
-  return lines;
+  return { lines, removedThinking: withoutThinking !== normalized };
+}
+
+export function splitTranscript(answer: string): string[] {
+  return parseTranscript(answer).lines;
 }
 
 function normalizedWords(lines: readonly string[]): string[] {

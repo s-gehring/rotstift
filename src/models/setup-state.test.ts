@@ -61,4 +61,11 @@ describe('setupReducer', () => {
     expect(activeModel(INITIAL_SETUP).id).toBe(model.id);
     expect(activeModel(loaded({ ...missing, state: 'ready' })).id).toBe(model.id);
   });
+
+  it('marks the state of a known model and ignores unknown ones', () => {
+    const state = loaded();
+    const marked = setupReducer(state, { type: 'mark', modelId: model.id, state: 'verifying' });
+    expect(marked.statuses[model.id]).toMatchObject({ state: 'verifying', totalBytes: 1000 });
+    expect(setupReducer(state, { type: 'mark', modelId: 'other', state: 'ready' })).toBe(state);
+  });
 });

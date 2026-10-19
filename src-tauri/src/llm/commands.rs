@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde_json::Value;
 use tauri::{AppHandle, Manager, Runtime, State};
 
@@ -5,7 +7,7 @@ use super::process;
 use super::runtime::{
     LlmError, LlmRuntime, RuntimePaths, RuntimeStatus, StartOptions, installed_layout,
 };
-use crate::models::{self, registry::ModelEntry};
+use crate::models::{self, ModelManager, registry::ModelEntry};
 
 fn environment_error(error: impl ToString) -> LlmError {
     LlmError::Environment(error.to_string())
@@ -49,11 +51,12 @@ pub fn start_options(entry: &ModelEntry) -> StartOptions {
 pub async fn llm_start_model<R: Runtime>(
     app: AppHandle<R>,
     runtime: State<'_, LlmRuntime>,
+    models: State<'_, Arc<ModelManager>>,
     model_id: String,
 ) -> Result<RuntimeStatus, LlmError> {
     let paths = runtime_paths(&app)?;
     let entry = models::entry(&model_id).map_err(|_| LlmError::InvalidModelName(model_id))?;
-    if !models::is_ready(&paths.models_dir, entry).await {
+    if !models.startable(&paths.models_dir, entry).await {
         return Err(LlmError::ModelNotFound(entry.files.model.name.clone()));
     }
     runtime.start(&paths, start_options(entry)).await

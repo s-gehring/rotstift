@@ -810,10 +810,16 @@ async fn import_and_verification_are_jobs_that_block_download_and_delete() {
         .start(&dir, entry, Arc::new(emit.clone()))
         .await
         .unwrap();
+    let stops = AtomicUsize::new(0);
+    let stop = || {
+        stops.fetch_add(1, Ordering::Relaxed);
+    };
     assert_eq!(
-        manager.import(&dir, entry, vec![]).await,
+        manager.import(&dir, entry, vec![], stop).await,
         Err(DownloadError::Busy)
     );
+    assert_eq!(stops.load(Ordering::Relaxed), 0);
+    assert!(!manager.startable(&dir, entry).await);
     assert_eq!(manager.verify(&dir, entry).await, Err(DownloadError::Busy));
     assert!(manager.cancel("test-model"));
     assert_eq!(next_final(&mut events).await, Update::Cancelled);
@@ -827,9 +833,12 @@ async fn import_and_verification_are_jobs_that_block_download_and_delete() {
             &dir,
             entry,
             vec![source.join("a.bin"), source.join("b.bin")],
+            stop,
         )
         .await
         .unwrap();
+    assert_eq!(stops.load(Ordering::Relaxed), 1);
+    assert!(manager.startable(&dir, entry).await);
     assert_eq!(outcome.imported, ["m.gguf", "p.gguf"]);
     assert!(!manager.is_busy("test-model"));
     assert_eq!(manager.status(&dir, entry).await.state, State::Ready);
@@ -915,4 +924,30 @@ async fn downloads_and_resumes_from_hugging_face() {
         file.bytes
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn import_and_delete_report_their_own_status_while_running() {
+    let (model, projector) = (content(46, 400_000), content(47, 3000));
+    let server = TestServer::start(&[], Behavior::default()).await;
+    let entry = leaked_entry(
+        file(&server, "m.gguf", &model),
+        file(&server, "p.gguf", &projector),
+    );
+    let dir = temp_dir("job-status");
+    let source = temp_dir("job-status-source");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("a.bin"), &model).unwrap();
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    let observed = Mutex::new(None);
+    let observe = || *observed.lock().unwrap() = manager.running_state("test-model");
+
+    manager
+        .import(&dir, entry, vec![source.join("a.bin")], observe)
+        .await
+        .unwrap();
+    assert_eq!(observed.lock().unwrap().take(), Some(State::Importing));
+    manager.delete(&dir, entry, observe).await.unwrap();
+    assert_eq!(observed.lock().unwrap().take(), Some(State::Deleting));
+    assert_eq!(manager.running_state("test-model"), None);
 }

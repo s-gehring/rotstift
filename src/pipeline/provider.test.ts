@@ -64,6 +64,16 @@ describe('resolveTranscriber', () => {
     }
   });
 
+  it('reports an import or deletion in progress as a pending problem', async () => {
+    for (const state of ['importing', 'deleting'] as const) {
+      const desktop = env(false, true);
+      expect(await resolveTranscriber(desktop, { model, state })).toEqual({
+        state: 'needs-model',
+        problem: state,
+      });
+    }
+  });
+
   it('passes the unavailable callback on to the model transcriber', async () => {
     const desktop = env(false, true);
     const onUnavailable = vi.fn<() => void>();

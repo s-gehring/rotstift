@@ -2,7 +2,7 @@ import { LlmCallError, visionMessage, type LlmClient } from '../llm/client.ts';
 import { modelImage } from '../llm/image.ts';
 import type { LlmError } from '../llm/types.ts';
 import type { ModelInfo } from '../models/registry.ts';
-import { hasRepetitionLoop, splitTranscript } from './transcript-lines.ts';
+import { hasRepetitionLoop, parseTranscript } from './transcript-lines.ts';
 import type {
   EngineMonitor,
   EnginePhase,
@@ -178,8 +178,8 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
           { signal },
         );
         if (answer.finishReason === 'length') return incomplete(INCOMPLETE_MESSAGE);
-        const lines = splitTranscript(answer.text);
-        if (lines.every((line) => line === '')) return incomplete(INCOMPLETE_MESSAGE);
+        const { lines, removedThinking } = parseTranscript(answer.text);
+        if (removedThinking && lines.length === 0) return incomplete(INCOMPLETE_MESSAGE);
         if (hasRepetitionLoop(lines)) return incomplete(LOOP_MESSAGE);
         return { ok: true, lines, startupMs };
       } catch (error) {

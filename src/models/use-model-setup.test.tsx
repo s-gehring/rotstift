@@ -12,7 +12,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const model = recommendModel(null);
 
-const status = (state: ModelState): ModelStatus => ({
+const statusOf = (state: ModelState): ModelStatus => ({
   modelId: model.id,
   state,
   downloadedBytes: 100,
@@ -22,17 +22,18 @@ const status = (state: ModelState): ModelStatus => ({
 function fakeClient(initial: ModelState, verified: Promise<ModelStatus>) {
   const states = { current: initial };
   const verify = vi.fn<ModelClient['verify']>(() => verified);
+  const status = vi.fn<ModelClient['status']>(() => Promise.resolve(statusOf(states.current)));
   const client: ModelClient = {
-    status: () => Promise.resolve(status(states.current)),
+    status,
     hardware: () => Promise.reject(new Error('no hardware')),
     verify,
     startDownload: () => Promise.resolve(undefined),
     cancelDownload: () => Promise.resolve(false),
-    remove: () => Promise.resolve(status('missing')),
+    remove: () => Promise.resolve(statusOf('missing')),
     importFiles: () => Promise.resolve(null),
     onDownload: () => Promise.resolve(() => undefined),
   };
-  return { client, verify, states };
+  return { client, verify, status, states };
 }
 
 let container: HTMLElement;
@@ -78,7 +79,7 @@ describe('useModelSetup verification', () => {
     expect(container.textContent).toBe('verifying');
 
     await act(async () => {
-      handle.finish(status('ready'));
+      handle.finish(statusOf('ready'));
       await verified;
     });
     expect(container.textContent).toBe('ready');
@@ -97,14 +98,14 @@ describe('useModelSetup verification', () => {
   });
 
   it('does not verify files that are already known to be fine', async () => {
-    const { client, verify } = fakeClient('ready', Promise.resolve(status('ready')));
+    const { client, verify } = fakeClient('ready', Promise.resolve(statusOf('ready')));
     await mount(client);
     await vi.waitFor(() => expect(container.textContent).toBe('ready'));
     expect(verify).not.toHaveBeenCalled();
   });
 
   it('refreshes the model status on request', async () => {
-    const { client, states } = fakeClient('ready', Promise.resolve(status('ready')));
+    const { client, states } = fakeClient('ready', Promise.resolve(statusOf('ready')));
     await mount(client);
     await vi.waitFor(() => expect(container.textContent).toBe('ready'));
     states.current = 'missing';
@@ -112,5 +113,34 @@ describe('useModelSetup verification', () => {
       await latest?.refresh();
     });
     expect(container.textContent).toBe('missing');
+  });
+
+  it('reloads the real status when the check fails and lets the user retry', async () => {
+    const failing = Promise.reject(new ModelCallError({ kind: 'io', detail: 'locked' }));
+    failing.catch(() => undefined);
+    const { client, verify, status } = fakeClient('unverified', failing);
+    await mount(client);
+    await vi.waitFor(() => expect(container.textContent).toBe('unverified'));
+    expect(latest?.state.error).toEqual({ kind: 'io', detail: 'locked' });
+    expect(status).toHaveBeenCalledTimes(2);
+
+    verify.mockResolvedValueOnce(statusOf('ready'));
+    await act(async () => {
+      await latest?.verifyAgain();
+    });
+    expect(verify).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toBe('ready');
+    expect(latest?.state.error).toBeNull();
+  });
+
+  it('falls back to unverified when even the status cannot be reloaded', async () => {
+    const failing = Promise.reject(new ModelCallError({ kind: 'io' }));
+    failing.catch(() => undefined);
+    const { client, status } = fakeClient('unverified', failing);
+    status.mockResolvedValueOnce(statusOf('unverified'));
+    status.mockRejectedValue(new Error('gone'));
+    await mount(client);
+    await vi.waitFor(() => expect(status).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(container.textContent).toBe('unverified'));
   });
 });

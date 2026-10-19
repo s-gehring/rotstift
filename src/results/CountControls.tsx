@@ -119,6 +119,8 @@ const SETUP_BUTTON: Record<ModelProblem, string> = {
   missing: 'Texterkennung einrichten',
   downloading: 'Download läuft …',
   verifying: 'Wird geprüft …',
+  importing: 'Wird importiert …',
+  deleting: 'Wird gelöscht …',
   corrupt: 'Texterkennung einrichten',
 };
 
@@ -130,6 +132,10 @@ function modelProblemText(problem: ModelProblem, download: ModelStatus | null): 
       return download === null
         ? 'Die Texterkennung wird heruntergeladen.'
         : `Die Texterkennung wird heruntergeladen (${formatMegabytes(download.downloadedBytes)} von ${formatMegabytes(download.totalBytes)}).`;
+    case 'importing':
+      return 'Die Texterkennung wird gerade aus Dateien importiert. Das dauert einen Moment.';
+    case 'deleting':
+      return 'Die Texterkennung wird gerade gelöscht.';
     case 'verifying':
       return 'Die Texterkennung wird geprüft. Das dauert einen Moment.';
     case 'corrupt':

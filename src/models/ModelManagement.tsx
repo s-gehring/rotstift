@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatSize } from './format.ts';
 import { totalBytes } from './registry.ts';
+import type { ModelState } from './types.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
 interface Props {
@@ -14,9 +15,18 @@ const STATE_TEXT = {
   missing: 'Nicht eingerichtet',
   downloading: 'Wird heruntergeladen',
   verifying: 'Wird geprüft',
-  unverified: 'Wird geprüft',
+  importing: 'Wird importiert',
+  deleting: 'Wird gelöscht',
+  unverified: 'Noch nicht geprüft',
   corrupt: 'Beschädigt, bitte neu laden',
 } as const;
+
+const BUSY_STATES: ReadonlySet<ModelState> = new Set([
+  'downloading',
+  'verifying',
+  'importing',
+  'deleting',
+]);
 
 export function ModelManagement({ setup, onSetup, disabled }: Props) {
   const { model, status } = setup;
@@ -67,12 +77,17 @@ export function ModelManagement({ setup, onSetup, disabled }: Props) {
           </div>
         ) : (
           <div className="dialog-actions">
+            {status.state === 'unverified' && (
+              <button type="button" onClick={() => void setup.verifyAgain()}>
+                Erneut prüfen
+              </button>
+            )}
             {status.state !== 'ready' && (
               <button type="button" onClick={onSetup}>
                 Texterkennung einrichten
               </button>
             )}
-            {hasFiles && status.state !== 'downloading' && status.state !== 'verifying' && (
+            {hasFiles && !BUSY_STATES.has(status.state) && (
               <button
                 type="button"
                 className="danger"
