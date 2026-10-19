@@ -9,11 +9,15 @@ export interface Statistics {
   errorsPer100Words: number;
 }
 
+export function continuesHyphenation(previousLine: string, line: string): boolean {
+  return /\p{L}-$/u.test(previousLine) && /^\p{Ll}/u.test(line);
+}
+
 function joinLines(lines: string[]): string {
   const parts: string[] = [];
   for (const line of lines) {
     const previous = parts.at(-1);
-    if (previous !== undefined && /\p{L}-$/u.test(previous) && /^\p{Ll}/u.test(line)) {
+    if (previous !== undefined && continuesHyphenation(previous, line)) {
       parts[parts.length - 1] = previous.slice(0, -1) + line;
     } else {
       parts.push(line);
