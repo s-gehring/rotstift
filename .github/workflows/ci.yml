@@ -37,6 +37,17 @@ jobs:
           key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
       - run: pnpm fetch:runtime
       - run: pnpm check
+      - name: Download the llama.cpp test model
+        run: |
+          mkdir -p "$RUNNER_TEMP/models"
+          curl -sSfL -o "$RUNNER_TEMP/models/stories260K-f32.gguf" \
+            https://huggingface.co/ggml-org/test-model-stories260K/resolve/479896ec924af6d40fd419ab8f4d1eb2101de00d/stories260K-f32.gguf
+          echo "270cba1bd5109f42d03350f60406024560464db173c0e387d91f0426d3bd256d  $RUNNER_TEMP/models/stories260K-f32.gguf" | sha256sum -c -
+      - name: Integration test with the real sidecar
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib starts_the_real -- --ignored
+        env:
+          ROTSTIFT_TEST_MODELS_DIR: ${{ runner.temp }}/models
+          ROTSTIFT_TEST_MODEL: stories260K-f32.gguf
 
   build:
     needs: check
@@ -67,9 +78,17 @@ jobs:
           path: src-tauri/binaries/.download
           key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
       - run: pnpm fetch:runtime
-      - name: Smoke-test the bundled sidecar
-        if: runner.os != 'Linux'
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib smoke_
       - run: pnpm build --debug
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/binaries/llama
+      - name: Smoke-test the sidecar in the build layout
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            contents="$GITHUB_WORKSPACE/src-tauri/target/debug/bundle/macos/Rotstift.app/Contents"
+            export ROTSTIFT_BUNDLE_EXE_DIR="$contents/MacOS" ROTSTIFT_BUNDLE_RESOURCE_DIR="$contents/Resources"
+          else
+            export ROTSTIFT_BUNDLE_EXE_DIR="$GITHUB_WORKSPACE/src-tauri/target/debug"
+            export ROTSTIFT_BUNDLE_RESOURCE_DIR="$GITHUB_WORKSPACE/src-tauri/target/debug"
+          fi
+          cargo test --manifest-path src-tauri/Cargo.toml --lib smoke_

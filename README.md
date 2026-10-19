@@ -66,10 +66,8 @@ src/              Frontend (React, TypeScript)
 src/stats/        Statistik über korrigierte Texte
 src/llm/          Client für das lokale Modell (über Rust-Commands)
 scripts/          Werkzeuge, etwa der Download der llama.cpp-Runtime
-eval/             Modell-Evaluation für Handschrift (Proben, Harness)
 src-tauri/        Tauri-Hülle in Rust (Fenster, Dateizugriff, llama-server-Sidecar)
 docs/adr/         Architekturentscheidungen
-docs/evaluations/ Messergebnisse und Modellempfehlungen
 ```
 
 Die Entscheidung für den Tech-Stack steht in [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md).
