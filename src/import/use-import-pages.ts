@@ -1,55 +1,78 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { fileKey } from './file-kind.ts';
 import { loadFile } from './load-files.ts';
 import { pagesReducer, type ImportPage } from './pages.ts';
 import { releasePdf } from './pdf-documents.ts';
+import { releaseRemoved } from './release.ts';
 
-function pdfDocumentIds(pages: readonly ImportPage[]): Set<string> {
-  const ids = new Set<string>();
-  for (const page of pages) {
-    if (page.source.kind === 'pdf') ids.add(page.source.documentId);
-  }
-  return ids;
+export interface Notice {
+  readonly id: number;
+  readonly text: string;
 }
 
 export function useImportPages() {
   const [pages, dispatch] = useReducer(pagesReducer, []);
   const [pending, setPending] = useState(0);
-  const [errors, setErrors] = useState<readonly string[]>([]);
+  const [notices, setNotices] = useState<readonly Notice[]>([]);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const previous = useRef<readonly ImportPage[]>([]);
+  const current = useRef<readonly ImportPage[]>([]);
+  const inFlight = useRef(new Set<string>());
+  const nextNoticeId = useRef(0);
 
   useEffect(() => {
-    const kept = new Set(pages.map((page) => page.id));
-    for (const page of previous.current) {
-      if (!kept.has(page.id)) URL.revokeObjectURL(page.thumbnailUrl);
-    }
-    const stillUsed = pdfDocumentIds(pages);
-    for (const documentId of pdfDocumentIds(previous.current)) {
-      if (!stillUsed.has(documentId)) void releasePdf(documentId);
-    }
+    current.current = pages;
+    releaseRemoved(previous.current, pages, {
+      revokeUrl: (url) => URL.revokeObjectURL(url),
+      releaseDocument: (documentId) => void releasePdf(documentId),
+    });
     previous.current = pages;
   }, [pages]);
 
-  const addFiles = useCallback((files: readonly File[]) => {
-    if (files.length === 0) return;
-    setErrors([]);
-    setPending((count) => count + files.length);
-    for (const file of files) {
-      queue.current = queue.current.then(async () => {
-        const result = await loadFile(file);
-        if (result.ok) dispatch({ type: 'add', pages: result.pages });
-        else setErrors((current) => [...current, result.message]);
-        setPending((count) => count - 1);
-      });
-    }
+  const addNotices = useCallback((texts: readonly string[]) => {
+    setNotices((existing) => [
+      ...existing,
+      ...texts.map((text) => ({ id: nextNoticeId.current++, text })),
+    ]);
   }, []);
+
+  const addFiles = useCallback(
+    (files: readonly File[]) => {
+      if (files.length === 0) return;
+      setNotices([]);
+      const duplicates: string[] = [];
+      const accepted: File[] = [];
+      const loaded = new Set(current.current.map((page) => page.fileKey));
+      for (const file of files) {
+        const key = fileKey(file);
+        if (loaded.has(key) || inFlight.current.has(key)) {
+          duplicates.push(`„${file.name}“ ist bereits geladen und wurde übersprungen.`);
+          continue;
+        }
+        inFlight.current.add(key);
+        accepted.push(file);
+      }
+      if (duplicates.length > 0) addNotices(duplicates);
+      setPending((count) => count + accepted.length);
+      for (const file of accepted) {
+        queue.current = queue.current.then(async () => {
+          const result = await loadFile(file);
+          inFlight.current.delete(fileKey(file));
+          if (result.ok) dispatch({ type: 'add', pages: result.pages });
+          else addNotices([result.message]);
+          setPending((count) => count - 1);
+        });
+      }
+    },
+    [addNotices],
+  );
 
   return {
     pages,
     dispatch,
     addFiles,
     busy: pending > 0,
-    errors,
-    dismissErrors: () => setErrors([]),
+    notices,
+    dismissNotices: () => setNotices([]),
   };
 }

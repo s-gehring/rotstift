@@ -32,3 +32,29 @@ export function get2dContext(canvas: HTMLCanvasElement): CanvasRenderingContext2
   if (context === null) throw new Error('Zeichenfläche nicht verfügbar.');
   return context;
 }
+
+export type DrawingContext = Pick<
+  CanvasRenderingContext2D,
+  'fillStyle' | 'fillRect' | 'translate' | 'rotate' | 'drawImage' | 'imageSmoothingQuality'
+>;
+
+export function drawRotated(
+  context: DrawingContext,
+  image: CanvasImageSource,
+  canvas: { readonly width: number; readonly height: number },
+  imageSize: { readonly width: number; readonly height: number },
+  rotationDegrees: number,
+): void {
+  context.imageSmoothingQuality = 'high';
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.translate(canvas.width / 2, canvas.height / 2);
+  context.rotate((rotationDegrees * Math.PI) / 180);
+  context.drawImage(
+    image,
+    -imageSize.width / 2,
+    -imageSize.height / 2,
+    imageSize.width,
+    imageSize.height,
+  );
+}

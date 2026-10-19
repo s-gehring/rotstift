@@ -26,6 +26,7 @@ export function PageCard({
   const [dragging, setDragging] = useState(false);
   const [dropTarget, setDropTarget] = useState(false);
 
+  const number = index + 1;
   const visible = rotatedSize(page);
   const scale = Math.min(STAGE / visible.width, STAGE / visible.height);
   const imageStyle = {
@@ -60,6 +61,7 @@ export function PageCard({
   return (
     <li
       className={className}
+      data-page-id={page.id}
       draggable
       onDragStart={onDragStart}
       onDragEnd={() => setDragging(false)}
@@ -70,35 +72,38 @@ export function PageCard({
       <div className="page-stage">
         <img
           src={page.thumbnailUrl}
-          alt={`Seite ${index + 1}: ${page.label}`}
+          alt={`Seite ${number}: ${page.label}`}
           style={imageStyle}
           draggable={false}
         />
       </div>
       <p className="page-label" title={page.label}>
-        <strong>{index + 1}</strong> · {page.label}
+        <strong>{number}</strong> · {page.label}
       </p>
       <div className="page-actions">
         <button
           type="button"
+          data-action="rotate-left"
           title="Nach links drehen"
-          aria-label="Nach links drehen"
+          aria-label={`Seite ${number} nach links drehen`}
           onClick={() => onRotate('counterclockwise')}
         >
           ↺
         </button>
         <button
           type="button"
+          data-action="rotate-right"
           title="Nach rechts drehen"
-          aria-label="Nach rechts drehen"
+          aria-label={`Seite ${number} nach rechts drehen`}
           onClick={() => onRotate('clockwise')}
         >
           ↻
         </button>
         <button
           type="button"
+          data-action="move-earlier"
           title="Nach vorn schieben"
-          aria-label="Nach vorn schieben"
+          aria-label={`Seite ${number} nach vorn schieben`}
           disabled={index === 0}
           onClick={() => onMove(index - 1)}
         >
@@ -106,8 +111,9 @@ export function PageCard({
         </button>
         <button
           type="button"
+          data-action="move-later"
           title="Nach hinten schieben"
-          aria-label="Nach hinten schieben"
+          aria-label={`Seite ${number} nach hinten schieben`}
           disabled={index === count - 1}
           onClick={() => onMove(index + 1)}
         >
@@ -115,9 +121,10 @@ export function PageCard({
         </button>
         <button
           type="button"
+          data-action="remove"
           className="danger"
           title="Seite entfernen"
-          aria-label="Seite entfernen"
+          aria-label={`Seite ${number} entfernen`}
           onClick={onRemove}
         >
           ✕

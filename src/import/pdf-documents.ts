@@ -1,23 +1,51 @@
 import {
-  GlobalWorkerOptions,
+  PasswordException,
+  PDFWorker,
   getDocument,
   type PDFDocumentLoadingTask,
   type PDFPageProxy,
 } from 'pdfjs-dist';
-// oxlint-disable-next-line import/default
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-GlobalWorkerOptions.workerSrc = workerUrl;
+export class PasswordProtectedError extends Error {
+  constructor() {
+    super('PDF ist passwortgeschützt.');
+    this.name = 'PasswordProtectedError';
+  }
+}
 
 const documents = new Map<string, PDFDocumentLoadingTask>();
+let sharedWorker: PDFWorker | undefined;
+
+function getSharedWorker(): PDFWorker {
+  sharedWorker ??= PDFWorker.create({
+    port: new Worker(new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url), {
+      type: 'module',
+    }),
+  });
+  return sharedWorker;
+}
+
+function decoderUrl(): string {
+  return new URL('/pdfjs-decoders/', document.baseURI).href;
+}
 
 export async function openPdf(file: File): Promise<{ documentId: string; pageCount: number }> {
   const data = new Uint8Array(await file.arrayBuffer());
-  const task = getDocument({ data });
-  const document = await task.promise;
-  const documentId = crypto.randomUUID();
-  documents.set(documentId, task);
-  return { documentId, pageCount: document.numPages };
+  const task = getDocument({
+    data,
+    worker: getSharedWorker(),
+    useWasm: false,
+    wasmUrl: decoderUrl(),
+  });
+  try {
+    const document = await task.promise;
+    const documentId = crypto.randomUUID();
+    documents.set(documentId, task);
+    return { documentId, pageCount: document.numPages };
+  } catch (error) {
+    await task.destroy();
+    throw error instanceof PasswordException ? new PasswordProtectedError() : error;
+  }
 }
 
 export async function getPdfPage(documentId: string, pageNumber: number): Promise<PDFPageProxy> {

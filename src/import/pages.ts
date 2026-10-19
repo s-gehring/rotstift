@@ -6,9 +6,9 @@ export type PageSource =
 
 export interface ImportPage {
   readonly id: string;
+  readonly fileKey: string;
   readonly label: string;
   readonly source: PageSource;
-  /** Size in pixels at scale 1 before the user rotation, including a rotation stored in the file. */
   readonly width: number;
   readonly height: number;
   readonly rotation: Rotation;
@@ -51,11 +51,13 @@ export function pagesReducer(
     case 'add':
       return [...pages, ...action.pages];
     case 'rotate':
-      return pages.map((page) =>
-        page.id === action.id
-          ? { ...page, rotation: rotate(page.rotation, action.direction) }
-          : page,
-      );
+      return pages.some((page) => page.id === action.id)
+        ? pages.map((page) =>
+            page.id === action.id
+              ? { ...page, rotation: rotate(page.rotation, action.direction) }
+              : page,
+          )
+        : pages;
     case 'move': {
       const from = pages.findIndex((page) => page.id === action.id);
       const moving = pages[from];

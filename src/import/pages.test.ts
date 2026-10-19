@@ -11,6 +11,7 @@ import {
 function page(id: string, overrides: Partial<ImportPage> = {}): ImportPage {
   return {
     id,
+    fileKey: `key-${id}`,
     label: id,
     source: { kind: 'pdf', documentId: 'doc', pageNumber: 1 },
     width: 100,
@@ -61,9 +62,16 @@ describe('rotate', () => {
     expect(result.map((p) => p.rotation)).toEqual([0, 90]);
   });
 
+  it('ignores unknown ids', () => {
+    const pages = [page('a')];
+    expect(apply(pages, { type: 'rotate', id: 'x', direction: 'clockwise' })).toBe(pages);
+  });
+
   it('swaps the size for sideways rotations', () => {
+    expect(rotatedSize(page('a', { rotation: 0 }))).toEqual({ width: 100, height: 200 });
     expect(rotatedSize(page('a', { rotation: 90 }))).toEqual({ width: 200, height: 100 });
     expect(rotatedSize(page('a', { rotation: 180 }))).toEqual({ width: 100, height: 200 });
+    expect(rotatedSize(page('a', { rotation: 270 }))).toEqual({ width: 200, height: 100 });
   });
 });
 

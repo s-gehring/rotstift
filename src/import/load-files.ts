@@ -1,31 +1,14 @@
-import { openPdf, releasePdf } from './pdf-documents.ts';
+import { detectFileKind, fileKey } from './file-kind.ts';
 import type { ImportPage } from './pages.ts';
+import { PasswordProtectedError, openPdf, releasePdf } from './pdf-documents.ts';
 import { imageThumbnail, pdfThumbnail } from './thumbnails.ts';
-
-export const ACCEPTED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.pdf'] as const;
-export const ACCEPT_ATTRIBUTE = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'].join(
-  ',',
-);
-
-export type FileKind = 'image' | 'pdf';
-
-export function detectFileKind(file: Pick<File, 'name' | 'type'>): FileKind | undefined {
-  const name = file.name.toLowerCase();
-  if (file.type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
-  if (
-    ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
-    ['.png', '.jpg', '.jpeg', '.webp'].some((extension) => name.endsWith(extension))
-  ) {
-    return 'image';
-  }
-  return undefined;
-}
 
 export async function loadImage(file: File): Promise<ImportPage[]> {
   const thumbnail = await imageThumbnail(file);
   return [
     {
       id: crypto.randomUUID(),
+      fileKey: fileKey(file),
       label: file.name,
       source: { kind: 'image', file },
       width: thumbnail.width,
@@ -44,6 +27,7 @@ export async function loadPdf(file: File): Promise<ImportPage[]> {
       const thumbnail = await pdfThumbnail(documentId, pageNumber);
       pages.push({
         id: crypto.randomUUID(),
+        fileKey: fileKey(file),
         label: pageCount === 1 ? file.name : `${file.name}, Seite ${pageNumber}`,
         source: { kind: 'pdf', documentId, pageNumber },
         width: thumbnail.width,
@@ -74,7 +58,11 @@ export async function loadFile(file: File): Promise<LoadResult> {
   }
   try {
     return { ok: true, pages: kind === 'pdf' ? await loadPdf(file) : await loadImage(file) };
-  } catch {
-    return { ok: false, message: `„${file.name}“ konnte nicht gelesen werden.` };
+  } catch (error) {
+    const reason =
+      error instanceof PasswordProtectedError
+        ? 'ist passwortgeschützt'
+        : 'konnte nicht gelesen werden';
+    return { ok: false, message: `„${file.name}“ ${reason}.` };
   }
 }

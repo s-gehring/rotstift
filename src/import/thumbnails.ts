@@ -1,4 +1,5 @@
-import { canvasToBlob, createCanvas, get2dContext, releaseCanvas } from './canvas.ts';
+import { canvasToBlob, createCanvas, drawRotated, get2dContext, releaseCanvas } from './canvas.ts';
+import { decodeScaled, readImageSize } from './image-decode.ts';
 import { getPdfPage } from './pdf-documents.ts';
 
 const THUMBNAIL_EDGE = 320;
@@ -23,16 +24,12 @@ async function toThumbnail(
 }
 
 export async function imageThumbnail(file: File): Promise<Thumbnail> {
-  const bitmap = await createImageBitmap(file);
+  const size = await readImageSize(file);
+  const bitmap = await decodeScaled(file, size, THUMBNAIL_EDGE);
   try {
-    const scale = Math.min(1, THUMBNAIL_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = createCanvas(bitmap.width * scale, bitmap.height * scale);
-    const context = get2dContext(canvas);
-    context.imageSmoothingQuality = 'high';
-    context.fillStyle = '#fff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return await toThumbnail(canvas, bitmap.width, bitmap.height);
+    const canvas = createCanvas(bitmap.width, bitmap.height);
+    drawRotated(get2dContext(canvas), bitmap, canvas, bitmap, 0);
+    return await toThumbnail(canvas, size.width, size.height);
   } finally {
     bitmap.close();
   }
