@@ -31,6 +31,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm fetch:runtime
       - run: pnpm check
 
   build:
@@ -57,4 +58,5 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm fetch:runtime
       - run: pnpm build --debug

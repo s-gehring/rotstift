@@ -18,7 +18,7 @@ Projektgerüst: Leeres Fenster, Wortzählung für die Statistik, CI und Release-
 ## Datenschutz
 
 - Keine Telemetrie, keine Cloud-Dienste. Netzwerkzugriff nur zum Herunterladen von Modellen.
-- Die Modelle laufen über einen eingebetteten llama.cpp-Server auf dem eigenen Rechner.
+- Die Modelle laufen über einen eingebetteten llama.cpp-Server auf dem eigenen Rechner. Er lauscht nur auf `127.0.0.1` und verlangt einen zufälligen Schlüssel, den nur die App kennt.
 - Der Quellcode ist offen, damit Schulen und Datenschutzbeauftragte das prüfen können.
 
 ## Testversion installieren
@@ -41,17 +41,21 @@ Schnellstart:
 
 ```bash
 pnpm install
+pnpm fetch:runtime
 pnpm dev
 ```
 
-| Befehl         | Zweck                                                                        |
-| -------------- | ---------------------------------------------------------------------------- |
-| `pnpm dev`     | App mit Hot Reload starten                                                   |
-| `pnpm dev:web` | Nur das Frontend im Browser (Port 1420)                                      |
-| `pnpm build`   | Installer für das aktuelle Betriebssystem bauen                              |
-| `pnpm check`   | Typprüfung, Lint, Format, Tests, dazu `cargo fmt`, `clippy` und `cargo test` |
-| `pnpm format`  | Prettier und `cargo fmt` anwenden                                            |
-| `pnpm test`    | Vitest einmal ausführen (`pnpm test:watch` beobachtet)                       |
+`pnpm fetch:runtime` lädt die gepinnte llama.cpp-Version samt SHA256-Prüfung nach `src-tauri/binaries/`. Ohne diesen Schritt bricht der Rust-Build ab. Modelle (GGUF) gehören in das App-Datenverzeichnis unter `models/`, nie ins Repo.
+
+| Befehl               | Zweck                                                                            |
+| -------------------- | -------------------------------------------------------------------------------- |
+| `pnpm dev`           | App mit Hot Reload starten                                                       |
+| `pnpm fetch:runtime` | llama.cpp-Sidecar für das aktuelle System laden (`--target <triple>` für andere) |
+| `pnpm dev:web`       | Nur das Frontend im Browser (Port 1420)                                          |
+| `pnpm build`         | Installer für das aktuelle Betriebssystem bauen                                  |
+| `pnpm check`         | Typprüfung, Lint, Format, Tests, dazu `cargo fmt`, `clippy` und `cargo test`     |
+| `pnpm format`        | Prettier und `cargo fmt` anwenden                                                |
+| `pnpm test`          | Vitest einmal ausführen (`pnpm test:watch` beobachtet)                           |
 
 Ein Tag `v*` baut über `.github/workflows/release.yml` Installer für alle Plattformen als Release-Entwurf.
 
@@ -60,7 +64,9 @@ Ein Tag `v*` baut über `.github/workflows/release.yml` Installer für alle Plat
 ```text
 src/              Frontend (React, TypeScript)
 src/stats/        Statistik über korrigierte Texte
-src-tauri/        Tauri-Hülle in Rust (Fenster, Dateizugriff, später Modell-Sidecar)
+src/llm/          Client für das lokale Modell (über Rust-Commands)
+scripts/          Werkzeuge, etwa der Download der llama.cpp-Runtime
+src-tauri/        Tauri-Hülle in Rust (Fenster, Dateizugriff, llama-server-Sidecar)
 docs/adr/         Architekturentscheidungen
 ```
 
@@ -68,4 +74,4 @@ Die Entscheidung für den Tech-Stack steht in [docs/adr/0001-tech-stack.md](docs
 
 ## Lizenz
 
-[GPL-3.0-or-later](LICENSE)
+[GPL-3.0-or-later](LICENSE). Die Installer enthalten llama.cpp (MIT), der Lizenztext liegt im Bundle unter `llama/LICENSE-llama.cpp`.
