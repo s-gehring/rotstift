@@ -70,7 +70,7 @@ describe('saveWordCountPdf', () => {
   it('fails without asking for a location when the PDF cannot be built', async () => {
     const { calls, invoke } = fakeInvoke({ fileName: 'Datei.pdf' });
     const outcome = await saveWordCountPdf({ title: 'Leer', pages: [] }, { ...cheap, invoke });
-    expect(outcome).toEqual({ state: 'failed' });
+    expect(outcome).toEqual({ state: 'failed', reason: 'build' });
     expect(calls).toHaveLength(0);
   });
 
@@ -144,8 +144,37 @@ describe('saveClassPdf', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('reports the phases and only asks for a location after the build', async () => {
+    const { invoke } = fakeInvoke({ fileName: 'Datei.pdf' });
+    const phases: string[] = [];
+    await saveClassPdf(await klasse(), {
+      ...cheap,
+      invoke,
+      onPhase: (phase) => phases.push(phase),
+      onProgress: (done, total) => {
+        if (done === total) phases.push('last page');
+      },
+    });
+    expect(phases).toEqual(['building', 'last page', 'saving']);
+  });
+
+  it('never reports the saving phase when the build is aborted', async () => {
+    const { invoke } = fakeInvoke({ fileName: 'Datei.pdf' });
+    const phases: string[] = [];
+    await saveClassPdf(await klasse(), {
+      ...cheap,
+      invoke,
+      signal: AbortSignal.abort(),
+      onPhase: (phase) => phases.push(phase),
+    });
+    expect(phases).toEqual(['building']);
+  });
+
   it('fails for an empty class', async () => {
     const { invoke } = fakeInvoke({ fileName: 'Datei.pdf' });
-    expect(await saveClassPdf([], { ...cheap, invoke })).toEqual({ state: 'failed' });
+    expect(await saveClassPdf([], { ...cheap, invoke })).toEqual({
+      state: 'failed',
+      reason: 'build',
+    });
   });
 });

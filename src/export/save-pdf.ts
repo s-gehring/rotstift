@@ -8,12 +8,16 @@ import type {
   WordCountArbeit,
 } from './types.ts';
 
+export type SavePhase = 'building' | 'saving';
+
 export interface SavePdfOptions extends ExportOptions {
   readonly invoke?: Invoke | null;
+  readonly onPhase?: (phase: SavePhase) => void;
 }
 
 export interface SaveClassPdfOptions extends ClassExportOptions {
   readonly invoke?: Invoke | null;
+  readonly onPhase?: (phase: SavePhase) => void;
 }
 
 const CLASS_PDF_NAME = 'Alle Arbeiten';
@@ -25,15 +29,23 @@ function isAbort(error: unknown, signal: AbortSignal | undefined): boolean {
 async function buildAndSave(
   build: () => Promise<Uint8Array>,
   suggestedName: string,
-  options: { readonly signal?: AbortSignal; readonly invoke?: Invoke | null },
+  options: {
+    readonly signal?: AbortSignal;
+    readonly invoke?: Invoke | null;
+    readonly onPhase?: (phase: SavePhase) => void;
+  },
 ): Promise<SaveOutcome> {
   let bytes: Uint8Array;
+  options.onPhase?.('building');
   try {
     bytes = await build();
     options.signal?.throwIfAborted();
   } catch (error) {
-    return isAbort(error, options.signal) ? { state: 'cancelled' } : { state: 'failed' };
+    return isAbort(error, options.signal)
+      ? { state: 'cancelled' }
+      : { state: 'failed', reason: 'build' };
   }
+  options.onPhase?.('saving');
   return saveFile('pdf', bytes, suggestedName, options.invoke);
 }
 

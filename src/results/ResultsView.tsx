@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { saveClassPdf, saveWordCountPdf, type SavePdfOptions } from '../export/save-pdf.ts';
+import {
+  saveClassPdf,
+  saveWordCountPdf,
+  type SavePdfOptions,
+  type SavePhase,
+} from '../export/save-pdf.ts';
 import type { SaveOutcome } from '../export/save-file.ts';
 import { rotatedSize, type ImportPage } from '../import/pages.ts';
 import { isCounting, isOutdated, type PageEntry } from '../pipeline/runner.ts';
@@ -29,13 +34,23 @@ interface PdfJob {
   readonly scope: string;
   readonly done: number;
   readonly total: number;
+  readonly phase: SavePhase;
 }
 
-type PdfRunOptions = Required<Pick<SavePdfOptions, 'signal' | 'onProgress' | 'encodePage'>>;
+type PdfRunOptions = Required<
+  Pick<SavePdfOptions, 'signal' | 'onProgress' | 'onPhase' | 'encodePage'>
+>;
 
 function PdfProgress({ job, onCancel }: { readonly job: PdfJob; readonly onCancel: () => void }) {
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => cancel.current?.focus(), []);
+  if (job.phase === 'saving') {
+    return (
+      <span className="pdf-progress" role="status">
+        Speicherort wählen …
+      </span>
+    );
+  }
   const text = job.total === 0 ? 'PDF wird vorbereitet …' : `Seite ${job.done} von ${job.total}`;
   return (
     <span className="pdf-progress">
@@ -204,7 +219,7 @@ function ArbeitSection({
   readonly canRetry: boolean;
   readonly pdfJob: PdfJob | null;
   readonly pdfBlocked: boolean;
-  readonly onSavePdf: () => void;
+  readonly onSavePdf: (trigger: HTMLElement) => void;
   readonly onCancelPdf: () => void;
 }) {
   const { runner, state } = count;
@@ -227,7 +242,7 @@ function ArbeitSection({
             type="button"
             aria-label={`Als PDF speichern: ${result.name}`}
             disabled={pdfBlocked || result.countedPages === 0}
-            onClick={onSavePdf}
+            onClick={(event) => onSavePdf(event.currentTarget)}
           >
             Als PDF speichern
           </button>
@@ -303,17 +318,21 @@ export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
 
   const pdfBlocked = pdfJob !== null || isCounting(state);
 
-  const runPdf = (scope: string, start: (options: PdfRunOptions) => Promise<SaveOutcome>) => {
+  const runPdf = (
+    scope: string,
+    trigger: HTMLElement,
+    start: (options: PdfRunOptions) => Promise<SaveOutcome>,
+  ) => {
     if (pdfAbort.current !== null) return;
     const abort = new AbortController();
     pdfAbort.current = abort;
-    returnFocus.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    setPdfJob({ scope, done: 0, total: 0 });
+    returnFocus.current = trigger;
+    setPdfJob({ scope, done: 0, total: 0, phase: 'building' });
     void start({
       signal: abort.signal,
       encodePage: pdfInput.encodePage,
-      onProgress: (done, total) => setPdfJob({ scope, done, total }),
+      onProgress: (done, total) => setPdfJob({ scope, done, total, phase: 'building' }),
+      onPhase: (phase) => setPdfJob((job) => (job === null ? job : { ...job, phase })),
     }).then((outcome) => {
       pdfAbort.current = null;
       setPdfJob(null);
@@ -325,20 +344,20 @@ export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
 
   const cancelPdf = () => pdfAbort.current?.abort();
 
-  const saveArbeitPdf = (arbeit: Arbeit) =>
-    runPdf(arbeit.id, (options) =>
-      saveWordCountPdf(pdfInput.wordCountArbeit(arbeit, state.entries), options),
+  const saveArbeitPdf = (arbeit: Arbeit, result: ArbeitResult, trigger: HTMLElement) =>
+    runPdf(arbeit.id, trigger, (options) =>
+      saveWordCountPdf(pdfInput.wordCountArbeit(arbeit, result), options),
     );
 
-  const saveClassPdfFile = () =>
-    runPdf(CLASS_SCOPE, (options) =>
+  const saveClassPdfFile = (trigger: HTMLElement) =>
+    runPdf(CLASS_SCOPE, trigger, (options) =>
       saveClassPdf(
-        arbeiten
-          .filter((arbeit) => arbeit.pages.length > 0)
-          .map((arbeit) => ({
-            kind: 'wordCount' as const,
-            ...pdfInput.wordCountArbeit(arbeit, state.entries),
-          })),
+        results.flatMap((result) => {
+          const arbeit = arbeiten.find((candidate) => candidate.id === result.id);
+          return arbeit === undefined || result.rows.length === 0
+            ? []
+            : [{ kind: 'wordCount' as const, ...pdfInput.wordCountArbeit(arbeit, result) }];
+        }),
         options,
       ),
     );
@@ -381,7 +400,7 @@ export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
           <button
             type="button"
             disabled={pdfBlocked || totals.countedPages === 0}
-            onClick={saveClassPdfFile}
+            onClick={(event) => saveClassPdfFile(event.currentTarget)}
           >
             Klassen-PDF speichern
           </button>
@@ -403,7 +422,7 @@ export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
               canRetry={canRetry}
               pdfJob={pdfJob?.scope === arbeit.id ? pdfJob : null}
               pdfBlocked={pdfBlocked}
-              onSavePdf={() => saveArbeitPdf(arbeit)}
+              onSavePdf={(trigger) => saveArbeitPdf(arbeit, result, trigger)}
               onCancelPdf={cancelPdf}
             />
           );

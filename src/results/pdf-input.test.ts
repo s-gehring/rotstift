@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { incompletePagesNote } from '../export/notes.ts';
 import type { PageImageEncoder } from '../export/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { PageEntry } from '../pipeline/runner.ts';
+import { formatCsv } from './export-table.ts';
 import { createPdfInput } from './pdf-input.ts';
+import { buildResults } from './summary.ts';
 
 function page(id: string, overrides: Partial<ImportPage> = {}): ImportPage {
   return {
@@ -31,10 +34,16 @@ const arbeit: Arbeit = {
 
 const entries = { a: entry('eins zwei\ndrei'), b: entry('', false) };
 
+function resultOf(target: Arbeit, pageEntries: Record<string, PageEntry>) {
+  const [result] = buildResults([target], pageEntries);
+  if (result === undefined) throw new Error('missing result');
+  return result;
+}
+
 describe('createPdfInput', () => {
   it('titles the Arbeit and gives every page its visible size', () => {
     const { wordCountArbeit } = createPdfInput(vi.fn(), vi.fn());
-    const input = wordCountArbeit(arbeit, entries);
+    const input = wordCountArbeit(arbeit, resultOf(arbeit, entries));
     expect(input.title).toBe('Anna');
     expect(input.pages.map((p) => [p.width, p.height])).toEqual([
       [100, 200],
@@ -43,15 +52,30 @@ describe('createPdfInput', () => {
     ]);
   });
 
-  it('turns the transcript text into lines and leaves uncounted pages without one', () => {
+  it('passes the words of the view and leaves uncounted pages open', () => {
     const { wordCountArbeit } = createPdfInput(vi.fn(), vi.fn());
-    const input = wordCountArbeit(arbeit, entries);
-    expect(input.pages[0]?.transcript?.lines.map((line) => line.text)).toEqual([
-      'eins zwei',
-      'drei',
-    ]);
-    expect(input.pages[1]?.transcript).toBeUndefined();
-    expect(input.pages[2]?.transcript).toBeUndefined();
+    const input = wordCountArbeit(arbeit, resultOf(arbeit, entries));
+    expect(input.words).toEqual([3, null, null]);
+  });
+
+  it('removes a word that is hyphenated across the page boundary, as the CSV does', () => {
+    const split: Arbeit = { id: 'y', name: 'Ben', pages: [page('p1'), page('p2')] };
+    const pageEntries = {
+      p1: entry('Wir gingen in den Wald und sam-'),
+      p2: entry('melten Blätter'),
+    };
+    const result = resultOf(split, pageEntries);
+    const { wordCountArbeit } = createPdfInput(vi.fn(), vi.fn());
+    const words = wordCountArbeit(split, result).words ?? [];
+    const pdfTotal = words.reduce<number>((sum, count) => sum + (count ?? 0), 0);
+    expect(pdfTotal).toBe(8);
+    expect(formatCsv([result])).toContain('Ben;2;8;');
+    expect(pdfTotal).toBe(result.words);
+  });
+
+  it('describes an incomplete count like the CSV', () => {
+    const result = resultOf(arbeit, entries);
+    expect(formatCsv([result])).toContain(incompletePagesNote(1, 3));
   });
 
   it('renders a page only when it is encoded and passes the rendering on', async () => {
@@ -61,7 +85,7 @@ describe('createPdfInput', () => {
       Promise.resolve({ bytes: new Uint8Array(1), format: 'jpeg' }),
     );
     const { wordCountArbeit, encodePage } = createPdfInput(render, encode);
-    const input = wordCountArbeit(arbeit, entries);
+    const input = wordCountArbeit(arbeit, resultOf(arbeit, entries));
     expect(render).not.toHaveBeenCalled();
 
     const second = input.pages[1];

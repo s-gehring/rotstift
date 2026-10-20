@@ -47,7 +47,10 @@ describe('saveFile', () => {
 
   it('reports any other failure', async () => {
     expect(await outcome('kaputt', true)).toEqual({ state: 'failed' });
-    expect(await outcome({ kind: 'tooLarge' }, true)).toEqual({ state: 'failed' });
+    expect(await outcome({ kind: 'tooLarge' }, true)).toEqual({
+      state: 'failed',
+      reason: 'tooLarge',
+    });
     expect(await outcome({ kind: 'invalidRequest' }, true)).toEqual({ state: 'failed' });
     expect(await outcome(new TypeError('x'), true)).toEqual({ state: 'failed' });
   });

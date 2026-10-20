@@ -1,17 +1,9 @@
-import type { Transcript } from '../annotations/transcript.ts';
 import { encodePageImage } from '../export/page-image.ts';
 import type { ExportPage, PageImageEncoder, WordCountArbeit } from '../export/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import { rotatedSize, type ImportPage } from '../import/pages.ts';
 import { renderPageToPng } from '../import/render-page.ts';
-import type { PageEntry } from '../pipeline/runner.ts';
-
-function transcriptOf(entry: PageEntry | undefined): Transcript | undefined {
-  if (entry === undefined || !entry.hasTranscript) return undefined;
-  return {
-    lines: entry.text.split('\n').map((text, index) => ({ number: index + 1, text, marks: [] })),
-  };
-}
+import type { ArbeitResult } from './summary.ts';
 
 export function createPdfInput(
   render: (page: ImportPage) => Promise<Blob> = renderPageToPng,
@@ -19,14 +11,9 @@ export function createPdfInput(
 ) {
   const sources = new WeakMap<ExportPage, ImportPage>();
 
-  const exportPage = (page: ImportPage, entry: PageEntry | undefined): ExportPage => {
+  const exportPage = (page: ImportPage): ExportPage => {
     const size = rotatedSize(page);
-    const lazy: ExportPage = {
-      image: new Blob(),
-      width: size.width,
-      height: size.height,
-      ...(entry?.hasTranscript ? { transcript: transcriptOf(entry) } : {}),
-    };
+    const lazy: ExportPage = { image: new Blob(), width: size.width, height: size.height };
     sources.set(lazy, page);
     return lazy;
   };
@@ -37,12 +24,10 @@ export function createPdfInput(
     return encode({ ...page, image }, profile);
   };
 
-  const wordCountArbeit = (
-    arbeit: Arbeit,
-    entries: Readonly<Record<string, PageEntry>>,
-  ): WordCountArbeit => ({
+  const wordCountArbeit = (arbeit: Arbeit, result: ArbeitResult): WordCountArbeit => ({
     title: arbeit.name,
-    pages: arbeit.pages.map((page) => exportPage(page, entries[page.id])),
+    pages: arbeit.pages.map(exportPage),
+    words: arbeit.pages.map((page) => result.rows.find((row) => row.id === page.id)?.words ?? null),
   });
 
   return { wordCountArbeit, encodePage };

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Runtime, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 const MAX_CSV_BYTES: usize = 8 * 1024 * 1024;
@@ -13,6 +13,10 @@ const FALLBACK_NAME: &str = "Rotstift";
 const KIND_HEADER: &str = "x-rotstift-kind";
 const NAME_HEADER: &str = "x-rotstift-name";
 const PDF_MAGIC: &[u8] = b"%PDF-";
+const RESERVED_NAMES: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
 
 #[derive(Debug, Serialize)]
 #[serde(
@@ -115,6 +119,13 @@ pub fn file_name(kind: FileKind, suggested: &str) -> String {
         stem
     };
     let stem = if stem.is_empty() { FALLBACK_NAME } else { stem };
+    let base = stem.split('.').next().unwrap_or_default().trim_end();
+    if RESERVED_NAMES
+        .iter()
+        .any(|reserved| reserved.eq_ignore_ascii_case(base))
+    {
+        return format!("_{stem}.{extension}");
+    }
     format!("{stem}.{extension}")
 }
 
@@ -182,18 +193,34 @@ fn parse_metadata(kind: Option<&str>, name: Option<&str>) -> Result<(FileKind, S
     Ok((kind, name))
 }
 
+fn body_bytes(kind: FileKind, body: &InvokeBody) -> Result<Vec<u8>, SaveError> {
+    let bytes = match body {
+        InvokeBody::Raw(bytes) => bytes.clone(),
+        InvokeBody::Json(serde_json::Value::Array(values)) => {
+            if values.len() > kind.max_bytes() {
+                return Err(SaveError::TooLarge);
+            }
+            values
+                .iter()
+                .map(|value| value.as_u64().and_then(|byte| u8::try_from(byte).ok()))
+                .collect::<Option<Vec<u8>>>()
+                .ok_or(SaveError::InvalidRequest)?
+        }
+        InvokeBody::Json(_) => return Err(SaveError::InvalidRequest),
+    };
+    check_content(kind, &bytes)?;
+    Ok(bytes)
+}
+
 #[tauri::command]
 pub async fn save_file<R: Runtime>(
     app: AppHandle<R>,
+    window: WebviewWindow<R>,
     request: Request<'_>,
 ) -> Result<Option<SavedFile>, SaveError> {
     let header = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok());
     let (kind, suggested_name) = parse_metadata(header(KIND_HEADER), header(NAME_HEADER))?;
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err(SaveError::InvalidRequest);
-    };
-    check_content(kind, bytes)?;
-    let bytes = bytes.clone();
+    let bytes = body_bytes(kind, request.body())?;
     let name = file_name(kind, &suggested_name);
     let dialog = app.clone();
     let default_name = name.clone();
@@ -201,6 +228,7 @@ pub async fn save_file<R: Runtime>(
         dialog
             .dialog()
             .file()
+            .set_parent(&window)
             .set_title(kind.dialog_title())
             .set_file_name(default_name)
             .add_filter(kind.filter_name(), &[kind.extension()])
@@ -415,6 +443,58 @@ mod tests {
         assert_eq!(file_name(FileKind::Pdf, ".pdf"), "Rotstift.pdf");
         assert_eq!(file_name(FileKind::Pdf, "Müller, Jörg"), "Müller, Jörg.pdf");
         assert_eq!(file_name(FileKind::Pdf, "äöü"), "äöü.pdf");
+    }
+
+    #[test]
+    fn avoids_reserved_windows_names() {
+        assert_eq!(file_name(FileKind::Pdf, "CON"), "_CON.pdf");
+        assert_eq!(file_name(FileKind::Csv, "nul"), "_nul.csv");
+        assert_eq!(file_name(FileKind::Pdf, "Com1.pdf"), "_Com1.pdf");
+        assert_eq!(file_name(FileKind::Pdf, "lpt9.alt"), "_lpt9.alt.pdf");
+        assert_eq!(file_name(FileKind::Pdf, "CON "), "_CON.pdf");
+        assert_eq!(file_name(FileKind::Pdf, "Console"), "Console.pdf");
+        assert_eq!(file_name(FileKind::Pdf, "COM10"), "COM10.pdf");
+    }
+
+    #[test]
+    fn takes_raw_bodies_unchanged() {
+        let body = InvokeBody::Raw(PDF.to_vec());
+        assert_eq!(body_bytes(FileKind::Pdf, &body).unwrap(), PDF);
+    }
+
+    #[test]
+    fn accepts_the_json_number_array_of_the_postmessage_fallback() {
+        let body = InvokeBody::Json(serde_json::json!(b"a;b\xc3\xa4".to_vec()));
+        assert_eq!(body_bytes(FileKind::Csv, &body).unwrap(), "a;bä".as_bytes());
+    }
+
+    #[test]
+    fn rejects_other_bodies() {
+        for body in [
+            InvokeBody::Json(serde_json::json!("%PDF-1.7")),
+            InvokeBody::Json(serde_json::json!([37, 80, 300])),
+            InvokeBody::Json(serde_json::json!([37, "x"])),
+            InvokeBody::Json(serde_json::json!({ "a": 1 })),
+        ] {
+            assert!(matches!(
+                body_bytes(FileKind::Pdf, &body),
+                Err(SaveError::InvalidRequest)
+            ));
+        }
+    }
+
+    #[test]
+    fn rejects_a_body_that_does_not_fit_the_kind() {
+        let body = InvokeBody::Raw(PDF.to_vec());
+        assert!(matches!(
+            body_bytes(FileKind::Csv, &body),
+            Err(SaveError::InvalidRequest)
+        ));
+        let large = InvokeBody::Raw(vec![b'x'; MAX_CSV_BYTES + 1]);
+        assert!(matches!(
+            body_bytes(FileKind::Csv, &large),
+            Err(SaveError::TooLarge)
+        ));
     }
 
     #[test]

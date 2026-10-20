@@ -1,3 +1,4 @@
+import { incompleteArbeitenNote, incompletePagesNote } from '../export/notes.ts';
 import { arbeitenText, classTotals, isComplete, type ArbeitResult } from './summary.ts';
 
 const BOM = '\uFEFF';
@@ -23,7 +24,7 @@ function cells(result: ArbeitResult): string[] {
     result.name,
     String(result.pageCount),
     complete ? String(result.words) : '',
-    complete ? '' : `Unvollständig: ${result.countedPages} von ${result.pageCount} Seiten gezählt`,
+    complete ? '' : incompletePagesNote(result.countedPages, result.pageCount),
   ];
 }
 
@@ -34,9 +35,7 @@ function totalCells(results: readonly ArbeitResult[]): string[] {
     'Gesamt',
     String(totals.pages),
     complete ? String(totals.words) : '',
-    complete
-      ? ''
-      : `Unvollständig: ${totals.completeArbeiten} von ${totals.arbeiten} Arbeiten vollständig gezählt`,
+    complete ? '' : incompleteArbeitenNote(totals.completeArbeiten, totals.arbeiten),
   ];
 }
 

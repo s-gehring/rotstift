@@ -489,7 +489,7 @@ describe('a class with several Arbeiten', () => {
       const input = firstInput(vi.mocked(saveWordCountPdf));
       expect(input.title).toBe('Ben');
       expect(input.pages).toHaveLength(1);
-      expect(input.pages[0]?.transcript?.lines.map((line) => line.text)).toEqual(['sechs']);
+      expect(input.words).toEqual([1]);
       expect(container.textContent).toContain('Gespeichert als „Ben.pdf“.');
     });
 
@@ -515,7 +515,6 @@ describe('a class with several Arbeiten', () => {
       const runner = mount(sequence(), klasse);
       await countWords(runner);
       const trigger = button('Klassen-PDF speichern');
-      trigger?.focus();
       act(() => trigger?.click());
 
       expect(container.querySelector('progress')).not.toBeNull();
@@ -539,6 +538,26 @@ describe('a class with several Arbeiten', () => {
       expect(container.querySelector('progress')).toBeNull();
       expect(button('Klassen-PDF speichern')?.disabled).toBe(false);
       expect(document.activeElement).toBe(button('Klassen-PDF speichern'));
+    });
+
+    it('says that a location is being chosen and offers no useless cancel while the dialog is open', async () => {
+      const save = pendingSave();
+      vi.mocked(saveClassPdf).mockImplementation(save.implementation);
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      act(() => button('Klassen-PDF speichern')?.click());
+      act(() => save.options()?.onProgress?.(3, 3));
+      act(() => save.options()?.onPhase?.('saving'));
+
+      expect(container.querySelector('.pdf-progress')?.textContent).toBe('Speicherort wählen …');
+      expect(container.querySelector('.pdf-progress')?.getAttribute('role')).toBe('status');
+      expect(container.querySelector('progress')).toBeNull();
+      expect(button('Abbrechen')).toBeUndefined();
+
+      save.pending.resolve({ state: 'cancelled' });
+      await flush();
+      expect(container.querySelector('.pdf-progress')).toBeNull();
+      expect(button('Klassen-PDF speichern')?.disabled).toBe(false);
     });
 
     it('shows the progress of a single Arbeit next to its own button', async () => {
@@ -601,7 +620,9 @@ describe('a class with several Arbeiten', () => {
         '„a.pdf“ gibt es bereits und wurde nicht überschrieben',
       ],
       [{ state: 'exists', fileName: 'a.pdf' }, 'Dateinamen mit „.pdf“'],
-      [{ state: 'failed' }, 'Das PDF konnte nicht erstellt oder gespeichert werden.'],
+      [{ state: 'failed' }, 'Das PDF konnte nicht gespeichert werden.'],
+      [{ state: 'failed', reason: 'tooLarge' }, 'mehr als 200 MB'],
+      [{ state: 'failed', reason: 'build' }, 'konnte nicht erstellt werden'],
       [{ state: 'unavailable' }, 'nur in der Rotstift-App möglich'],
     ] as const)('explains %j in German', async (outcome, expected) => {
       vi.mocked(saveClassPdf).mockResolvedValue(outcome);
