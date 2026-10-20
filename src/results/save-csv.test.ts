@@ -1,47 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { saveCsv, type Invoke } from './save-csv.ts';
-
-function fakeInvoke(result: unknown, fail = false) {
-  const calls: [string, Record<string, unknown> | undefined][] = [];
-  const invoke: Invoke = (command, args) => {
-    calls.push([command, args]);
-    return fail
-      ? Promise.reject(result)
-      : Promise.resolve(JSON.parse(JSON.stringify(result ?? null)));
-  };
-  return { calls, invoke };
-}
-
-const outcome = (result: unknown, fail = false) =>
-  saveCsv('x', 'y', fakeInvoke(result, fail).invoke);
+import { fakeInvoke } from '../export/fake-invoke.ts';
+import { saveCsv } from './save-csv.ts';
 
 describe('saveCsv', () => {
-  it('passes only the text and a suggested name, never a path', async () => {
-    const { calls, invoke } = fakeInvoke(null);
-    await saveCsv('a;b', 'Wortzahlen', invoke);
-    expect(calls).toEqual([['save_csv', { content: 'a;b', suggestedName: 'Wortzahlen' }]]);
-  });
-
-  it('reports a cancelled dialog', async () => {
-    expect(await outcome(null)).toEqual({ state: 'cancelled' });
-  });
-
-  it('reports the name of the saved file', async () => {
-    expect(await outcome({ fileName: 'Klasse.csv' })).toEqual({
-      state: 'saved',
-      fileName: 'Klasse.csv',
+  it('saves the text as UTF-8 bytes of kind csv, BOM included', async () => {
+    const { calls, invoke } = fakeInvoke({ fileName: 'Wortzahlen.csv' });
+    const outcome = await saveCsv('\uFEFFName;Wörter\r\n', 'Wortzahlen', invoke);
+    expect(outcome).toEqual({ state: 'saved', fileName: 'Wortzahlen.csv' });
+    expect(calls[0]?.command).toBe('save_file');
+    expect(Array.from(calls[0]?.body ?? [])).toEqual(
+      Array.from(new TextEncoder().encode('\uFEFFName;Wörter\r\n')),
+    );
+    expect(Array.from(calls[0]?.body.subarray(0, 3) ?? [])).toEqual([0xef, 0xbb, 0xbf]);
+    expect(calls[0]?.headers).toEqual({
+      'x-rotstift-kind': 'csv',
+      'x-rotstift-name': 'Wortzahlen',
     });
-  });
-
-  it('reports a file that already exists', async () => {
-    expect(await outcome({ kind: 'alreadyExists', fileName: 'klasse.csv' }, true)).toEqual({
-      state: 'exists',
-      fileName: 'klasse.csv',
-    });
-  });
-
-  it('reports any other failure', async () => {
-    expect(await outcome('kaputt', true)).toEqual({ state: 'failed' });
-    expect(await outcome({ kind: 'tooLarge' }, true)).toEqual({ state: 'failed' });
   });
 });

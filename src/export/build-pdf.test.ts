@@ -142,11 +142,43 @@ describe('buildWordCountPdf', () => {
     const text = pdf.texts[3] ?? '';
     expect(text).toContain('WORTZAHL');
     expect(text).toContain('Schmidt, Anna');
-    expect(text).toContain('Wörter gesamt 9');
     expect(text).toContain('Seite 1 6');
     expect(text).toContain('Seite 2 –');
     expect(text).toContain('Seite 3 3');
+  });
+
+  it('shows no total and an incomplete note when a page is not counted', async () => {
+    const text = (await readPdf(await buildWordCountPdf(await wordCountArbeit(), options)))
+      .texts[3];
+    expect(text).toContain('Wörter gesamt – Unvollständig: 2 von 3 Seiten gezählt');
+    expect(text).toContain('Gesamt –');
+  });
+
+  it('shows the total when every page is counted', async () => {
+    const arbeit = { ...(await wordCountArbeit()), words: [6, 0, 3] };
+    const text = (await readPdf(await buildWordCountPdf(arbeit, options))).texts[3] ?? '';
+    expect(text).toContain('Wörter gesamt 9');
+    expect(text).toContain('Seite 2 0');
     expect(text).toContain('Gesamt 9');
+    expect(text).not.toContain('Unvollständig');
+  });
+
+  it('uses the given words per page instead of the transcripts', async () => {
+    const arbeit = { ...(await wordCountArbeit()), words: [5, 1, 3] };
+    const text = (await readPdf(await buildWordCountPdf(arbeit, options))).texts[3] ?? '';
+    expect(text).toContain('Seite 1 5');
+    expect(text).toContain('Gesamt 9');
+  });
+
+  it('marks pages without a count in the given words as open', async () => {
+    const arbeit = { ...(await wordCountArbeit()), words: [6, null, 3] };
+    const text = (await readPdf(await buildWordCountPdf(arbeit, options))).texts[3] ?? '';
+    expect(text).toContain('Wörter gesamt – Unvollständig: 2 von 3 Seiten gezählt');
+  });
+
+  it('rejects words that do not match the pages', async () => {
+    const arbeit = { ...(await wordCountArbeit()), words: [6, 3] };
+    await expect(buildWordCountPdf(arbeit, options)).rejects.toThrow('passen nicht zu den Seiten');
   });
 
   it('continues the table on a new page for long Arbeiten', async () => {
@@ -182,9 +214,38 @@ describe('buildClassPdf', () => {
     expect(cover).toContain(
       `Müller, Jörg 3 ${corrected.statistics.words} ${corrected.statistics.errors}`,
     );
-    expect(cover).toContain('Schmidt, Anna 3 9 –');
+    expect(cover).toContain('Schmidt, Anna 3 – –');
+    expect(cover).toContain('Unvollständig: 2 von 3 Seiten gezählt');
+    expect(cover).toContain('Gesamt 6 – –');
+    expect(cover).toContain('Unvollständig: 1 von 2 Arbeiten vollständig gezählt');
     expect(pdf.texts[4]).toContain('AUSWERTUNG');
     expect(pdf.texts[8]).toContain('WORTZAHL');
+  });
+
+  it('sums words and errors on the cover when everything is complete', async () => {
+    const corrected = await correctedArbeit('Müller, Jörg');
+    const arbeiten: ClassArbeit[] = [
+      { kind: 'corrected', ...corrected },
+      { kind: 'corrected', ...corrected, title: 'Ben' },
+    ];
+    const cover = (await readPdf(await buildClassPdf(arbeiten, cheap))).texts[0] ?? '';
+    const { words, errors } = corrected.statistics;
+    expect(cover).toContain(`Gesamt 6 ${words * 2} ${errors * 2}`);
+    expect(cover).not.toContain('Unvollständig');
+  });
+
+  it('shows a class total of complete word counts and a dash for the errors', async () => {
+    const anna = { ...(await wordCountArbeit('Anna')), words: [6, 0, 3] };
+    const ben = { ...(await wordCountArbeit('Ben')), words: [1, 1, 1] };
+    const arbeiten: ClassArbeit[] = [
+      { kind: 'wordCount', ...anna },
+      { kind: 'wordCount', ...ben },
+    ];
+    const cover = (await readPdf(await buildClassPdf(arbeiten, cheap))).texts[0] ?? '';
+    expect(cover).toContain('Anna 3 9 –');
+    expect(cover).toContain('Ben 3 3 –');
+    expect(cover).toContain('Gesamt 6 12 –');
+    expect(cover).not.toContain('Unvollständig');
   });
 
   it('continues the cover on further pages for big classes', async () => {

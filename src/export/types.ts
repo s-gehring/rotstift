@@ -19,6 +19,7 @@ export interface CorrectedArbeit {
 export interface WordCountArbeit {
   readonly title: string;
   readonly pages: readonly ExportPage[];
+  readonly words?: readonly (number | null)[];
 }
 
 export type ClassArbeit =
