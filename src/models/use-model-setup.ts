@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { ModelCallError, type ModelClient } from './client.ts';
 import { describeImport } from './format.ts';
-import { MODELS } from './registry.ts';
-import { activeModel, INITIAL_SETUP, setupReducer } from './setup-state.ts';
+import { DEFAULT_MODEL_ID, MODELS } from './registry.ts';
+import {
+  ANY_MODEL,
+  activeModel,
+  errorOf,
+  hasRunningJob,
+  INITIAL_SETUP,
+  samplesOf,
+  setupReducer,
+} from './setup-state.ts';
 import type { DownloadError } from './types.ts';
 
 function toDownloadError(error: unknown): DownloadError {
@@ -23,7 +31,7 @@ export function useModelSetup(client: ModelClient | null) {
       } catch (error) {
         const failure = toDownloadError(error);
         if (failure.kind !== 'busy') {
-          dispatch({ type: 'error', error: failure });
+          dispatch({ type: 'error', modelId, error: failure });
           try {
             dispatch({ type: 'status', status: await client.status(modelId) });
           } catch {
@@ -57,7 +65,7 @@ export function useModelSetup(client: ModelClient | null) {
         if (status.state === 'unverified') void verify(status.modelId);
       }
     } catch (error) {
-      dispatch({ type: 'error', error: toDownloadError(error) });
+      dispatch({ type: 'error', modelId: ANY_MODEL, error: toDownloadError(error) });
     }
   }, [client, verify]);
 
@@ -87,37 +95,37 @@ export function useModelSetup(client: ModelClient | null) {
   const model = useMemo(() => activeModel(state), [state]);
   const status = state.statuses[model.id] ?? null;
 
-  const guard = useCallback(async (action: () => Promise<void>) => {
+  const guard = useCallback(async (modelId: string, action: () => Promise<void>) => {
     try {
       await action();
     } catch (error) {
-      dispatch({ type: 'error', error: toDownloadError(error) });
+      dispatch({ type: 'error', modelId, error: toDownloadError(error) });
     }
   }, []);
 
   const select = useCallback(
     async (modelId: string) => {
-      if (client === null || modelId === model.id) return;
-      dispatch({ type: 'error', error: null });
-      await guard(async () => {
+      if (client === null || modelId === model.id || hasRunningJob(state)) return;
+      dispatch({ type: 'error', modelId: model.id, error: null });
+      await guard(model.id, async () => {
         await client.select(modelId);
         dispatch({ type: 'selected', modelId });
       });
     },
-    [client, guard, model.id],
+    [client, guard, model.id, state],
   );
 
   const verifyAgain = useCallback(async () => {
-    dispatch({ type: 'error', error: null });
+    dispatch({ type: 'error', modelId: model.id, error: null });
     dispatch({ type: 'mark', modelId: model.id, state: 'verifying' });
     await verify(model.id);
   }, [model.id, verify]);
 
   const download = useCallback(async () => {
     if (client === null) return;
-    dispatch({ type: 'error', error: null });
+    dispatch({ type: 'error', modelId: model.id, error: null });
     dispatch({ type: 'note', note: null });
-    await guard(async () => {
+    await guard(model.id, async () => {
       await client.startDownload(model.id);
       await refresh();
     });
@@ -125,7 +133,7 @@ export function useModelSetup(client: ModelClient | null) {
 
   const cancel = useCallback(async () => {
     if (client === null) return;
-    await guard(async () => {
+    await guard(model.id, async () => {
       await client.cancelDownload(model.id);
     });
   }, [client, guard, model.id]);
@@ -133,16 +141,18 @@ export function useModelSetup(client: ModelClient | null) {
   const remove = useCallback(async () => {
     if (client === null) return;
     dispatch({ type: 'note', note: null });
-    await guard(async () => {
+    await guard(model.id, async () => {
       dispatch({ type: 'status', status: await client.remove(model.id) });
+      const selectedId = await client.selection().catch(() => null);
+      dispatch({ type: 'selected', modelId: selectedId ?? DEFAULT_MODEL_ID });
     });
   }, [client, guard, model.id]);
 
   const importFiles = useCallback(async () => {
     if (client === null) return;
-    dispatch({ type: 'error', error: null });
+    dispatch({ type: 'error', modelId: model.id, error: null });
     dispatch({ type: 'importing', importing: true });
-    await guard(async () => {
+    await guard(model.id, async () => {
       const outcome = await client.importFiles(model.id);
       if (outcome !== null) {
         dispatch({
@@ -160,6 +170,8 @@ export function useModelSetup(client: ModelClient | null) {
     state,
     model,
     status,
+    error: errorOf(state, model.id),
+    samples: samplesOf(state, model.id),
     select,
     download,
     cancel,
@@ -168,7 +180,7 @@ export function useModelSetup(client: ModelClient | null) {
     refresh,
     verifyAgain,
     clearError: () => {
-      dispatch({ type: 'error', error: null });
+      dispatch({ type: 'error', modelId: model.id, error: null });
     },
   };
 }

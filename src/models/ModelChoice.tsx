@@ -1,5 +1,6 @@
 import { formatSize } from './format.ts';
-import { DEFAULT_MODEL_ID, modelNote, offeredModels, totalBytes } from './registry.ts';
+import { DEFAULT_MODEL_ID, choiceModels, modelNote, totalBytes } from './registry.ts';
+import { hasRunningJob } from './setup-state.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
 interface Props {
@@ -8,10 +9,11 @@ interface Props {
 }
 
 export function ModelChoice({ setup, disabled }: Props) {
-  const offered = offeredModels(setup.state.hardware?.totalRamBytes ?? null);
+  const offered = choiceModels(setup.state.hardware?.totalRamBytes ?? null, setup.model);
   if (offered.length < 2) return null;
+  const jobRunning = hasRunningJob(setup.state);
   return (
-    <fieldset className="model-choice" disabled={disabled}>
+    <fieldset className="model-choice" disabled={disabled || jobRunning}>
       <legend>Welches Modell soll Wörter zählen?</legend>
       {offered.map((candidate) => {
         const note = modelNote(candidate);
@@ -42,6 +44,12 @@ export function ModelChoice({ setup, disabled }: Props) {
       {disabled && (
         <p className="hint">
           Während Wörter gezählt werden, kann das Modell nicht gewechselt werden.
+        </p>
+      )}
+      {!disabled && jobRunning && (
+        <p className="hint">
+          Solange ein Modell geladen, geprüft, importiert oder gelöscht wird, kann das Modell nicht
+          gewechselt werden.
         </p>
       )}
     </fieldset>

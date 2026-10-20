@@ -80,6 +80,15 @@ export function offeredModels(
   );
 }
 
+export function choiceModels(
+  totalRamBytes: number | null,
+  active: ModelInfo,
+  models: readonly ModelInfo[] = MODELS,
+): readonly ModelInfo[] {
+  const offered = offeredModels(totalRamBytes, models);
+  return models.filter((model) => model.id === active.id || offered.includes(model));
+}
+
 export interface ModelNote {
   readonly speed: string;
   readonly accuracy: string;

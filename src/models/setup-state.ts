@@ -1,14 +1,35 @@
 import { pushSample, type Sample } from './format.ts';
-import { MODELS, offeredModels, recommendModel, type ModelInfo } from './registry.ts';
-import type { DownloadError, DownloadEvent, HardwareInfo, ModelStatus } from './types.ts';
+import {
+  DEFAULT_MODEL_ID,
+  MODELS,
+  offeredModels,
+  recommendModel,
+  type ModelInfo,
+} from './registry.ts';
+import type {
+  DownloadError,
+  DownloadEvent,
+  HardwareInfo,
+  ModelState,
+  ModelStatus,
+} from './types.ts';
+
+export const ANY_MODEL = '*';
+
+const RUNNING_JOBS: ReadonlySet<ModelState> = new Set([
+  'downloading',
+  'verifying',
+  'importing',
+  'deleting',
+]);
 
 export interface SetupState {
   readonly loaded: boolean;
   readonly statuses: Readonly<Record<string, ModelStatus>>;
   readonly hardware: HardwareInfo | null;
   readonly selectedId: string | null;
-  readonly samples: readonly Sample[];
-  readonly error: DownloadError | null;
+  readonly samples: Readonly<Record<string, readonly Sample[]>>;
+  readonly errors: Readonly<Record<string, DownloadError>>;
   readonly note: string | null;
   readonly importing: boolean;
 }
@@ -24,7 +45,7 @@ export type SetupAction =
   | { type: 'status'; status: ModelStatus }
   | { type: 'mark'; modelId: string; state: ModelStatus['state'] }
   | { type: 'event'; event: DownloadEvent; at: number }
-  | { type: 'error'; error: DownloadError | null }
+  | { type: 'error'; modelId: string; error: DownloadError | null }
   | { type: 'note'; note: string | null }
   | { type: 'importing'; importing: boolean };
 
@@ -33,8 +54,8 @@ export const INITIAL_SETUP: SetupState = {
   statuses: {},
   hardware: null,
   selectedId: null,
-  samples: [],
-  error: null,
+  samples: {},
+  errors: {},
   note: null,
   importing: false,
 };
@@ -43,13 +64,52 @@ function withStatus(state: SetupState, status: ModelStatus): SetupState['statuse
   return { ...state.statuses, [status.modelId]: status };
 }
 
+function withError(
+  state: SetupState,
+  modelId: string,
+  error: DownloadError | null,
+): SetupState['errors'] {
+  const { [modelId]: _dropped, ...rest } = state.errors;
+  return error === null ? rest : { ...rest, [modelId]: error };
+}
+
+function withoutSamples(state: SetupState, modelId: string): SetupState['samples'] {
+  const { [modelId]: _dropped, ...rest } = state.samples;
+  return rest;
+}
+
+export function samplesOf(state: SetupState, modelId: string): readonly Sample[] {
+  return state.samples[modelId] ?? [];
+}
+
+export function errorOf(state: SetupState, modelId: string): DownloadError | null {
+  return state.errors[modelId] ?? state.errors[ANY_MODEL] ?? null;
+}
+
+export function hasRunningJob(state: SetupState): boolean {
+  return Object.values(state.statuses).some((status) => RUNNING_JOBS.has(status.state));
+}
+
+function settledSelection(
+  selectedId: string | null,
+  statuses: SetupState['statuses'],
+): string | null {
+  const chosen = selectedId === null ? undefined : statuses[selectedId];
+  if (chosen?.state !== 'missing' || chosen.downloadedBytes > 0) return selectedId;
+  const ready = Object.values(statuses).filter(
+    (status) => status.state === 'ready' && status.modelId !== chosen.modelId,
+  );
+  const fallback = ready.find((status) => status.modelId === DEFAULT_MODEL_ID) ?? ready[0];
+  return fallback?.modelId ?? selectedId;
+}
+
 function applyEvent(state: SetupState, event: DownloadEvent, at: number): SetupState {
   const known = state.statuses[event.modelId];
   switch (event.state) {
     case 'progress':
       return {
         ...state,
-        error: null,
+        errors: withError(state, event.modelId, null),
         note: null,
         statuses: withStatus(state, {
           modelId: event.modelId,
@@ -57,12 +117,18 @@ function applyEvent(state: SetupState, event: DownloadEvent, at: number): SetupS
           downloadedBytes: event.downloadedBytes,
           totalBytes: event.totalBytes,
         }),
-        samples: pushSample(state.samples, { at, bytes: event.downloadedBytes }),
+        samples: {
+          ...state.samples,
+          [event.modelId]: pushSample(samplesOf(state, event.modelId), {
+            at,
+            bytes: event.downloadedBytes,
+          }),
+        },
       };
     case 'done':
       return {
         ...state,
-        samples: [],
+        samples: withoutSamples(state, event.modelId),
         statuses: known
           ? withStatus(state, { ...known, state: 'ready', downloadedBytes: known.totalBytes })
           : state.statuses,
@@ -70,14 +136,14 @@ function applyEvent(state: SetupState, event: DownloadEvent, at: number): SetupS
     case 'cancelled':
       return {
         ...state,
-        samples: [],
+        samples: withoutSamples(state, event.modelId),
         statuses: known ? withStatus(state, { ...known, state: 'missing' }) : state.statuses,
       };
     case 'failed':
       return {
         ...state,
-        samples: [],
-        error: event.error,
+        samples: withoutSamples(state, event.modelId),
+        errors: withError(state, event.modelId, event.error),
         statuses: known ? withStatus(state, { ...known, state: 'missing' }) : state.statuses,
       };
     default: {
@@ -89,21 +155,24 @@ function applyEvent(state: SetupState, event: DownloadEvent, at: number): SetupS
 
 export function setupReducer(state: SetupState, action: SetupAction): SetupState {
   switch (action.type) {
-    case 'loaded':
+    case 'loaded': {
+      const statuses = Object.fromEntries(
+        [...Object.values(state.statuses), ...action.statuses].map((status) => [
+          status.modelId,
+          status,
+        ]),
+      );
+      const selectedId = action.selectedId === undefined ? state.selectedId : action.selectedId;
       return {
         ...state,
         loaded: true,
         hardware: action.hardware ?? state.hardware,
-        selectedId: action.selectedId === undefined ? state.selectedId : action.selectedId,
-        statuses: Object.fromEntries(
-          [...Object.values(state.statuses), ...action.statuses].map((status) => [
-            status.modelId,
-            status,
-          ]),
-        ),
+        selectedId: state.loaded ? selectedId : settledSelection(selectedId, statuses),
+        statuses,
       };
+    }
     case 'selected':
-      return { ...state, selectedId: action.modelId, samples: [], error: null, note: null };
+      return { ...state, selectedId: action.modelId, note: null };
     case 'status':
       return { ...state, statuses: withStatus(state, action.status) };
     case 'mark': {
@@ -115,7 +184,7 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
     case 'event':
       return applyEvent(state, action.event, action.at);
     case 'error':
-      return { ...state, error: action.error };
+      return { ...state, errors: withError(state, action.modelId, action.error) };
     case 'note':
       return { ...state, note: action.note };
     case 'importing':

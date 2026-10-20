@@ -3,6 +3,7 @@ import { TRANSCRIBE_PROMPT } from '../../eval/models.ts';
 import {
   MODELS,
   DEFAULT_MODEL_ID,
+  choiceModels,
   findModel,
   isLowOnMemory,
   modelNote,
@@ -16,6 +17,8 @@ import {
 const GIB = 1024 ** 3;
 const model = recommendModel();
 
+const list = (ram: number | null, active: ModelInfo) =>
+  choiceModels(ram, active).map((entry) => entry.id);
 const ids = (ram: number | null) => offeredModels(ram).map((entry) => entry.id);
 
 function variant(id: string, recommendedRamGb: number): ModelInfo {
@@ -89,6 +92,14 @@ describe('registry', () => {
     expect(offeredModels(2 * GIB, [variant('only', 32)]).map((entry) => entry.id)).toEqual([
       'only',
     ]);
+  });
+
+  it('keeps the active model in the choice even when the machine does not qualify', () => {
+    const stronger = findModel('qwen3-vl-4b-q4') ?? model;
+    expect(list(null, stronger)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+    expect(list(8 * GIB, stronger)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+    expect(list(null, model)).toEqual([DEFAULT_MODEL_ID]);
+    expect(list(32 * GIB, model)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
   });
 
   it('describes speed and accuracy of the stronger model only', () => {

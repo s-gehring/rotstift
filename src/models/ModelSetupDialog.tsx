@@ -42,9 +42,9 @@ export function progressMilestone(downloaded: number, total: number): number {
 }
 
 function Progress({ setup }: { readonly setup: ModelSetup }) {
-  const { status, state } = setup;
+  const { status } = setup;
   if (status === null) return null;
-  const remaining = remainingText(state.samples, status.downloadedBytes, status.totalBytes);
+  const remaining = remainingText(setup.samples, status.downloadedBytes, status.totalBytes);
   const amount = `${formatMegabytes(status.downloadedBytes)} von ${formatMegabytes(status.totalBytes)}`;
   const milestone = progressMilestone(status.downloadedBytes, status.totalBytes);
   return (
@@ -219,9 +219,9 @@ export function ModelSetupDialog({ setup, open, onClose, switchDisabled }: Props
         </>
       )}
 
-      {state.error !== null && (
+      {setup.error !== null && (
         <p className="error-text" role="alert">
-          {describeDownloadError(state.error)}
+          {describeDownloadError(setup.error)}
         </p>
       )}
       {state.note !== null && !ready && <p className="notice">{state.note}</p>}

@@ -1000,7 +1000,16 @@ async fn two_models_are_installed_side_by_side_and_managed_separately() {
     assert_eq!(manager.status(&dir, first).await.state, State::Ready);
     assert_eq!(manager.status(&dir, second).await.state, State::Ready);
 
-    manager.delete(&dir, first, || {}).await.unwrap();
+    assert!(!manager.has_jobs());
+    let during = Mutex::new(None);
+    manager
+        .delete(&dir, first, || {
+            *during.lock().unwrap() = Some(manager.has_jobs());
+        })
+        .await
+        .unwrap();
+    assert_eq!(during.lock().unwrap().take(), Some(true));
+    assert!(!manager.has_jobs());
     assert_eq!(manager.status(&dir, first).await.state, State::Missing);
     assert_eq!(manager.status(&dir, second).await.state, State::Ready);
     assert!(is_ready(&dir, second).await);

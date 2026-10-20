@@ -466,6 +466,11 @@ impl LlmRuntime {
         Ok((PendingRequest { runtime: self, id }, receiver))
     }
 
+    pub fn is_busy(&self) -> bool {
+        let starting = matches!(self.lock().status, RuntimeStatus::Starting { .. });
+        starting || !self.requests().pending.is_empty()
+    }
+
     pub fn cancel(&self, id: &str) -> bool {
         let mut requests = self.requests();
         if let Some(sender) = requests.pending.remove(id) {
@@ -1019,7 +1024,9 @@ mod tests {
                 runtime.status().await,
                 RuntimeStatus::Starting { .. }
             ));
+            assert!(runtime.is_busy());
             runtime.stop();
+            assert!(!runtime.is_busy());
             assert_eq!(starting.await.unwrap(), Ok(RuntimeStatus::Stopped));
             assert!(!is_running(pid));
             assert_eq!(records(&paths), 0);
@@ -1101,9 +1108,11 @@ mod tests {
             };
             tokio::time::sleep(Duration::from_millis(300)).await;
             assert!(!finished.load(Ordering::SeqCst));
+            assert!(runtime.is_busy());
             assert!(runtime.cancel("r1"));
             assert_eq!(chat.await.unwrap(), Err(LlmError::Cancelled));
             assert!(runtime.requests().pending.is_empty());
+            assert!(!runtime.is_busy());
             runtime.stop();
         }
 

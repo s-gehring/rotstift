@@ -85,6 +85,7 @@ pub async fn model_delete<R: Runtime>(
             }
         })
         .await?;
+    selection::forget(&selection::selection_path(&dir), entry)?;
     Ok(models.status(&dir, entry).await)
 }
 
@@ -150,10 +151,14 @@ pub fn model_selection<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, 
 #[tauri::command]
 pub async fn model_select<R: Runtime>(
     app: AppHandle<R>,
+    models: State<'_, Arc<ModelManager>>,
     llm: State<'_, LlmRuntime>,
     model_id: String,
 ) -> Result<(), DownloadError> {
     let entry = manager::entry(&model_id)?;
+    if llm.is_busy() || models.has_jobs() {
+        return Err(DownloadError::Busy);
+    }
     selection::save(&selection::selection_path(&models_dir(&app)?), entry)?;
     if selection::runs_other_model(&llm.status().await, entry) {
         drop(llm.stop());

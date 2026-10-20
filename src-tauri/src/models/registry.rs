@@ -8,6 +8,7 @@ use crate::llm::MAX_OUTPUT_TOKENS;
 
 const REGISTRY_JSON: &str = include_str!("../../models.json");
 const MIN_CONTEXT_SIZE: u32 = 1024;
+pub const DEFAULT_MODEL_ID: &str = "glm-ocr-q8";
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -194,6 +195,11 @@ impl Registry {
                 return Err(format!("model {id}: invalid request parameters"));
             }
         }
+        if self.find(DEFAULT_MODEL_ID).is_none() {
+            return Err(format!(
+                "registry lacks the default model {DEFAULT_MODEL_ID}"
+            ));
+        }
         Ok(())
     }
 
@@ -244,6 +250,12 @@ mod tests {
         assert_eq!(stronger.request.image_max_edge, 1536);
         assert_eq!(stronger.files.model.bytes, 2_497_281_664);
         assert_eq!(stronger.files.mmproj.bytes, 453_974_304);
+    }
+
+    #[test]
+    fn requires_the_default_model() {
+        let error = rejection(|m| m["id"] = json!("renamed"));
+        assert!(error.contains("default model"), "{error}");
     }
 
     #[test]

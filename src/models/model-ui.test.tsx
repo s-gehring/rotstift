@@ -7,7 +7,7 @@ import { ModelSetupDialog, progressMilestone } from './ModelSetupDialog.tsx';
 import { recommendModel, type ModelInfo } from './registry.ts';
 import { INITIAL_SETUP, type SetupState } from './setup-state.ts';
 import type { ModelSetup } from './use-model-setup.ts';
-import type { ModelState } from './types.ts';
+import type { DownloadError, ModelState } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -21,13 +21,20 @@ const model: ModelInfo = {
 };
 const GIB = 1024 ** 3;
 
-function fakeSetup(state: ModelState, downloaded = 0, extra: Partial<SetupState> = {}): ModelSetup {
+function fakeSetup(
+  state: ModelState,
+  downloaded = 0,
+  extra: Partial<SetupState> = {},
+  error: DownloadError | null = null,
+): ModelSetup {
   const total = model.files.model.bytes + model.files.mmproj.bytes;
   return {
     available: true,
     state: { ...INITIAL_SETUP, loaded: true, ...extra },
     model,
     status: { modelId: model.id, state, downloadedBytes: downloaded, totalBytes: total },
+    error,
+    samples: [],
     select: vi.fn<(modelId: string) => Promise<void>>(() => Promise.resolve()),
     download: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     cancel: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -198,7 +205,7 @@ describe('ModelSetupDialog', () => {
   });
 
   it('resumes partial downloads and shows understandable errors', () => {
-    renderDialog(fakeSetup('missing', 300_000_000, { error: { kind: 'network', detail: 'x' } }));
+    renderDialog(fakeSetup('missing', 300_000_000, {}, { kind: 'network', detail: 'x' }));
     expect(button('Download fortsetzen')).toBeDefined();
     expect(container.querySelector('.error-text')?.textContent).toContain('Internetverbindung');
   });
@@ -306,6 +313,30 @@ describe('ModelChoice', () => {
     act(() => radios()[1]?.click());
     expect(setup.select).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps the choice visible when the active model needs more memory than detected', () => {
+    const stronger = { ...model, id: 'qwen3-vl-4b-q4', recommendedRamGb: 16 };
+    renderDialog({ ...fakeSetup('ready', 1000, small), model: stronger });
+    expect(radios()).toHaveLength(2);
+    expect(radios().map((radio) => radio.checked)).toEqual([false, true]);
+    renderDialog({ ...fakeSetup('ready', 1000), model: stronger });
+    expect(radios()).toHaveLength(2);
+  });
+
+  it.each(['downloading', 'verifying', 'importing', 'deleting'] as const)(
+    'blocks switching while a model is %s',
+    (running) => {
+      const other = {
+        modelId: 'qwen3-vl-4b-q4',
+        state: running,
+        downloadedBytes: 1,
+        totalBytes: 2,
+      };
+      renderDialog(fakeSetup('ready', 1000, { ...big, statuses: { [other.modelId]: other } }));
+      expect(container.querySelector('fieldset')?.disabled).toBe(true);
+      expect(container.textContent).toContain('geladen, geprüft, importiert oder gelöscht');
+    },
+  );
 
   it('blocks switching while words are being counted', () => {
     const setup = fakeSetup('ready', 1_552_000_000, big);

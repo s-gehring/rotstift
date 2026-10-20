@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::download::DownloadError;
 use super::manager;
-use super::registry::ModelEntry;
+use super::registry::{DEFAULT_MODEL_ID, ModelEntry};
 use crate::llm::runtime::RuntimeStatus;
 
 const SELECTION_FILE: &str = "selection.json";
@@ -41,6 +41,14 @@ pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
     std::fs::write(&temp, text)?;
     std::fs::rename(&temp, path)?;
     Ok(())
+}
+
+pub fn forget(path: &Path, deleted: &ModelEntry) -> Result<(), DownloadError> {
+    if load(path).as_deref() != Some(deleted.id.as_str()) || deleted.id == DEFAULT_MODEL_ID {
+        return Ok(());
+    }
+    let default = manager::entry(DEFAULT_MODEL_ID)?;
+    save(path, default)
 }
 
 pub fn serves_model(status: &RuntimeStatus, entry: &ModelEntry) -> bool {
@@ -108,6 +116,26 @@ mod tests {
         assert_eq!(load(&path), Some(second.id.clone()));
         save(&path, first).unwrap();
         assert_eq!(load(&path), Some(first.id.clone()));
+    }
+
+    #[test]
+    fn deleting_the_chosen_model_falls_back_to_the_default() {
+        let dir = temp_dir("forget");
+        let path = selection_path(&dir.join("models"));
+        let (first, second) = models();
+        assert_eq!(first.id, DEFAULT_MODEL_ID);
+
+        save(&path, second).unwrap();
+        forget(&path, first).unwrap();
+        assert_eq!(load(&path), Some(second.id.clone()));
+        forget(&path, second).unwrap();
+        assert_eq!(load(&path), Some(DEFAULT_MODEL_ID.to_owned()));
+
+        forget(&path, first).unwrap();
+        assert_eq!(load(&path), Some(DEFAULT_MODEL_ID.to_owned()));
+        let nothing = selection_path(&dir.join("other").join("models"));
+        forget(&nothing, second).unwrap();
+        assert_eq!(load(&nothing), None);
     }
 
     #[test]
