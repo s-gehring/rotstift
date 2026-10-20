@@ -1,5 +1,6 @@
 mod llm;
 mod models;
+mod save;
 
 use std::sync::Arc;
 
@@ -30,6 +31,7 @@ pub fn run() {
             models::commands::model_delete,
             models::commands::model_import,
             models::commands::model_verify,
+            save::save_csv,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

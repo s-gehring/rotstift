@@ -503,3 +503,49 @@ button.danger:hover:not(:disabled) {
 .model-choice input {
   margin-top: 0.3rem;
 }
+
+.arbeit-list,
+.arbeit-results {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.arbeit-header,
+.arbeit-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.arbeit-header .arbeit-name {
+  flex: 1;
+  min-width: 10rem;
+  font-weight: 600;
+}
+
+.arbeit-result-head h3 {
+  margin: 0;
+}
+
+.page-move {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.results-header .average {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.export-actions {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}

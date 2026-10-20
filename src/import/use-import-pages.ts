@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { arbeitenReducer, defaultArbeitName, flattenPages } from './arbeiten.ts';
 import { fileKey } from './file-kind.ts';
 import { loadFile } from './load-files.ts';
-import { pagesReducer, type ImportPage } from './pages.ts';
+import type { ImportPage } from './pages.ts';
 import { releasePdf } from './pdf-documents.ts';
 import { releaseRemoved } from './release.ts';
 
@@ -11,7 +12,8 @@ export interface Notice {
 }
 
 export function useImportPages() {
-  const [pages, dispatch] = useReducer(pagesReducer, []);
+  const [arbeiten, dispatch] = useReducer(arbeitenReducer, []);
+  const pages = useMemo(() => flattenPages(arbeiten), [arbeiten]);
   const [pending, setPending] = useState(0);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -58,8 +60,16 @@ export function useImportPages() {
         queue.current = queue.current.then(async () => {
           const result = await loadFile(file);
           inFlight.current.delete(fileKey(file));
-          if (result.ok) dispatch({ type: 'add', pages: result.pages });
-          else addNotices([result.message]);
+          if (result.ok) {
+            dispatch({
+              type: 'add',
+              arbeit: {
+                id: crypto.randomUUID(),
+                name: defaultArbeitName(file.name),
+                pages: result.pages,
+              },
+            });
+          } else addNotices([result.message]);
           setPending((count) => count - 1);
         });
       }
@@ -68,6 +78,7 @@ export function useImportPages() {
   );
 
   return {
+    arbeiten,
     pages,
     dispatch,
     addFiles,

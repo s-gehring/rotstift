@@ -10,9 +10,10 @@ Lehrkräfte erzielen mit Cloud-KI gute Ergebnisse beim Korrigieren, dürfen Sch�
 
 Version 0.1 zählt die Wörter handschriftlicher Texte, komplett offline:
 
-- Bilder (PNG, JPEG, WebP) und PDFs per Drag and drop laden, Seiten drehen, sortieren und entfernen.
-- „Wörter zählen“ liest jede Seite mit einem lokalen KI-Modell (GLM-OCR) und zeigt die Wortzahl je Seite und gesamt. Der erkannte Text lässt sich korrigieren, die Zahlen passen sich sofort an.
-- Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Datei. Leere Seiten zählen mit 0 Wörtern.
+- Bilder (PNG, JPEG, WebP) und PDFs per Drag and drop laden, Seiten drehen, sortieren und entfernen. Jede Datei wird eine Arbeit (eine Schülerin oder ein Schüler) und heißt wie die Datei, der Name lässt sich direkt ändern. Seitenweise gescannte Arbeiten lassen sich zusammenführen, einzelne Seiten in eine andere Arbeit verschieben.
+- „Wörter zählen“ liest jede Seite mit einem lokalen KI-Modell (GLM-OCR) und zeigt die Wortzahl je Seite, je Arbeit, für die ganze Klasse und im Durchschnitt. Der erkannte Text lässt sich korrigieren, die Zahlen passen sich sofort an.
+- Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Arbeit. Leere Seiten zählen mit 0 Wörtern.
+- „Als CSV speichern“ legt eine Tabelle (Name, Seiten, Wörter, Gesamtzeile) an, die deutsches Excel direkt öffnet (UTF-8 mit BOM, Semikolon). Den Speicherort wählt man im Systemdialog. „In die Zwischenablage kopieren“ liefert dieselbe Tabelle tabulatorgetrennt zum Einfügen in Excel oder Notenprogramme.
 
 Genauigkeit: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag die Wortzahl im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Durchgestrichenes behandelt Rotstift noch nicht gesondert.
 
