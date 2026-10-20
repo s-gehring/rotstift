@@ -1,5 +1,10 @@
 import type { ImportPage, Rotation } from '../import/pages.ts';
-import type { PageTranscriber, TranscribeError, TranscribeResult } from './transcriber.ts';
+import type {
+  EnginePhase,
+  PageTranscriber,
+  TranscribeError,
+  TranscribeResult,
+} from './transcriber.ts';
 
 export type PageStatus = 'waiting' | 'running' | 'done' | 'error';
 
@@ -57,6 +62,14 @@ const isQueued = (entry: PageEntry) => entry.status === 'waiting' || entry.statu
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function isCounting(state: RunState): boolean {
+  return state.batch !== null || Object.values(state.entries).some(isQueued);
+}
+
+export function isSwitchLocked(state: RunState, phase: EnginePhase): boolean {
+  return isCounting(state) || phase === 'starting';
 }
 
 export function isOutdated(entry: PageEntry, page: Pick<ImportPage, 'rotation'>): boolean {

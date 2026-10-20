@@ -9,7 +9,7 @@ import {
   type LlmTranscriberDeps,
 } from './llm-transcriber.ts';
 
-const model = recommendModel(null);
+const model = recommendModel();
 
 const ready: RuntimeStatus = { state: 'ready', model: model.files.model.name, port: 1 };
 const png = new Blob(['x'], { type: 'image/png' });

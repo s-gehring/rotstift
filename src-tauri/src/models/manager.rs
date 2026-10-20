@@ -235,6 +235,10 @@ impl ModelManager {
         self.jobs().get(model_id).map(|job| job.kind.state())
     }
 
+    pub fn has_jobs(&self) -> bool {
+        !self.jobs().is_empty()
+    }
+
     pub fn is_busy(&self, model_id: &str) -> bool {
         self.jobs().contains_key(model_id)
     }

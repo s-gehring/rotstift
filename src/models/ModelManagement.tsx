@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatSize } from './format.ts';
+import { ModelChoice } from './ModelChoice.tsx';
 import { totalBytes } from './registry.ts';
 import type { ModelState } from './types.ts';
 import type { ModelSetup } from './use-model-setup.ts';
@@ -44,6 +45,7 @@ export function ModelManagement({ setup, onSetup, disabled }: Props) {
     <section className="model-management" aria-label="Texterkennung verwalten">
       <details>
         <summary>Texterkennung verwalten</summary>
+        <ModelChoice setup={setup} disabled={disabled} />
         <p>
           {model.displayName}: {STATE_TEXT[status.state]}
           {status.state === 'ready' &&

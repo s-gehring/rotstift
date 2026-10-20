@@ -22,6 +22,8 @@ pub fn run() {
             llm::commands::llm_chat,
             llm::commands::llm_cancel,
             models::commands::model_status,
+            models::commands::model_selection,
+            models::commands::model_select,
             models::commands::hardware_info,
             models::commands::model_download_start,
             models::commands::model_download_cancel,

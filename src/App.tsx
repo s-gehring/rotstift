@@ -5,6 +5,8 @@ import { ModelManagement } from './models/ModelManagement.tsx';
 import { ModelSetupDialog } from './models/ModelSetupDialog.tsx';
 import { useModelSetup } from './models/use-model-setup.ts';
 import { browserModelClient } from './pipeline/environment.ts';
+import { isSwitchLocked } from './pipeline/runner.ts';
+import { useEnginePhase } from './pipeline/use-engine-phase.ts';
 import type { ModelAvailability } from './pipeline/provider.ts';
 import { useTranscriber } from './pipeline/use-transcriber.ts';
 import { CountControls, CountHint } from './results/CountControls.tsx';
@@ -27,6 +29,8 @@ export function App() {
     void setup.refresh();
   });
   const count = useWordCount(importState.pages, transcriber);
+  const enginePhase = useEnginePhase(transcriber);
+  const switchLocked = isSwitchLocked(count.state, enginePhase);
   const openSetup = () => {
     setDialogOpen(true);
   };
@@ -59,11 +63,12 @@ export function App() {
         count={count}
         canRetry={transcriber?.state === 'ready'}
       />
-      <ModelManagement setup={setup} onSetup={openSetup} disabled={count.state.batch !== null} />
+      <ModelManagement setup={setup} onSetup={openSetup} disabled={switchLocked} />
       {setup.available && (
         <ModelSetupDialog
           setup={setup}
           open={dialogOpen}
+          switchDisabled={switchLocked}
           onClose={() => {
             setDialogOpen(false);
           }}

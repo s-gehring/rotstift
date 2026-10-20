@@ -47,6 +47,8 @@ export function createModelClient(
     hardware: () => call<HardwareInfo>('hardware_info'),
     startDownload: (modelId: string) => call<undefined>('model_download_start', { modelId }),
     cancelDownload: (modelId: string) => call<boolean>('model_download_cancel', { modelId }),
+    selection: () => call<string | null>('model_selection'),
+    select: (modelId: string) => call<undefined>('model_select', { modelId }),
     remove: (modelId: string) => call<ModelStatus>('model_delete', { modelId }),
     verify: (modelId: string) => call<ModelStatus>('model_verify', { modelId }),
     importFiles: (modelId: string) => call<ImportOutcome | null>('model_import', { modelId }),
