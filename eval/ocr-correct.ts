@@ -37,6 +37,7 @@ export interface CorrectedDoc extends CorrectDoc {
 
 export interface CorrectRun {
   model: string;
+  ocrModel?: string;
   prompt: OcrPrompt;
   thinking: boolean;
   machine: string;
@@ -133,10 +134,14 @@ async function main() {
     ? JSON.parse(await readFile(values.out, 'utf8'))
     : undefined;
   const done = previous?.docs ?? [];
+  const source: OcrRun | undefined = values.ocr
+    ? JSON.parse(await readFile(values.ocr, 'utf8'))
+    : undefined;
+  const ocrModel = source?.model;
   const todo = collectDocs(values).filter((doc) => !done.some((entry) => entry.id === doc.id));
 
   const server = await launchServer({
-    model: localFile(model.files.model.url),
+    model: localFile(model.files.model),
     contextSize: model.server.contextSize,
     threads,
     extraArgs: model.server.cpuRepack ? [] : ['--no-repack'],
@@ -145,6 +150,7 @@ async function main() {
   const save = async () => {
     const run: CorrectRun = {
       model: model.id,
+      ...(ocrModel && { ocrModel }),
       prompt,
       thinking: !values['no-thinking'],
       machine: `${hostname()} (${cpus()[0]?.model.trim() ?? 'CPU'})`,

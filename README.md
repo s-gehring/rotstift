@@ -55,7 +55,7 @@ Die Modelle stecken in `src-tauri/models.json` (Quelle auf einen Commit festgele
 
 ## Testversion installieren
 
-Testversionen liegen unter [Releases](https://github.com/s-gehring/rotstift/releases). Sie sind nicht signiert, daher warnt das Betriebssystem beim ersten Start:
+Testversionen liegen unter [Releases](https://github.com/s-gehring/rotstift/releases). Solange keine Signierzertifikate hinterlegt sind (siehe [docs/signieren.md](docs/signieren.md)), sind sie nicht signiert, daher warnt das Betriebssystem beim ersten Start:
 
 - **Windows:** Bei der SmartScreen-Meldung „Weitere Informationen“ und dann „Trotzdem ausführen“ wählen.
 - **macOS:** Nach dem ersten Startversuch unter Systemeinstellungen, Datenschutz & Sicherheit, „Dennoch öffnen“ wählen. Meldet macOS, die App sei beschädigt: `xattr -dr com.apple.quarantine /Applications/Rotstift.app`.

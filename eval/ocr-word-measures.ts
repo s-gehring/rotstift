@@ -6,6 +6,7 @@ import type { Mark } from '../src/annotations/transcript.ts';
 import { charProbabilities, lineProbabilities } from '../src/correction/reading-confidence.ts';
 import { splitTranscript } from '../src/pipeline/transcript-lines.ts';
 import { goldFromMarkup } from './gold.ts';
+import { auc } from './ocr-calibration.ts';
 import { remapGold } from './mark-metrics.ts';
 import { attributeMarks } from './ocr-attribution.ts';
 import { truthLines } from './ocr-correct.ts';
@@ -81,18 +82,20 @@ function asMark(word: WordScore): Mark {
   return { kind: 'error', type: 'R', original: word.text, correction: '', offset: word.offset };
 }
 
-function scadsWords(ocrFile: string, dataset: string) {
+export function pageWords(page: Page, truth: readonly string[]) {
+  const lines = splitTranscript(page.content).map(normalizeLine);
+  const attribution = attributeMarks(truth, lines);
+  return wordScores(page, lines).map((word) => ({
+    word,
+    misread: attribution.cause(word.line, asMark(word)) === 'reading',
+  }));
+}
+
+export function scadsWords(ocrFile: string, dataset: string) {
   const run: OcrRun = JSON.parse(readFileSync(ocrFile, 'utf8'));
   return run.pages
     .filter((page) => page.finishReason === 'stop')
-    .flatMap((page) => {
-      const lines = splitTranscript(page.content).map(normalizeLine);
-      const attribution = attributeMarks(truthLines(dataset, page.name), lines);
-      return wordScores(page, lines).map((word) => ({
-        word,
-        misread: attribution.cause(word.line, asMark(word)) === 'reading',
-      }));
-    });
+    .flatMap((page) => pageWords(page, truthLines(dataset, page.name)));
 }
 
 function renderedWords(ocrFile: string) {
@@ -122,14 +125,6 @@ function renderedWords(ocrFile: string) {
       ),
     }));
   });
-}
-
-function auc(positive: readonly number[], negative: readonly number[]): number {
-  let sum = 0;
-  for (const low of positive) {
-    for (const high of negative) sum += low < high ? 1 : low === high ? 0.5 : 0;
-  }
-  return sum / positive.length / negative.length;
 }
 
 function share(values: readonly number[], threshold: number): string {

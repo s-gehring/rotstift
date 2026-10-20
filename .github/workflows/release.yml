@@ -53,14 +53,84 @@ jobs:
           path: src-tauri/binaries/.download
           key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
       - run: pnpm fetch:runtime ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+      - name: macOS-Signierung vorbereiten
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ] || [ -z "$APPLE_SIGNING_IDENTITY" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "Apple-Secrets nicht vollständig gesetzt, die App wird nicht signiert."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm "$RUNNER_TEMP/certificate.p12"
+          for library in src-tauri/binaries/llama/*.dylib; do
+            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$library"
+          done
+          {
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+            echo "APPLE_ID=$APPLE_ID"
+            echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+            echo "MACOS_SIGNED=true"
+          } >> "$GITHUB_ENV"
+      - name: Windows-Signierung vorbereiten
+        id: windows-signing
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ -z "$AZURE_TENANT_ID" ] || [ -z "$AZURE_ARTIFACT_SIGNING_ENDPOINT" ] || [ -z "$AZURE_ARTIFACT_SIGNING_ACCOUNT" ] || [ -z "$AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE" ]; then
+            echo "Azure-Secrets nicht vollständig gesetzt, der Installer wird nicht signiert."
+            exit 0
+          fi
+          cargo install artifact-signing-cli --version 0.12.0 --locked
+          node -e '
+            const e = process.env;
+            const config = { bundle: { windows: { signCommand: {
+              cmd: "artifact-signing-cli",
+              args: ["-e", e.AZURE_ARTIFACT_SIGNING_ENDPOINT, "-a", e.AZURE_ARTIFACT_SIGNING_ACCOUNT, "-c", e.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE, "%1"],
+            } } } };
+            require("fs").writeFileSync(e.RUNNER_TEMP + "/sign.conf.json", JSON.stringify(config));
+          '
+          echo "args=--config $RUNNER_TEMP/sign.conf.json" >> "$GITHUB_OUTPUT"
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           LD_LIBRARY_PATH: ${{ github.workspace }}/src-tauri/binaries/llama
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: Rotstift v__VERSION__
-          releaseBody: Unsignierte Testversion. Installationshinweise stehen im README.
+          releaseBody: Testversion. Installationshinweise und Signierstatus stehen im README und in docs/signieren.md.
           releaseDraft: true
           prerelease: true
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} ${{ steps.windows-signing.outputs.args }}
+      - name: macOS-Signatur und Notarisierung prüfen
+        if: env.MACOS_SIGNED == 'true'
+        run: |
+          app="$(find src-tauri/target -type d -name Rotstift.app -path '*/bundle/macos/*' | head -n 1)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"

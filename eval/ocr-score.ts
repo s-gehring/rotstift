@@ -24,7 +24,10 @@ import { judgeMark, wordsOf } from './ocr-guards.ts';
 import type { Guards, Verdict } from './ocr-guards.ts';
 import type { OcrRun } from './ocr-run.ts';
 import { TRUTH_SLIPS } from './ocr-truth-slips.ts';
-import { characterEdits } from './metrics.ts';
+import { characterEdits, classifyErrors, cleanTranscript } from './metrics.ts';
+import type { ErrorOutcome } from './metrics.ts';
+import { parseSample } from './sample.ts';
+import type { ErrorKind } from './sample.ts';
 import { remapGold, scorePage } from './mark-metrics.ts';
 import { samplesDir } from './paths.ts';
 
@@ -108,6 +111,10 @@ function readCorrections(file: string): CorrectRun {
   return { ...run, docs: run.docs.filter((doc) => !skipped.has(doc.id)) };
 }
 
+function isRendered(run: OcrRun): boolean {
+  return run.pages[0]?.name.includes('--') ?? false;
+}
+
 export function falseAlarms(
   run: CorrectRun,
   ocr: OcrRun | undefined,
@@ -152,7 +159,39 @@ export function falseAlarms(
   return totals;
 }
 
-export function recallDocs(run: CorrectRun, ocr: OcrRun | undefined, guards: Guards) {
+export type MarkupOf = (id: string) => string;
+
+export function textMarkup(id: string): string {
+  const text = id.split('--')[0] ?? '';
+  return readFileSync(join(samplesDir, 'texts', `${text}.txt`), 'utf8').trim();
+}
+
+function isCleanDoc(id: string, markup: string): boolean {
+  return (
+    id.includes('--fehlerfrei') ||
+    goldFromMarkup(markup).gold.lines.every((line) => line.marks.length === 0)
+  );
+}
+
+export interface ThresholdRow {
+  threshold: number;
+  alarms: number;
+  words: number;
+}
+
+export function chooseThreshold(rows: readonly ThresholdRow[], target = 0.01): number | undefined {
+  return rows
+    .filter((row) => row.words > 0 && wilson(row.alarms, row.words)[0] <= target)
+    .map((row) => row.threshold)
+    .toSorted((a, b) => a - b)[0];
+}
+
+export function recallDocs(
+  run: CorrectRun,
+  ocr: OcrRun | undefined,
+  guards: Guards,
+  markupOf: MarkupOf = textMarkup,
+) {
   const score = {
     total: 0,
     gold: 0,
@@ -177,14 +216,13 @@ export function recallDocs(run: CorrectRun, ocr: OcrRun | undefined, guards: Gua
     const uncertain = judged.filter((entry) => entry.verdict === 'uncertain').length;
     const kept = judged.filter((entry) => entry.verdict === 'keep');
     const words = countWords(lines.join('\n'));
-    if (doc.id.includes('--fehlerfrei')) {
+    const markup = markupOf(doc.id);
+    if (isCleanDoc(doc.id, markup)) {
       score.cleanWords += words;
       score.cleanAlarms += kept.length;
       score.cleanUncertain += uncertain;
       continue;
     }
-    const text = doc.id.split('--')[0] ?? '';
-    const markup = readFileSync(join(samplesDir, 'texts', `${text}.txt`), 'utf8').trim();
     const input: Transcript = {
       lines: lines.map((line, index) => ({ number: index + 1, text: line, marks: [] })),
     };
@@ -214,25 +252,26 @@ export function recallDocs(run: CorrectRun, ocr: OcrRun | undefined, guards: Gua
   return score;
 }
 
-function writtenLines(name: string): string[] {
-  const text = name.split('--')[0] ?? '';
-  const markup = readFileSync(join(samplesDir, 'texts', `${text}.txt`), 'utf8').trim();
+export function writtenLines(markup: string): string[] {
   return goldFromMarkup(markup).input.lines.map((line) => line.text);
 }
 
-export function readingErrorRate(ocr: OcrRun, dataset: string) {
+export type TruthOf = (name: string) => string[];
+
+export function datasetTruth(dataset: string): TruthOf {
+  return (name) =>
+    name.includes('--')
+      ? writtenLines(textMarkup(name))
+      : splitTranscript(readFileSync(join(dataset, 'ground_truth', `${name}.txt`), 'utf8'));
+}
+
+export function readingErrorRate(ocr: OcrRun, truthOf: TruthOf) {
   let edits = 0;
   let chars = 0;
   let words = 0;
   let misread = 0;
   for (const page of ocr.pages.filter((entry) => entry.finishReason === 'stop')) {
-    const truth = (
-      page.name.includes('--')
-        ? writtenLines(page.name)
-        : splitTranscript(readFileSync(join(dataset, 'ground_truth', `${page.name}.txt`), 'utf8'))
-    )
-      .map(normalizeLine)
-      .join(' ');
+    const truth = truthOf(page.name).map(normalizeLine).join(' ');
     const read = splitTranscript(page.content).map(normalizeLine).join(' ');
     const count = characterEdits(truth, read);
     edits += count.edits;
@@ -243,6 +282,19 @@ export function readingErrorRate(ocr: OcrRun, dataset: string) {
   }
   const incomplete = ocr.pages.filter((entry) => entry.finishReason !== 'stop').length;
   return { edits, chars, words, misread, incomplete };
+}
+
+export function errorOutcomes(ocr: OcrRun) {
+  const counts: Record<ErrorOutcome, number> = { preserved: 0, corrected: 0, misread: 0 };
+  const corrected: Record<ErrorKind, number> = { R: 0, Z: 0, G: 0 };
+  for (const page of ocr.pages.filter((entry) => entry.finishReason === 'stop')) {
+    const sample = parseSample(textMarkup(page.name));
+    for (const result of classifyErrors(sample, cleanTranscript(page.content))) {
+      counts[result.outcome] += 1;
+      if (result.outcome === 'corrected') corrected[result.kind] += 1;
+    }
+  }
+  return { ...counts, correctedByKind: corrected };
 }
 
 async function guardSet(dictionary: Dictionary | undefined, thresholds: readonly number[]) {
@@ -301,8 +353,10 @@ async function main() {
   for (const name of values.skip.split(',').filter(Boolean)) skipped.add(name);
   const recallOcr = values['recall-ocr'] ? readOcr(values['recall-ocr']) : undefined;
   const ocrRuns = [...values.ocr.map((file) => readOcr(file)), ...(recallOcr ? [recallOcr] : [])];
-  const ocrFor = (model: string) =>
-    ocrRuns.find((run) => run.model === model && !run.pages[0]?.name.includes('--'));
+  const sourceOcr = (run: CorrectRun, file: string, rendered: boolean) => {
+    const model = run.ocrModel ?? (file.includes('qwen') ? 'qwen3-vl-4b-q4' : 'glm-ocr-q8');
+    return ocrRuns.find((entry) => entry.model === model && isRendered(entry) === rendered);
+  };
   const scadsRuns = values.scads.map((file) => ({ file, run: readCorrections(file) }));
   const recallRuns = values.recall.map((file) => ({ file, run: readCorrections(file) }));
   const dictionary = values.dictionary
@@ -317,16 +371,23 @@ async function main() {
   const out: string[] = [];
 
   for (const ocr of ocrRuns) {
-    const errors = readingErrorRate(ocr, dataset);
+    const errors = readingErrorRate(ocr, datasetTruth(dataset));
     out.push(
       `Lesefehler ${ocr.model}: CER ${percent(errors.edits, errors.chars, 1)}, falsch gelesene Wörter ${percent(errors.misread, errors.words, 1)} (${errors.misread} von ${errors.words}), ${ocr.pages.length} Seiten, davon ${errors.incomplete} unvollständig (Wiederholung bis zum Token-Limit, nicht gewertet), Mittel ${(ocr.pages.reduce((sum, page) => sum + page.seconds, 0) / ocr.pages.length).toFixed(1)} s/Seite auf ${ocr.machine}, ${ocr.threads} Threads`,
       '',
     );
+    if (isRendered(ocr)) {
+      const outcomes = errorOutcomes(ocr);
+      const total = outcomes.preserved + outcomes.corrected + outcomes.misread;
+      out.push(
+        `Eingebaute Fehler ${ocr.model}: erhalten ${percent(outcomes.preserved, total)}, eigenmächtig korrigiert ${percent(outcomes.corrected, total)} (R ${outcomes.correctedByKind.R}, Z ${outcomes.correctedByKind.Z}, G ${outcomes.correctedByKind.G}), anders gelesen ${percent(outcomes.misread, total)} (${total} Fehler)`,
+        '',
+      );
+    }
   }
 
   for (const { file, run } of scadsRuns) {
-    const ocr = ocrFor(file.includes('qwen') ? 'qwen3-vl-4b-q4' : 'glm-ocr-q8');
-    const source = file.includes('truth') ? undefined : ocr;
+    const source = file.includes('truth') ? undefined : sourceOcr(run, file, false);
     out.push(`### ${file.split('/').at(-1)} (${run.prompt}, ${run.docs.length} Seiten)`, '');
     out.push(
       '| Gegenmittel | Fehlalarme je 100 Wörter | davon Lesefehler | davon Korrektor | „unsicher gelesen“ | verworfen | Vorlage fehlerhaft | ungültig |',
@@ -343,7 +404,7 @@ async function main() {
   }
 
   for (const { file, run } of recallRuns) {
-    const source = file.includes('rendered') ? recallOcr : undefined;
+    const source = file.includes('rendered') ? sourceOcr(run, file, true) : undefined;
     out.push(`### ${file.split('/').at(-1)} (${run.prompt}, ${run.docs.length} Texte)`, '');
     out.push(
       '| Gegenmittel | Recall | Recall mit Hinweisen | Precision | erreichbare Fehler | Hinweise je 100 Wörter | Fehlalarme je 100 Wörter fehlerfrei | Hinweise fehlerfrei | ungültig |',
@@ -361,10 +422,7 @@ async function main() {
   }
   if (values.examples) {
     const run = readCorrections(values.examples);
-    const ocr =
-      run.docs.length > 0
-        ? ocrFor(values.examples.includes('qwen') ? 'qwen3-vl-4b-q4' : 'glm-ocr-q8')
-        : undefined;
+    const ocr = run.docs.length > 0 ? sourceOcr(run, values.examples, false) : undefined;
     for (const doc of run.docs.filter((entry) => entry.ok)) {
       const truthFile = join(dataset, 'ground_truth', `${doc.id}.txt`);
       const truth = splitTranscript(readFileSync(truthFile, 'utf8')).map(normalizeLine);
@@ -390,7 +448,9 @@ async function main() {
     const [scadsFile = '', renderedFile = ''] = pair.split(',');
     const scads = readCorrections(scadsFile);
     const rendered = readCorrections(renderedFile);
-    const ocr = ocrFor(scadsFile.includes('qwen') ? 'qwen3-vl-4b-q4' : 'glm-ocr-q8');
+    const ocr = sourceOcr(scads, scadsFile, false);
+    const renderedOcr = sourceOcr(rendered, renderedFile, true);
+    const rows: ThresholdRow[] = [];
     out.push(`### Kurve ${scadsFile.split('/').at(-1)} / ${renderedFile.split('/').at(-1)}`, '');
     out.push(
       '| Schwelle | Wörterbuch | Fehlalarme je 100 Wörter (ScaDS) | Hinweise je 100 Wörter (ScaDS) | Recall (gerendert) | Hinweise je 100 Wörter (gerendert) |',
@@ -402,13 +462,21 @@ async function main() {
         : [undefined]) {
         const guards: Guards = { minConfidence: threshold, ...(isWord && { isWord }) };
         const alarms = falseAlarms(scads, ocr, dataset, guards);
-        const recall = recallDocs(rendered, recallOcr, guards);
+        const recall = recallDocs(rendered, renderedOcr, guards);
+        if (!isWord) {
+          rows.push({ threshold, alarms: alarms.reading + alarms.corrector, words: alarms.words });
+        }
         out.push(
           `| ${threshold} | ${isWord ? 'ja' : 'nein'} | ${rate(alarms.reading + alarms.corrector, alarms.words)} | ${((100 * (alarms.uncertainReading + alarms.uncertainCorrector)) / alarms.words).toFixed(1)} | ${percent(recall.matched, recall.gold)} | ${((100 * recall.uncertain) / recall.words).toFixed(1)} |`,
         );
       }
     }
-    out.push('');
+    const chosen = chooseThreshold(rows);
+    out.push(
+      '',
+      `Schwelle nach Regel (kleinste, deren Intervall 1 Fehlalarm je 100 Wörter erreicht): ${chosen ?? 'keine'}`,
+      '',
+    );
   }
   process.stdout.write(`${out.join('\n')}\n`);
 }

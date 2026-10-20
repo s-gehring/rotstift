@@ -6,6 +6,7 @@ import process from 'node:process';
 import { parseArgs } from 'node:util';
 import { visionMessage } from '../src/llm/client.ts';
 import type { TokenProbability } from '../src/correction/reading-confidence.ts';
+import type { ModelInfo } from '../src/models/registry.ts';
 import { localFile, transcriber } from './ocr-registry.ts';
 import { launchServer, postJson, record } from './server.ts';
 
@@ -40,6 +41,13 @@ function readTokens(logprobs: unknown): TokenProbability[] {
   });
 }
 
+export function serverArgs(model: Pick<ModelInfo, 'server'>): string[] {
+  return [
+    ...(model.server.cpuRepack ? [] : ['--no-repack']),
+    ...(model.server.reasoning === 'off' ? ['--reasoning', 'off'] : []),
+  ];
+}
+
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -69,12 +77,12 @@ async function main() {
   );
 
   const server = await launchServer({
-    model: localFile(model.files.model.url),
-    mmproj: localFile(model.files.mmproj.url),
+    model: localFile(model.files.model),
+    mmproj: localFile(model.files.mmproj),
     contextSize: model.server.contextSize,
     threads,
     imageMaxTokens: model.server.imageMaxTokens ?? undefined,
-    extraArgs: model.server.cpuRepack ? [] : ['--no-repack'],
+    extraArgs: serverArgs(model),
   });
   let peak = previous?.peakRssBytes ?? 0;
   try {
