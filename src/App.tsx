@@ -23,6 +23,12 @@ import { useReview } from './review/use-review.ts';
 
 const modelClient = browserModelClient();
 
+function checkTexts() {
+  const heading = document.getElementById('results-title');
+  heading?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  heading?.focus({ preventScroll: true });
+}
+
 export function App() {
   const importState = useImportPages();
   const setup = useModelSetup(modelClient);
@@ -52,6 +58,7 @@ export function App() {
   const openSetup = () => {
     setDialogOpen(true);
   };
+  const hasTexts = Object.values(count.state.entries).some((entry) => entry.hasTranscript);
   const startReview = () => {
     setView('review');
     void review.flow.start(pages, profile);
@@ -111,7 +118,11 @@ export function App() {
                   arbeiten={importState.arbeiten}
                   download={setup.status}
                 />
-                <ReviewHint corrector={corrector} onSetup={correction.setup.openSetup} />
+                <ReviewHint
+                  corrector={corrector}
+                  onSetup={correction.setup.openSetup}
+                  {...(hasTexts && { onCheckTexts: checkTexts })}
+                />
               </>
             }
           />

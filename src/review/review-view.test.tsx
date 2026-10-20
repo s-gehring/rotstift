@@ -12,7 +12,13 @@ import type { SaveOutcome } from '../export/save-file.ts';
 import { saveClassPdf, saveCorrectedPdf, type SavePdfOptions } from '../export/save-pdf.ts';
 import type { ReviewEngine } from './engine-phase.ts';
 import { LAYOUT_FAILED, type ReviewFlow } from './review-flow.ts';
-import { PREVIEW_NOTICE, ReviewControls, ReviewHint } from './ReviewControls.tsx';
+import {
+  OCR_NOTICE,
+  PDF_FOOTER,
+  PREVIEW_NOTICE,
+  ReviewControls,
+  ReviewHint,
+} from './ReviewControls.tsx';
 import { ReviewView } from './ReviewView.tsx';
 import { deferred, setupReview, tick, waitFor } from './test-support.ts';
 
@@ -317,6 +323,25 @@ describe('ReviewControls', () => {
     expect(container.querySelector('#review-hint')?.textContent).toBe('Korrekturmodell fehlt.');
   });
 
+  it('marks Berichtigen as a preview and warns about reading errors before the start', () => {
+    const onCheckTexts = vi.fn<() => void>();
+    act(() =>
+      root.render(
+        <ReviewHint
+          corrector={{ state: 'ready', corrector: createFakeCorrector('x'), preview: false }}
+          onCheckTexts={onCheckTexts}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain(OCR_NOTICE);
+    act(() => buttonNamed('Erkannte Texte prüfen').click());
+    expect(onCheckTexts).toHaveBeenCalledOnce();
+
+    controls({ state: 'ready', corrector: createFakeCorrector('x'), preview: false });
+    expect(buttonNamed('Berichtigen').nextElementSibling?.textContent).toBe('Vorschau');
+    expect(container.textContent).not.toContain('Erkannte Texte prüfen');
+  });
+
   it('opens the correction model setup instead of starting while the model is missing', () => {
     const onSetup = vi.fn<() => void>();
     const onStart = controls(
@@ -361,6 +386,7 @@ describe('saving the review as PDF', () => {
       profile: DEUTSCH,
       statistics: { words: 1, errors: 0 },
     });
+    expect(options.footer).toBe(PDF_FOOTER);
     act(() => options.onProgress?.(1, 1));
     const pdfControls = controlsOf('Als PDF speichern: Aufsatz Ben');
     expect(pdfControls.textContent).toContain('Seite 1 von 1');
@@ -425,7 +451,8 @@ describe('saving the review as PDF', () => {
       labelled('Klassen-PDF mit Korrekturen speichern').click();
       await tick();
     });
-    const [arbeiten] = vi.mocked(saveClassPdf).mock.calls.at(-1) ?? [];
+    const [arbeiten, classOptions] = vi.mocked(saveClassPdf).mock.calls.at(-1) ?? [];
+    expect(classOptions?.footer).toBe(PDF_FOOTER);
     expect(arbeiten?.map((arbeit) => [arbeit.kind, arbeit.title])).toEqual([
       ['corrected', 'Aufsatz Ben'],
     ]);

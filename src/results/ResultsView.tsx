@@ -372,7 +372,9 @@ export function ResultsView({ arbeiten, count, canRetry, locked = false }: Resul
           </p>
         )}
         <div className="results-header">
-          <h2 id="results-title">Wortzahl</h2>
+          <h2 id="results-title" tabIndex={-1}>
+            Wortzahl
+          </h2>
           <p className="total" data-testid="total-words">
             <strong>{formatCount(totals.words)}</strong> {totals.words === 1 ? 'Wort' : 'Wörter'}{' '}
             gesamt

@@ -37,6 +37,15 @@ describe('buildCorrectedPdf', () => {
     expect(pdf.images[0]?.[0]?.[0]).toBeGreaterThan(1000);
   });
 
+  it('prints the footer on every page when one is given', async () => {
+    const arbeit = await correctedArbeit();
+    const footer = 'Vorschau: automatisch erstellte Korrektur, bitte prüfen';
+    const stamped = await readPdf(await buildCorrectedPdf(arbeit, { ...options, footer }));
+    expect(stamped.texts.every((text) => text.includes(footer))).toBe(true);
+    const plain = await readPdf(await buildCorrectedPdf(arbeit, options));
+    expect(plain.texts.some((text) => text.includes('Vorschau'))).toBe(false);
+  });
+
   it('keeps the orientation of a landscape page', async () => {
     const arbeit = await correctedArbeit();
     const pages = [...arbeit.pages, await bareScan(LANDSCAPE)];

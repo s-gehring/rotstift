@@ -1,9 +1,10 @@
-import { PDFDocument, type PDFImage } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFImage } from 'pdf-lib';
 import { listErrors } from '../annotations/transcript.ts';
 import { computeStatistics } from '../stats/statistics.ts';
 import { incompleteArbeitenNote, incompletePagesNote } from './notes.ts';
 import { encodePageImage } from './page-image.ts';
-import { A4, embedFonts, type Fonts } from './sheet.ts';
+import { A4, COLORS, embedFonts, type Fonts } from './sheet.ts';
+import { encodable } from './text.ts';
 import {
   drawCoverPage,
   drawStatisticsPage,
@@ -56,6 +57,35 @@ async function createContext(
     total,
     done: 0,
   };
+}
+
+const FOOTER_SIZE = 7;
+const FOOTER_BASELINE = 8;
+const FOOTER_PAD = 3;
+
+function stampFooter(context: Context, footer: string | undefined): void {
+  if (footer === undefined || footer === '') return;
+  const font = context.fonts.regular;
+  const text = encodable(font, footer);
+  const width = font.widthOfTextAtSize(text, FOOTER_SIZE);
+  for (const page of context.doc.getPages()) {
+    const x = (page.getWidth() - width) / 2;
+    page.drawRectangle({
+      x: x - FOOTER_PAD,
+      y: FOOTER_BASELINE - FOOTER_PAD,
+      width: width + 2 * FOOTER_PAD,
+      height: FOOTER_SIZE + 2 * FOOTER_PAD,
+      color: rgb(1, 1, 1),
+      opacity: 0.85,
+    });
+    page.drawText(text, {
+      x,
+      y: FOOTER_BASELINE,
+      size: FOOTER_SIZE,
+      font,
+      color: COLORS.muted,
+    });
+  }
 }
 
 function requirePages(arbeit: { readonly title: string; readonly pages: readonly ExportPage[] }) {
@@ -175,6 +205,7 @@ export async function buildCorrectedPdf(
 ): Promise<Uint8Array> {
   const context = await createContext(input.title, input.pages.length, options);
   await appendCorrected(context, input);
+  stampFooter(context, options.footer);
   return context.doc.save();
 }
 
@@ -240,5 +271,6 @@ export async function buildClassPdf(
     if (arbeit.kind === 'corrected') await appendCorrected(context, arbeit);
     else await appendWordCount(context, arbeit);
   }
+  stampFooter(context, options.footer);
   return context.doc.save();
 }

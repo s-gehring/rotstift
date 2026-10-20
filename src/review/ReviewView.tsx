@@ -17,7 +17,7 @@ import {
 } from './export-input.ts';
 import { useObjectUrl } from './page-image.ts';
 import type { ReviewFlow, ReviewPage, ReviewState, ReviewStatus } from './review-flow.ts';
-import { PREVIEW_NOTICE } from './ReviewControls.tsx';
+import { PDF_FOOTER, PREVIEW_NOTICE, PreviewTag } from './ReviewControls.tsx';
 import { PdfControls, usePdfSave, type PdfSave } from './ReviewPdf.tsx';
 import {
   errorsText,
@@ -168,7 +168,11 @@ function ClassOverview({
           blocked={blocked}
           onSave={(trigger) => {
             pdf.run(CLASS_SCOPE, trigger, (options) =>
-              saveClassPdf(included, { ...options, encodePage: exporter.encodePage }),
+              saveClassPdf(included, {
+                ...options,
+                encodePage: exporter.encodePage,
+                footer: PDF_FOOTER,
+              }),
             );
           }}
         />
@@ -408,7 +412,11 @@ function ArbeitDetail({
             const corrected = exporter.correctedArbeit(arbeit, state, entries, profile);
             if (corrected === null) return;
             pdf.run(arbeit.id, trigger, (options) =>
-              saveCorrectedPdf(corrected, { ...options, encodePage: exporter.encodePage }),
+              saveCorrectedPdf(corrected, {
+                ...options,
+                encodePage: exporter.encodePage,
+                footer: PDF_FOOTER,
+              }),
             );
           }}
         />
@@ -494,7 +502,9 @@ export function ReviewView({
         <button type="button" onClick={onBack}>
           Zurück zu den Arbeiten
         </button>
-        <h2 id="review-title">Berichtigung</h2>
+        <h2 id="review-title">
+          Berichtigung <PreviewTag />
+        </h2>
         {profile !== null && <span className="hint">Korrekturprofil {profile.name}</span>}
         {running && (
           <button type="button" className="primary" disabled={state.stopping} onClick={flow.cancel}>

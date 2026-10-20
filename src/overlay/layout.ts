@@ -360,8 +360,7 @@ function fitCodeRows(
   }
   const shortened = shortenCodes(codes, floor, available);
   if (shortened !== null) return { rows: [shortened], size: floor };
-  const last =
-    codes.length > 1 ? `${codes[0] ?? ''}${CODE_SEPARATOR}+${codes.length - 1}` : single;
+  const last = codes.length > 1 ? `${codes[0] ?? ''}${CODE_SEPARATOR}+${codes.length - 1}` : single;
   const width = estimateTextWidth(last, 1);
   return { rows: [last], size: width > 0 ? Math.min(floor, available / width) : floor };
 }

@@ -7,6 +7,17 @@ import type { ReviewState } from './review-flow.ts';
 export const PREVIEW_NOTICE =
   'Vorschau: Im Browser liefert ein Platzhalter die Korrekturen. Sie sind erfunden und dienen nur zum Ausprobieren der Ansicht.';
 
+export const PREVIEW_TAG = 'Vorschau';
+
+export const OCR_NOTICE =
+  'Lesefehler der Texterkennung werden als Fehler markiert. Prüfe die erkannten Texte vor dem Berichtigen.';
+
+export const PDF_FOOTER = 'Vorschau: automatisch erstellte Korrektur, bitte prüfen';
+
+export function PreviewTag() {
+  return <span className="preview-tag">{PREVIEW_TAG}</span>;
+}
+
 interface ControlsProps {
   readonly state: ReviewState;
   readonly profile: CorrectionProfile;
@@ -62,6 +73,7 @@ export function ReviewControls({
           Berichtigen
         </button>
       )}
+      <PreviewTag />
       {!running && hasResults && (
         <button type="button" onClick={onOpen}>
           Berichtigung anzeigen
@@ -74,9 +86,10 @@ export function ReviewControls({
 interface HintProps {
   readonly corrector: CorrectorStatus | null;
   readonly onSetup?: () => void;
+  readonly onCheckTexts?: () => void;
 }
 
-export function ReviewHint({ corrector, onSetup }: HintProps) {
+export function ReviewHint({ corrector, onSetup, onCheckTexts }: HintProps) {
   let text: string;
   if (corrector === null) text = 'Korrekturmodell wird geprüft …';
   else if (corrector.state === 'ready') text = corrector.preview ? PREVIEW_NOTICE : '';
@@ -91,6 +104,19 @@ export function ReviewHint({ corrector, onSetup }: HintProps) {
               {' '}
               <button type="button" onClick={onSetup}>
                 Korrekturmodell einrichten
+              </button>
+            </>
+          )}
+        </p>
+      )}
+      {corrector?.state === 'ready' && (
+        <p className="notice">
+          {OCR_NOTICE}
+          {onCheckTexts !== undefined && (
+            <>
+              {' '}
+              <button type="button" onClick={onCheckTexts}>
+                Erkannte Texte prüfen
               </button>
             </>
           )}
