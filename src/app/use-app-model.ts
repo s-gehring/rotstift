@@ -7,11 +7,12 @@ import { useImportPages } from '../import/use-import-pages.ts';
 import { useModelSetup } from '../models/use-model-setup.ts';
 import { browserModelClient, isTauri } from '../pipeline/environment.ts';
 import type { ModelAvailability } from '../pipeline/provider.ts';
-import { isCounting, isSwitchLocked } from '../pipeline/runner.ts';
+import { isCounting, isSwitchLocked, type Runner } from '../pipeline/runner.ts';
 import { useEnginePhase } from '../pipeline/use-engine-phase.ts';
 import { useTranscriber } from '../pipeline/use-transcriber.ts';
 import { useWordCount } from '../results/use-word-count.ts';
 import { useMonitorPhase } from '../review/engine-phase.ts';
+import type { ReviewFlow } from '../review/review-flow.ts';
 import { useReview } from '../review/use-review.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts';
@@ -25,7 +26,9 @@ import {
   runProgress,
   saveRunKind,
   startDecision,
+  startRun,
   type Readiness,
+  type RunStart,
 } from './run.ts';
 import type { AppModel, ModelRole, Navigation, Route, RunKind } from './types.ts';
 
@@ -47,6 +50,23 @@ function useNow(active: boolean): number {
     return () => window.clearInterval(timer);
   }, [active]);
   return now;
+}
+
+function useRunStart(flow: ReviewFlow, runner: Runner): RunStart | null {
+  const [start, setStart] = useState<RunStart | null>(null);
+  useEffect(
+    () =>
+      flow.subscribe(() => {
+        const review = flow.getState();
+        const at = performance.now();
+        setStart((current) => {
+          if (review.run === null) return null;
+          return current ?? startRun(review, runner.getState(), at);
+        });
+      }),
+    [flow, runner],
+  );
+  return start;
 }
 
 function useNavigation(arbeiten: AppModel['importState']['arbeiten']): Navigation {
@@ -102,6 +122,7 @@ export function useAppModel(): AppModel {
   const reviewing = review.state.run !== null;
   const running = reviewing || isCounting(count.state);
   const now = useNow(running);
+  const runStart = useRunStart(review.flow, count.runner);
 
   const [kind, setStoredKind] = useState<RunKind>(() => loadRunKind());
   const setKind = useCallback((next: RunKind) => {
@@ -223,8 +244,8 @@ export function useAppModel(): AppModel {
       running,
       stopping: review.state.stopping,
       progress: running
-        ? (runProgress(review.state, count.state, engine, now) ?? {
-            label: 'Texterkennung …',
+        ? (runProgress(review.state, count.state, engine, now, runStart) ?? {
+            label: 'Wird vorbereitet …',
             detail: null,
             value: null,
             max: 1,
