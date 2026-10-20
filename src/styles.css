@@ -570,3 +570,14 @@ button.danger:hover:not(:disabled) {
   align-items: center;
   gap: 0.5rem 0.75rem;
 }
+
+.pdf-progress {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.pdf-progress progress {
+  accent-color: var(--accent);
+}

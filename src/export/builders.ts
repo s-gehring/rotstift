@@ -1,6 +1,7 @@
 import { PDFDocument, type PDFImage } from 'pdf-lib';
 import { listErrors } from '../annotations/transcript.ts';
 import { computeStatistics } from '../stats/statistics.ts';
+import { incompleteArbeitenNote, incompletePagesNote } from './notes.ts';
 import { encodePageImage } from './page-image.ts';
 import { A4, embedFonts, type Fonts } from './sheet.ts';
 import {
@@ -105,6 +106,27 @@ function totalWords(pages: readonly ExportPage[]): number {
   return pages.reduce((sum, page) => sum + (pageWords(page) ?? 0), 0);
 }
 
+interface WordSummary {
+  readonly words: readonly (number | undefined)[];
+  readonly total: number | undefined;
+  readonly note: string | undefined;
+}
+
+function summarizeWords(arbeit: WordCountArbeit): WordSummary {
+  const { pages } = arbeit;
+  if (arbeit.words !== undefined && arbeit.words.length !== pages.length) {
+    throw new RangeError(`Die Wortzahlen der Arbeit „${arbeit.title}“ passen nicht zu den Seiten.`);
+  }
+  const words = arbeit.words?.map((count) => count ?? undefined) ?? pages.map(pageWords);
+  const counted = words.filter((count) => count !== undefined).length;
+  const complete = counted === pages.length;
+  return {
+    words,
+    total: complete ? words.reduce<number>((sum, count) => sum + (count ?? 0), 0) : undefined,
+    note: complete ? undefined : incompletePagesNote(counted, pages.length),
+  };
+}
+
 function requireConsistentStatistics(arbeit: CorrectedArbeit): void {
   const transcripts = arbeit.pages.flatMap((page) => (page.transcript ? [page.transcript] : []));
   const errors = transcripts.flatMap(listErrors);
@@ -138,10 +160,11 @@ async function appendCorrected(context: Context, arbeit: CorrectedArbeit): Promi
 
 async function appendWordCount(context: Context, arbeit: WordCountArbeit): Promise<void> {
   requirePages(arbeit);
+  const summary = summarizeWords(arbeit);
   await appendPages(context, arbeit.pages, undefined);
   drawWordCountPage(context.doc, context.fonts, {
     title: arbeit.title,
-    words: arbeit.pages.map(pageWords),
+    ...summary,
     date: context.date,
   });
 }
@@ -165,19 +188,37 @@ export async function buildWordCountPdf(
 }
 
 function coverEntry(arbeit: ClassArbeit): CoverEntry {
-  return arbeit.kind === 'corrected'
-    ? {
-        name: arbeit.title,
-        pages: arbeit.pages.length,
-        words: arbeit.statistics.words,
-        errors: arbeit.statistics.errors,
-      }
-    : {
-        name: arbeit.title,
-        pages: arbeit.pages.length,
-        words: totalWords(arbeit.pages),
-        errors: undefined,
-      };
+  if (arbeit.kind === 'corrected') {
+    return {
+      name: arbeit.title,
+      pages: arbeit.pages.length,
+      words: arbeit.statistics.words,
+      errors: arbeit.statistics.errors,
+    };
+  }
+  const summary = summarizeWords(arbeit);
+  return {
+    name: arbeit.title,
+    pages: arbeit.pages.length,
+    words: summary.total,
+    errors: undefined,
+    ...(summary.note !== undefined && { note: summary.note }),
+  };
+}
+
+function coverTotal(entries: readonly CoverEntry[]): CoverEntry {
+  const complete = entries.filter((entry) => entry.words !== undefined).length;
+  const sum = (field: 'words' | 'errors') =>
+    entries.every((entry) => entry[field] !== undefined)
+      ? entries.reduce((total, entry) => total + (entry[field] ?? 0), 0)
+      : undefined;
+  return {
+    name: 'Gesamt',
+    pages: entries.reduce((total, entry) => total + entry.pages, 0),
+    words: sum('words'),
+    errors: sum('errors'),
+    ...(complete < entries.length && { note: incompleteArbeitenNote(complete, entries.length) }),
+  };
 }
 
 export async function buildClassPdf(
@@ -188,9 +229,11 @@ export async function buildClassPdf(
   const title = options.title ?? 'Alle Arbeiten';
   const total = arbeiten.reduce((sum, arbeit) => sum + arbeit.pages.length, 0);
   const context = await createContext(title, total, options);
+  const entries = arbeiten.map(coverEntry);
   drawCoverPage(context.doc, context.fonts, {
     title,
-    entries: arbeiten.map(coverEntry),
+    entries,
+    total: coverTotal(entries),
     date: context.date,
   });
   for (const arbeit of arbeiten) {

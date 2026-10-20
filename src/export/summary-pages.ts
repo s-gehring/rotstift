@@ -131,8 +131,12 @@ export function drawStatisticsPage(
 export interface WordCountPageInput {
   readonly title: string;
   readonly words: readonly (number | undefined)[];
+  readonly total: number | undefined;
+  readonly note: string | undefined;
   readonly date: Date;
 }
+
+const figure = (count: number | undefined) => (count === undefined ? DASH : String(count));
 
 function drawTableHead(
   sheet: Sheet,
@@ -154,9 +158,8 @@ function drawTableHead(
 export function drawWordCountPage(
   doc: PDFDocument,
   fonts: Fonts,
-  { title, words, date }: WordCountPageInput,
+  { title, words, total, note, date }: WordCountPageInput,
 ): void {
-  const total = words.reduce<number>((sum, count) => sum + (count ?? 0), 0);
   const sheet = new Sheet(doc, fonts, (next) => {
     drawTableHead(next, [
       ['Seite', next.left, false],
@@ -165,7 +168,12 @@ export function drawWordCountPage(
   });
   drawHeading(sheet, { label: 'Wortzahl', title });
   drawFacts(sheet, [['Datum', formatDate(date)]]);
-  drawFigures(sheet, [['Wörter gesamt', String(total)]]);
+  drawFigures(sheet, [['Wörter gesamt', figure(total)]]);
+  if (note !== undefined) {
+    sheet.y += 14;
+    sheet.text(note, sheet.left, sheet.y, { size: 10.5, color: COLORS.muted });
+    sheet.y -= 26;
+  }
   drawTableHead(sheet, [
     ['Seite', sheet.left, false],
     ['Wörter', sheet.right, true],
@@ -173,30 +181,28 @@ export function drawWordCountPage(
   words.forEach((count, index) => {
     sheet.ensure(ROW);
     sheet.text(`Seite ${index + 1}`, sheet.left, sheet.y, { size: 11 });
-    sheet.text(count === undefined ? DASH : String(count), sheet.right, sheet.y, {
-      size: 11,
-      bold: true,
-      align: 'right',
-    });
+    sheet.text(figure(count), sheet.right, sheet.y, { size: 11, bold: true, align: 'right' });
     sheet.y -= ROW;
   });
   sheet.ensure(ROW);
   sheet.rule(sheet.y + ROW - 8, COLORS.text, 1);
   sheet.text('Gesamt', sheet.left, sheet.y, { size: 11, bold: true });
-  sheet.text(String(total), sheet.right, sheet.y, { size: 11, bold: true, align: 'right' });
+  sheet.text(figure(total), sheet.right, sheet.y, { size: 11, bold: true, align: 'right' });
   drawFooter(sheet);
 }
 
 export interface CoverEntry {
   readonly name: string;
   readonly pages: number;
-  readonly words: number;
+  readonly words: number | undefined;
   readonly errors: number | undefined;
+  readonly note?: string;
 }
 
 export interface CoverPageInput {
   readonly title: string;
   readonly entries: readonly CoverEntry[];
+  readonly total: CoverEntry;
   readonly date: Date;
 }
 
@@ -208,10 +214,23 @@ const coverColumns = (sheet: Sheet) =>
     ['Fehler', sheet.right, true],
   ] as const;
 
+function drawCoverRow(sheet: Sheet, entry: CoverEntry, bold = false): void {
+  sheet.ensure(entry.note === undefined ? ROW : ROW + 12);
+  sheet.text(entry.name, sheet.left, sheet.y, { size: 11, bold, maxWidth: sheet.width - 200 });
+  sheet.text(String(entry.pages), sheet.right - 170, sheet.y, { size: 11, bold, align: 'right' });
+  sheet.text(figure(entry.words), sheet.right - 90, sheet.y, { size: 11, bold, align: 'right' });
+  sheet.text(figure(entry.errors), sheet.right, sheet.y, { size: 11, bold: true, align: 'right' });
+  sheet.y -= ROW;
+  if (entry.note !== undefined) {
+    sheet.text(entry.note, sheet.left, sheet.y + 8, { size: 9, color: COLORS.muted });
+    sheet.y -= 12;
+  }
+}
+
 export function drawCoverPage(
   doc: PDFDocument,
   fonts: Fonts,
-  { title, entries, date }: CoverPageInput,
+  { title, entries, total, date }: CoverPageInput,
 ): void {
   const sheet = new Sheet(doc, fonts, (next) => drawTableHead(next, coverColumns(next)));
   drawHeading(sheet, { label: 'Klassenübersicht', title });
@@ -220,17 +239,8 @@ export function drawCoverPage(
     ['Arbeiten', String(entries.length)],
   ]);
   drawTableHead(sheet, coverColumns(sheet));
-  for (const entry of entries) {
-    sheet.ensure(ROW);
-    sheet.text(entry.name, sheet.left, sheet.y, { size: 11, maxWidth: sheet.width - 200 });
-    sheet.text(String(entry.pages), sheet.right - 170, sheet.y, { size: 11, align: 'right' });
-    sheet.text(String(entry.words), sheet.right - 90, sheet.y, { size: 11, align: 'right' });
-    sheet.text(entry.errors === undefined ? DASH : String(entry.errors), sheet.right, sheet.y, {
-      size: 11,
-      bold: true,
-      align: 'right',
-    });
-    sheet.y -= ROW;
-  }
+  for (const entry of entries) drawCoverRow(sheet, entry);
+  sheet.rule(sheet.y + ROW - 8, COLORS.text, 1);
+  drawCoverRow(sheet, total, true);
   drawFooter(sheet);
 }
