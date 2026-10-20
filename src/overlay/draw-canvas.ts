@@ -51,17 +51,32 @@ export function drawOverlay(context: OverlayContext, model: OverlayModel): void 
 export interface RasterizeInput {
   readonly image: CanvasImageSource;
   readonly model: OverlayModel;
+  readonly type?: 'image/png' | 'image/jpeg';
+  readonly quality?: number;
+  readonly maxEdge?: number;
 }
 
-export async function rasterizeAnnotatedPage({ image, model }: RasterizeInput): Promise<Blob> {
-  await ensureOverlayFont();
-  const canvas = createCanvas(model.page.width, model.page.height);
+export async function rasterizeAnnotatedPage({
+  image,
+  model,
+  type = 'image/png',
+  quality,
+  maxEdge = Number.POSITIVE_INFINITY,
+}: RasterizeInput): Promise<Blob> {
+  if (model.items.length > 0) await ensureOverlayFont();
+  const shrink = Math.min(1, maxEdge / Math.max(model.page.width, model.page.height));
+  const canvas = createCanvas(model.page.width * shrink, model.page.height * shrink);
   try {
     const context = get2dContext(canvas);
+    if (type === 'image/jpeg') {
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    context.imageSmoothingQuality = 'high';
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     context.scale(canvas.width / model.page.width, canvas.height / model.page.height);
     drawOverlay(context, model);
-    return await canvasToBlob(canvas, 'image/png');
+    return await canvasToBlob(canvas, type, quality);
   } finally {
     releaseCanvas(canvas);
   }
