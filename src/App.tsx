@@ -64,6 +64,7 @@ export function App() {
         <ModelSetupDialog
           setup={setup}
           open={dialogOpen}
+          switchDisabled={count.state.batch !== null}
           onClose={() => {
             setDialogOpen(false);
           }}

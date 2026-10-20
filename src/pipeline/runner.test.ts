@@ -599,6 +599,29 @@ describe('runner', () => {
     });
   });
 
+  it('keeps counted pages when the transcriber is swapped and uses the new one for the rest', async () => {
+    const t = setup();
+    t.runner.setPages([page('a'), page('b')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.calls[0]?.resolve(t.ok('eins', 'zwei'));
+    await t.waitForCalls(2);
+    t.calls[1]?.resolve({ ok: false, error: { kind: 'cancelled' } });
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+
+    const second = vi.fn<PageTranscriber['transcribe']>(() =>
+      Promise.resolve({ ok: true, lines: ['drei'] }),
+    );
+    t.runner.setTranscriber({ transcribe: second });
+    expect(t.runner.getState().entries['a']).toMatchObject({ status: 'done', text: 'eins\nzwei' });
+
+    t.runner.start();
+    await vi.waitFor(() => expect(t.status('b')).toBe('done'));
+    expect(second).toHaveBeenCalledOnce();
+    expect(t.runner.getState().entries['a']?.text).toBe('eins\nzwei');
+    expect(t.runner.getState().entries['b']?.text).toBe('drei');
+  });
+
   it('notifies subscribers and stops after unsubscribe', async () => {
     const t = setup();
     let notifications = 0;

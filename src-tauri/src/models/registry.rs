@@ -233,6 +233,20 @@ mod tests {
     }
 
     #[test]
+    fn the_bundled_registry_lists_the_default_and_the_stronger_model() {
+        let registry = registry().unwrap();
+        let ids: Vec<&str> = registry.models.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["glm-ocr-q8", "qwen3-vl-4b-q4"]);
+        let stronger = registry.find("qwen3-vl-4b-q4").unwrap();
+        assert_eq!(stronger.recommended_ram_gb, 16);
+        assert_eq!(stronger.server.context_size, 4096);
+        assert_eq!(stronger.server.image_max_tokens, Some(1024));
+        assert_eq!(stronger.request.image_max_edge, 1536);
+        assert_eq!(stronger.files.model.bytes, 2_497_281_664);
+        assert_eq!(stronger.files.mmproj.bytes, 453_974_304);
+    }
+
+    #[test]
     fn rejects_unknown_fields_and_bad_ids() {
         assert!(rejection(|m| m["extra"] = json!(1)).contains("unknown field"));
         assert!(rejection(|m| m["id"] = json!("Upper Case")).contains("invalid model id"));

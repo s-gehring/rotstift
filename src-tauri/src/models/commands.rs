@@ -8,6 +8,7 @@ use tauri_plugin_dialog::DialogExt;
 use super::download::DownloadError;
 use super::import::ImportOutcome;
 use super::manager::{self, DownloadEvent, ModelManager, ModelStatus};
+use super::selection;
 use super::system;
 use crate::llm::LlmRuntime;
 use crate::llm::commands::runtime_paths;
@@ -76,7 +77,14 @@ pub async fn model_delete<R: Runtime>(
 ) -> Result<ModelStatus, DownloadError> {
     let entry = manager::entry(&model_id)?;
     let dir = models_dir(&app)?;
-    models.delete(&dir, entry, || drop(llm.stop())).await?;
+    let serving = selection::serves_model(&llm.status().await, entry);
+    models
+        .delete(&dir, entry, || {
+            if serving {
+                drop(llm.stop());
+            }
+        })
+        .await?;
     Ok(models.status(&dir, entry).await)
 }
 
@@ -110,9 +118,14 @@ pub async fn model_import<R: Runtime>(
         .into_iter()
         .filter_map(|file| file.into_path().ok())
         .collect();
+    let serving = selection::serves_model(&llm.status().await, entry);
     Ok(Some(
         models
-            .import(&dir, entry, sources, || drop(llm.stop()))
+            .import(&dir, entry, sources, || {
+                if serving {
+                    drop(llm.stop());
+                }
+            })
             .await?,
     ))
 }
@@ -125,4 +138,25 @@ pub async fn model_verify<R: Runtime>(
 ) -> Result<ModelStatus, DownloadError> {
     let entry = manager::entry(&model_id)?;
     models.verify(&models_dir(&app)?, entry).await
+}
+
+#[tauri::command]
+pub fn model_selection<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, DownloadError> {
+    Ok(selection::load(&selection::selection_path(&models_dir(
+        &app,
+    )?)))
+}
+
+#[tauri::command]
+pub async fn model_select<R: Runtime>(
+    app: AppHandle<R>,
+    llm: State<'_, LlmRuntime>,
+    model_id: String,
+) -> Result<(), DownloadError> {
+    let entry = manager::entry(&model_id)?;
+    selection::save(&selection::selection_path(&models_dir(&app)?), entry)?;
+    if selection::runs_other_model(&llm.status().await, entry) {
+        drop(llm.stop());
+    }
+    Ok(())
 }

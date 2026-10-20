@@ -1,11 +1,12 @@
 import { pushSample, type Sample } from './format.ts';
-import { MODELS, recommendModel, type ModelInfo } from './registry.ts';
+import { MODELS, offeredModels, recommendModel, type ModelInfo } from './registry.ts';
 import type { DownloadError, DownloadEvent, HardwareInfo, ModelStatus } from './types.ts';
 
 export interface SetupState {
   readonly loaded: boolean;
   readonly statuses: Readonly<Record<string, ModelStatus>>;
   readonly hardware: HardwareInfo | null;
+  readonly selectedId: string | null;
   readonly samples: readonly Sample[];
   readonly error: DownloadError | null;
   readonly note: string | null;
@@ -13,7 +14,13 @@ export interface SetupState {
 }
 
 export type SetupAction =
-  | { type: 'loaded'; statuses: readonly ModelStatus[]; hardware: HardwareInfo | null }
+  | {
+      type: 'loaded';
+      statuses: readonly ModelStatus[];
+      hardware: HardwareInfo | null;
+      selectedId?: string | null;
+    }
+  | { type: 'selected'; modelId: string }
   | { type: 'status'; status: ModelStatus }
   | { type: 'mark'; modelId: string; state: ModelStatus['state'] }
   | { type: 'event'; event: DownloadEvent; at: number }
@@ -25,6 +32,7 @@ export const INITIAL_SETUP: SetupState = {
   loaded: false,
   statuses: {},
   hardware: null,
+  selectedId: null,
   samples: [],
   error: null,
   note: null,
@@ -86,6 +94,7 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
         ...state,
         loaded: true,
         hardware: action.hardware ?? state.hardware,
+        selectedId: action.selectedId === undefined ? state.selectedId : action.selectedId,
         statuses: Object.fromEntries(
           [...Object.values(state.statuses), ...action.statuses].map((status) => [
             status.modelId,
@@ -93,6 +102,8 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
           ]),
         ),
       };
+    case 'selected':
+      return { ...state, selectedId: action.modelId, samples: [], error: null, note: null };
     case 'status':
       return { ...state, statuses: withStatus(state, action.status) };
     case 'mark': {
@@ -117,7 +128,9 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
 }
 
 export function activeModel(state: SetupState, models: readonly ModelInfo[] = MODELS): ModelInfo {
-  const recommended = recommendModel(state.hardware?.totalRamBytes ?? null, models);
-  const ready = models.filter((model) => state.statuses[model.id]?.state === 'ready');
-  return ready.find((model) => model.id === recommended.id) ?? ready[0] ?? recommended;
+  const ram = state.hardware?.totalRamBytes ?? null;
+  const chosen = models.find((model) => model.id === state.selectedId);
+  const allowed =
+    chosen !== undefined && (ram === null || offeredModels(ram, models).includes(chosen));
+  return allowed ? chosen : recommendModel(models);
 }

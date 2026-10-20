@@ -611,8 +611,12 @@ async fn checks_free_disk_space_before_downloading() {
 }
 
 fn leaked_entry(model: ModelFile, mmproj: ModelFile) -> &'static ModelEntry {
+    leaked_entry_with_id("test-model", model, mmproj)
+}
+
+fn leaked_entry_with_id(id: &str, model: ModelFile, mmproj: ModelFile) -> &'static ModelEntry {
     Box::leak(Box::new(ModelEntry {
-        id: "test-model".into(),
+        id: id.into(),
         display_name: "Test".into(),
         license: "MIT".into(),
         recommended_ram_gb: 8,
@@ -950,4 +954,66 @@ async fn import_and_delete_report_their_own_status_while_running() {
     manager.delete(&dir, entry, observe).await.unwrap();
     assert_eq!(observed.lock().unwrap().take(), Some(State::Deleting));
     assert_eq!(manager.running_state("test-model"), None);
+}
+
+#[tokio::test]
+async fn two_models_are_installed_side_by_side_and_managed_separately() {
+    let bodies = [
+        (content(51, 200_000), content(52, 30_000)),
+        (content(53, 250_000), content(54, 40_000)),
+    ];
+    let server = TestServer::start(
+        &[
+            ("a.gguf", bodies[0].0.clone()),
+            ("a-proj.gguf", bodies[0].1.clone()),
+            ("b.gguf", bodies[1].0.clone()),
+            ("b-proj.gguf", bodies[1].1.clone()),
+        ],
+        Behavior::default(),
+    )
+    .await;
+    let first = leaked_entry_with_id(
+        "first",
+        file(&server, "a.gguf", &bodies[0].0),
+        file(&server, "a-proj.gguf", &bodies[0].1),
+    );
+    let second = leaked_entry_with_id(
+        "second",
+        file(&server, "b.gguf", &bodies[1].0),
+        file(&server, "b-proj.gguf", &bodies[1].1),
+    );
+    let dir = temp_dir("side-by-side");
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let emit: super::manager::Emitter = Arc::new(move |event: DownloadEvent| {
+        let _ = sender.send(event);
+    });
+
+    manager.start(&dir, first, Arc::clone(&emit)).await.unwrap();
+    manager
+        .start(&dir, second, Arc::clone(&emit))
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        assert_eq!(next_final(&mut events).await, Update::Done);
+    }
+    assert_eq!(manager.status(&dir, first).await.state, State::Ready);
+    assert_eq!(manager.status(&dir, second).await.state, State::Ready);
+
+    manager.delete(&dir, first, || {}).await.unwrap();
+    assert_eq!(manager.status(&dir, first).await.state, State::Missing);
+    assert_eq!(manager.status(&dir, second).await.state, State::Ready);
+    assert!(is_ready(&dir, second).await);
+    assert!(manager.startable(&dir, second).await);
+    assert!(!manager.startable(&dir, first).await);
+
+    let observed = Mutex::new(None);
+    manager
+        .delete(&dir, second, || {
+            *observed.lock().unwrap() = Some((manager.is_busy("second"), manager.is_busy("first")));
+        })
+        .await
+        .unwrap();
+    assert_eq!(observed.lock().unwrap().take(), Some((true, false)));
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
 }

@@ -6,6 +6,7 @@ import {
   formatSize,
   remainingText,
 } from './format.ts';
+import { ModelChoice } from './ModelChoice.tsx';
 import { isLowOnMemory, modelSource, totalBytes, type ModelInfo } from './registry.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
@@ -13,6 +14,7 @@ interface Props {
   readonly setup: ModelSetup;
   readonly open: boolean;
   readonly onClose: () => void;
+  readonly switchDisabled: boolean;
 }
 
 function useModalDialog(open: boolean) {
@@ -106,7 +108,7 @@ function OfflineSetup({ model }: { readonly model: ModelInfo }) {
   );
 }
 
-export function ModelSetupDialog({ setup, open, onClose }: Props) {
+export function ModelSetupDialog({ setup, open, onClose, switchDisabled }: Props) {
   const ref = useModalDialog(open);
   const { model, status, state } = setup;
   const source = modelSource(model);
@@ -140,6 +142,8 @@ export function ModelSetupDialog({ setup, open, onClose }: Props) {
       onCancel={onClose}
     >
       <h2 id="model-dialog-title">Texterkennung einrichten</h2>
+
+      <ModelChoice setup={setup} disabled={switchDisabled} />
 
       {ready ? (
         <p role="status">

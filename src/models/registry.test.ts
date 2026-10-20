@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import { TRANSCRIBE_PROMPT } from '../../eval/models.ts';
 import {
   MODELS,
+  DEFAULT_MODEL_ID,
+  findModel,
   isLowOnMemory,
+  modelNote,
   modelSource,
+  offeredModels,
   recommendModel,
   totalBytes,
   type ModelInfo,
 } from './registry.ts';
 
 const GIB = 1024 ** 3;
-const model = recommendModel(null);
+const model = recommendModel();
+
+const ids = (ram: number | null) => offeredModels(ram).map((entry) => entry.id);
 
 function variant(id: string, recommendedRamGb: number): ModelInfo {
   return { ...model, id, recommendedRamGb };
@@ -42,13 +49,52 @@ describe('registry', () => {
     expect(isLowOnMemory(model, 4 * GIB)).toBe(true);
   });
 
-  it('recommends the largest model that fits and the smallest one otherwise', () => {
+  it('keeps GLM-OCR as the default and lists the stronger model second', () => {
+    expect(MODELS.map((entry) => entry.id)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+    expect(recommendModel().id).toBe(DEFAULT_MODEL_ID);
+  });
+
+  it('describes the stronger model with the evaluated values and the evaluation prompt', () => {
+    const stronger = findModel('qwen3-vl-4b-q4');
+    expect(stronger).toMatchObject({
+      displayName: 'Qwen3-VL 4B Instruct (Q4_K_M)',
+      license: 'Apache-2.0',
+      recommendedRamGb: 16,
+      server: { contextSize: 4096, imageMaxTokens: 1024, threads: null, gpuLayers: null },
+      request: { maxOutputTokens: 2048, temperature: 0, imageMaxEdge: 1536 },
+      prompt: TRANSCRIBE_PROMPT,
+    });
+    expect(stronger && totalBytes(stronger)).toBe(2_497_281_664 + 453_974_304);
+  });
+
+  it('recommends the default on every machine, even a large one', () => {
+    for (const ram of [null, 2 * GIB, 8 * GIB, 64 * GIB]) {
+      expect(recommendModel().id).toBe(DEFAULT_MODEL_ID);
+      expect(offeredModels(ram)[0]?.id).toBe(DEFAULT_MODEL_ID);
+    }
     const small = variant('small', 4);
     const large = variant('large', 16);
-    const models = [small, large];
-    expect(recommendModel(32 * GIB, models).id).toBe('large');
-    expect(recommendModel(8 * GIB, models).id).toBe('small');
-    expect(recommendModel(2 * GIB, models).id).toBe('small');
-    expect(recommendModel(null, models).id).toBe('small');
+    expect(recommendModel([large, small]).id).toBe('small');
+    expect(recommendModel([variant(DEFAULT_MODEL_ID, 8), large]).id).toBe(DEFAULT_MODEL_ID);
+    expect(() => recommendModel([])).toThrow('Modellliste ist leer');
+  });
+
+  it('offers the stronger model from 16 GB, with a tolerance for reserved memory', () => {
+    expect(ids(null)).toEqual([DEFAULT_MODEL_ID]);
+    expect(ids(8 * GIB)).toEqual([DEFAULT_MODEL_ID]);
+    expect(ids(12 * GIB)).toEqual([DEFAULT_MODEL_ID]);
+    expect(ids(15.7 * GIB)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+    expect(ids(16 * GIB)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+    expect(ids(48 * GIB)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+    expect(offeredModels(2 * GIB, [variant('only', 32)]).map((entry) => entry.id)).toEqual([
+      'only',
+    ]);
+  });
+
+  it('describes speed and accuracy of the stronger model only', () => {
+    const note = modelNote(findModel('qwen3-vl-4b-q4') ?? model);
+    expect(note?.speed).toContain('doppelt so langsam');
+    expect(note?.accuracy).toContain('Wörterzählen');
+    expect(modelNote(model)).toBeNull();
   });
 });

@@ -53,27 +53,48 @@ export function isLowOnMemory(model: ModelInfo, totalRamBytes: number): boolean 
   return totalRamBytes < recommendedRamBytes(model) * LOW_RAM_TOLERANCE;
 }
 
-export function recommendModel(
-  totalRamBytes: number | null,
-  models: readonly ModelInfo[] = MODELS,
-): ModelInfo {
-  let smallest: ModelInfo | undefined;
-  let largestFitting: ModelInfo | undefined;
-  for (const model of models) {
-    if (smallest === undefined || model.recommendedRamGb < smallest.recommendedRamGb) {
-      smallest = model;
-    }
-    const fits = totalRamBytes !== null && !isLowOnMemory(model, totalRamBytes);
-    if (
-      fits &&
-      (largestFitting === undefined || model.recommendedRamGb > largestFitting.recommendedRamGb)
-    ) {
-      largestFitting = model;
-    }
-  }
-  const chosen = largestFitting ?? smallest;
+export const DEFAULT_MODEL_ID = 'glm-ocr-q8';
+
+export function recommendModel(models: readonly ModelInfo[] = MODELS): ModelInfo {
+  const chosen =
+    models.find((model) => model.id === DEFAULT_MODEL_ID) ??
+    models.reduce<ModelInfo | undefined>(
+      (smallest, model) =>
+        smallest === undefined || model.recommendedRamGb < smallest.recommendedRamGb
+          ? model
+          : smallest,
+      undefined,
+    );
   if (chosen === undefined) throw new Error('Die Modellliste ist leer.');
   return chosen;
+}
+
+export function offeredModels(
+  totalRamBytes: number | null,
+  models: readonly ModelInfo[] = MODELS,
+): readonly ModelInfo[] {
+  const fallback = recommendModel(models);
+  return models.filter(
+    (model) =>
+      model.id === fallback.id || (totalRamBytes !== null && !isLowOnMemory(model, totalRamBytes)),
+  );
+}
+
+export interface ModelNote {
+  readonly speed: string;
+  readonly accuracy: string;
+}
+
+const MODEL_NOTES: Readonly<Record<string, ModelNote>> = {
+  'qwen3-vl-4b-q4': {
+    speed: 'Etwa doppelt so langsam wie GLM-OCR.',
+    accuracy:
+      'Zählt die Wörter genauer, im Test weichen sie im Mittel um 0,9 statt 1,6 % ab. Nur zum Wörterzählen geeignet, weil es beim Abschreiben gelegentlich Fehler der Schüler verbessert.',
+  },
+};
+
+export function modelNote(model: ModelInfo): ModelNote | null {
+  return MODEL_NOTES[model.id] ?? null;
 }
 
 export interface ModelSource {

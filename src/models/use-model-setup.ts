@@ -40,9 +40,10 @@ export function useModelSetup(client: ModelClient | null) {
   const refresh = useCallback(async () => {
     if (client === null) return;
     try {
-      const [statuses, hardware] = await Promise.all([
+      const [statuses, hardware, selectedId] = await Promise.all([
         Promise.all(MODELS.map((model) => client.status(model.id))),
         client.hardware().catch(() => null),
+        client.selection().catch(() => null),
       ]);
       dispatch({
         type: 'loaded',
@@ -50,6 +51,7 @@ export function useModelSetup(client: ModelClient | null) {
           status.state === 'unverified' ? { ...status, state: 'verifying' } : status,
         ),
         hardware,
+        selectedId,
       });
       for (const status of statuses) {
         if (status.state === 'unverified') void verify(status.modelId);
@@ -92,6 +94,18 @@ export function useModelSetup(client: ModelClient | null) {
       dispatch({ type: 'error', error: toDownloadError(error) });
     }
   }, []);
+
+  const select = useCallback(
+    async (modelId: string) => {
+      if (client === null || modelId === model.id) return;
+      dispatch({ type: 'error', error: null });
+      await guard(async () => {
+        await client.select(modelId);
+        dispatch({ type: 'selected', modelId });
+      });
+    },
+    [client, guard, model.id],
+  );
 
   const verifyAgain = useCallback(async () => {
     dispatch({ type: 'error', error: null });
@@ -146,6 +160,7 @@ export function useModelSetup(client: ModelClient | null) {
     state,
     model,
     status,
+    select,
     download,
     cancel,
     remove,
