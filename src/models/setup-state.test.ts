@@ -162,6 +162,16 @@ describe('setupReducer', () => {
     expect(errorOf(state, STRONGER)).toEqual({ kind: 'io' });
   });
 
+  it('forgets the general error once the models could be loaded', () => {
+    const failed = setupReducer(INITIAL_SETUP, {
+      type: 'error',
+      modelId: ANY_MODEL,
+      error: { kind: 'io' },
+    });
+    const state = setupReducer(failed, { type: 'loaded', statuses: [missing], hardware: null });
+    expect(errorOf(state, model.id)).toBeNull();
+  });
+
   it('reports a running job for any model', () => {
     expect(hasRunningJob(INITIAL_SETUP)).toBe(false);
     expect(hasRunningJob(loaded())).toBe(false);

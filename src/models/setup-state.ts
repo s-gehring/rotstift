@@ -181,6 +181,7 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
         hardware: action.hardware ?? state.hardware,
         selectedId: state.loaded ? selectedId : settledSelection(selectedId, statuses),
         statuses,
+        errors: withError(state, ANY_MODEL, null),
       };
     }
     case 'selected':

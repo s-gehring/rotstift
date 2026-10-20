@@ -8,13 +8,13 @@ import type { ImportPage } from '../import/pages.ts';
 import { saveClassPdf, saveCorrectedPdf } from '../export/save-pdf.ts';
 import { AnnotatedPage } from '../overlay/AnnotatedPage.tsx';
 import { markText } from '../overlay/hint-layout.ts';
-import { formatCount, pagesText, wordsText } from '../results/summary.ts';
+import { formatCount, wordsText } from '../results/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
-import { engineText, IDLE_ENGINE, type ReviewEngine } from './engine-phase.ts';
 import {
   arbeitExportBlock,
   createReviewExport,
   EXPORT_BLOCK_TEXT,
+  PDF_FOOTER,
   type ReviewExport,
 } from './export-input.ts';
 import { useObjectUrl } from './page-image.ts';
@@ -25,7 +25,6 @@ import type {
   ReviewState,
   ReviewStatus,
 } from './review-flow.ts';
-import { PDF_FOOTER, PREVIEW_NOTICE, PreviewTag } from './ReviewControls.tsx';
 import { PdfControls, usePdfSave, type PdfSave } from './ReviewPdf.tsx';
 import {
   errorsText,
@@ -45,13 +44,11 @@ type Display = 'notes' | 'original';
 
 interface ReviewViewProps {
   readonly arbeiten: readonly Arbeit[];
+  readonly arbeitId: string;
   readonly flow: ReviewFlow;
   readonly state: ReviewState;
   readonly entries: Entries;
   readonly canRetry: boolean;
-  readonly preview: boolean;
-  readonly engine?: ReviewEngine;
-  readonly onBack: () => void;
 }
 
 const STATUS_TEXT: Readonly<Record<ReviewStatus, string>> = {
@@ -68,45 +65,9 @@ const STATUS_TEXT: Readonly<Record<ReviewStatus, string>> = {
 
 const STALE_TEXT = 'Veraltet: Nach Drehen oder Bearbeiten bitte erneut berichtigen';
 
-const PHASE_TEXT = {
-  transcribing: 'Texterkennung',
-  locating: 'Zeilen suchen',
-  correcting: 'Korrektur',
-} as const;
-
 const CLASS_SCOPE = 'class';
 
 const RETRYABLE: ReadonlySet<ReviewStatus> = new Set(['unreadable', 'failed', 'cancelled']);
-
-function progressText(
-  state: ReviewState,
-  arbeiten: readonly Arbeit[],
-  entries: Entries,
-  engine: ReviewEngine,
-): string {
-  const { run } = state;
-  if (state.stopping) return 'Wird abgebrochen …';
-  if (run !== null) {
-    const label = PHASE_TEXT[run.phase];
-    const loading = engineText(run, engine);
-    const position =
-      run.total === 0
-        ? `${label} …`
-        : `${label}: Seite ${Math.min(run.finished + 1, run.total)} von ${run.total}`;
-    return loading === null ? position : `${position} · ${loading}`;
-  }
-  if (state.outcome === 'cancelled') return 'Abgebrochen.';
-  if (state.outcome === 'finished') {
-    const summary = summarizeClass(arbeiten, state, entries);
-    const pages = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.pageCount, 0);
-    const corrected = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.corrected, 0);
-    const problems = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.problems, 0);
-    const parts = [`Fertig: ${corrected} von ${pagesText(pages)} berichtigt.`];
-    if (problems > 0) parts.push(`${pagesText(problems)} mit Problemen.`);
-    return parts.join(' ');
-  }
-  return '';
-}
 
 function typeName(profile: CorrectionProfile, code: string): string {
   return findErrorKind(profile.language, code)?.name ?? code;
@@ -138,7 +99,7 @@ function topTypes(statistics: Statistics, profile: CorrectionProfile): string {
   return types.length === 0 ? 'keine' : types.map((t) => `${t.type} (${t.count})`).join(', ');
 }
 
-function ClassOverview({
+export function ClassOverview({
   arbeiten,
   state,
   entries,
@@ -542,72 +503,30 @@ function ArbeitDetail({
 
 export function ReviewView({
   arbeiten,
+  arbeitId,
   flow,
   state,
   entries,
   canRetry,
-  preview,
-  engine = IDLE_ENGINE,
-  onBack,
 }: ReviewViewProps) {
-  const [selected, setSelected] = useState<string | undefined>(undefined);
   const profile = state.profile;
-  const reviewed = arbeiten.filter((arbeit) =>
-    arbeit.pages.some((page) => state.pages[page.id] !== undefined),
-  );
-  const current = reviewed.find((arbeit) => arbeit.id === selected) ?? reviewed[0];
-  const running = state.run !== null;
-  const previewResults = Object.values(state.pages).some((page) => page.result?.preview === true);
+  const arbeit = arbeiten.find((candidate) => candidate.id === arbeitId);
   const pdf = usePdfSave();
   const exporter = useMemo(() => createReviewExport(), []);
-
+  if (profile === null || arbeit === undefined) return null;
   return (
-    <section className="review" aria-labelledby="review-title">
-      <div className="review-header">
-        <button type="button" onClick={onBack}>
-          Zurück zu den Arbeiten
-        </button>
-        <h2 id="review-title">
-          Berichtigung <PreviewTag />
-        </h2>
-        {profile !== null && <span className="hint">Korrekturprofil {profile.name}</span>}
-        {running && (
-          <button type="button" className="primary" disabled={state.stopping} onClick={flow.cancel}>
-            Abbrechen
-          </button>
-        )}
-        <p className="progress" role="status">
-          {progressText(state, arbeiten, entries, engine)}
-        </p>
-      </div>
-      {(preview || previewResults) && <p className="notice demo">{PREVIEW_NOTICE}</p>}
-      {profile === null || current === undefined ? (
-        <p className="hint">Noch nichts berichtigt.</p>
-      ) : (
-        <>
-          <ClassOverview
-            arbeiten={reviewed}
-            state={state}
-            entries={entries}
-            profile={profile}
-            selected={current.id}
-            onSelect={setSelected}
-            pdf={pdf}
-            exporter={exporter}
-          />
-          <ArbeitDetail
-            key={current.id}
-            arbeit={current}
-            flow={flow}
-            state={state}
-            entries={entries}
-            profile={profile}
-            canRetry={canRetry}
-            pdf={pdf}
-            exporter={exporter}
-          />
-        </>
-      )}
+    <section className="review" aria-label="Korrektur">
+      <ArbeitDetail
+        key={arbeit.id}
+        arbeit={arbeit}
+        flow={flow}
+        state={state}
+        entries={entries}
+        profile={profile}
+        canRetry={canRetry}
+        pdf={pdf}
+        exporter={exporter}
+      />
     </section>
   );
 }

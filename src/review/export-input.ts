@@ -12,6 +12,8 @@ import { renderPageToPng } from '../import/render-page.ts';
 import type { ReviewState } from './review-flow.ts';
 import { pageCondition, summarizeArbeit, type Entries } from './summary.ts';
 
+export const PDF_FOOTER = 'Vorschau: automatisch erstellte Korrektur, bitte prüfen';
+
 export type ExportBlock = 'running' | 'preview' | 'incomplete' | null;
 
 export function createReviewExport(
