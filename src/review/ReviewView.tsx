@@ -8,6 +8,7 @@ import { saveClassPdf, saveCorrectedPdf } from '../export/save-pdf.ts';
 import { AnnotatedPage } from '../overlay/AnnotatedPage.tsx';
 import { formatCount, pagesText, wordsText } from '../results/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import { engineText, IDLE_ENGINE, type ReviewEngine } from './engine-phase.ts';
 import {
   arbeitExportBlock,
   createReviewExport,
@@ -40,6 +41,7 @@ interface ReviewViewProps {
   readonly entries: Entries;
   readonly canRetry: boolean;
   readonly preview: boolean;
+  readonly engine?: ReviewEngine;
   readonly onBack: () => void;
 }
 
@@ -67,13 +69,22 @@ const CLASS_SCOPE = 'class';
 
 const RETRYABLE: ReadonlySet<ReviewStatus> = new Set(['unreadable', 'failed', 'cancelled']);
 
-function progressText(state: ReviewState, arbeiten: readonly Arbeit[], entries: Entries): string {
+function progressText(
+  state: ReviewState,
+  arbeiten: readonly Arbeit[],
+  entries: Entries,
+  engine: ReviewEngine,
+): string {
   const { run } = state;
   if (state.stopping) return 'Wird abgebrochen …';
   if (run !== null) {
     const label = PHASE_TEXT[run.phase];
-    if (run.total === 0) return `${label} …`;
-    return `${label}: Seite ${Math.min(run.finished + 1, run.total)} von ${run.total}`;
+    const loading = engineText(run, engine);
+    const position =
+      run.total === 0
+        ? `${label} …`
+        : `${label}: Seite ${Math.min(run.finished + 1, run.total)} von ${run.total}`;
+    return loading === null ? position : `${position} · ${loading}`;
   }
   if (state.outcome === 'cancelled') return 'Abgebrochen.';
   if (state.outcome === 'finished') {
@@ -463,6 +474,7 @@ export function ReviewView({
   entries,
   canRetry,
   preview,
+  engine = IDLE_ENGINE,
   onBack,
 }: ReviewViewProps) {
   const [selected, setSelected] = useState<string | undefined>(undefined);
@@ -490,7 +502,7 @@ export function ReviewView({
           </button>
         )}
         <p className="progress" role="status">
-          {progressText(state, arbeiten, entries)}
+          {progressText(state, arbeiten, entries, engine)}
         </p>
       </div>
       {(preview || previewResults) && <p className="notice demo">{PREVIEW_NOTICE}</p>}

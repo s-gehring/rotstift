@@ -1,7 +1,17 @@
-import { useEffect, useState } from 'react';
-import { isTauri } from '../pipeline/environment.ts';
+import { useEffect, useMemo, useState } from 'react';
+import type { ModelClient } from '../models/client.ts';
+import {
+  useCorrectorSetup,
+  type CorrectorSetup,
+  type CreateCorrector,
+} from '../models/corrector-setup.tsx';
 import type { Corrector } from './corrector.ts';
-import { resolveCorrector, type CorrectorEnvironment, type CorrectorStatus } from './provider.ts';
+import {
+  resolveBrowserCorrector,
+  sidecarCorrectorStatus,
+  type CorrectorEnvironment,
+  type CorrectorStatus,
+} from './provider.ts';
 
 async function loadPreview(): Promise<Corrector> {
   if (import.meta.env.DEV) {
@@ -12,14 +22,15 @@ async function loadPreview(): Promise<Corrector> {
 }
 
 export function browserCorrectorEnvironment(): CorrectorEnvironment {
-  return { isDev: import.meta.env.DEV, isTauri: isTauri(), loadPreview };
+  return { isDev: import.meta.env.DEV, loadPreview };
 }
 
-export function useCorrector(): CorrectorStatus | null {
+function useBrowserCorrector(enabled: boolean): CorrectorStatus | null {
   const [status, setStatus] = useState<CorrectorStatus | null>(null);
   useEffect(() => {
+    if (!enabled) return undefined;
     let current = true;
-    resolveCorrector(browserCorrectorEnvironment()).then(
+    resolveBrowserCorrector(browserCorrectorEnvironment()).then(
       (resolved) => {
         if (current) setStatus(resolved);
       },
@@ -35,6 +46,28 @@ export function useCorrector(): CorrectorStatus | null {
     return () => {
       current = false;
     };
-  }, []);
-  return status;
+  }, [enabled]);
+  return enabled ? status : null;
+}
+
+export interface CorrectorChoice {
+  readonly status: CorrectorStatus | null;
+  readonly setup: CorrectorSetup;
+}
+
+export function useCorrector(
+  client: ModelClient | null,
+  create?: CreateCorrector,
+): CorrectorChoice {
+  const setup = useCorrectorSetup(client, create);
+  const browser = useBrowserCorrector(client === null);
+  const modelState = setup.setup.status?.state;
+  const sidecar = useMemo(
+    () =>
+      sidecarCorrectorStatus(
+        modelState === undefined ? null : { state: modelState, corrector: setup.corrector },
+      ),
+    [modelState, setup.corrector],
+  );
+  return { status: client === null ? browser : sidecar, setup };
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useProfileChoice } from './correction/ProfilePicker.tsx';
 import { useCorrector } from './correction/use-corrector.ts';
+import { CorrectorManagement, CorrectorSetupDialog } from './models/corrector-setup.tsx';
 import { flattenPages } from './import/arbeiten.ts';
 import { ImportView } from './import/ImportView.tsx';
 import { useImportPages } from './import/use-import-pages.ts';
@@ -16,6 +17,7 @@ import { CountControls, CountHint } from './results/CountControls.tsx';
 import { ResultsView } from './results/ResultsView.tsx';
 import { useWordCount } from './results/use-word-count.ts';
 import { reviewBlocked, ReviewControls, ReviewHint } from './review/ReviewControls.tsx';
+import { useMonitorPhase } from './review/engine-phase.ts';
 import { ReviewView } from './review/ReviewView.tsx';
 import { useReview } from './review/use-review.ts';
 
@@ -36,7 +38,11 @@ export function App() {
   });
   const count = useWordCount(importState.pages, transcriber);
   const enginePhase = useEnginePhase(transcriber);
-  const corrector = useCorrector();
+  const correction = useCorrector(modelClient);
+  const corrector = correction.status;
+  const correctorPhase = useMonitorPhase(
+    corrector?.state === 'ready' ? corrector.engine : undefined,
+  );
   const { profile, select: selectProfile } = useProfileChoice();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
   const review = useReview(count.runner, pages, corrector);
@@ -63,6 +69,7 @@ export function App() {
           entries={count.state.entries}
           canRetry={!reviewBlocked(transcriber, corrector)}
           preview={corrector?.state === 'ready' && corrector.preview}
+          engine={{ transcriber: enginePhase, corrector: correctorPhase }}
           onBack={() => {
             setView('import');
           }}
@@ -92,6 +99,7 @@ export function App() {
                   onOpen={() => {
                     setView('review');
                   }}
+                  onSetup={correction.setup.openSetup}
                 />
               </CountControls>
             }
@@ -103,7 +111,7 @@ export function App() {
                   arbeiten={importState.arbeiten}
                   download={setup.status}
                 />
-                <ReviewHint corrector={corrector} />
+                <ReviewHint corrector={corrector} onSetup={correction.setup.openSetup} />
               </>
             }
           />
@@ -116,6 +124,7 @@ export function App() {
         </>
       )}
       <ModelManagement setup={setup} onSetup={openSetup} disabled={switchLocked} />
+      <CorrectorManagement corrector={correction.setup} disabled={reviewing} />
       {setup.available && (
         <ModelSetupDialog
           setup={setup}
@@ -126,6 +135,7 @@ export function App() {
           }}
         />
       )}
+      <CorrectorSetupDialog corrector={correction.setup} switchDisabled={reviewing} />
     </main>
   );
 }

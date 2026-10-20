@@ -10,6 +10,7 @@ import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { Runner } from '../pipeline/runner.ts';
 import type { SaveOutcome } from '../export/save-file.ts';
 import { saveClassPdf, saveCorrectedPdf, type SavePdfOptions } from '../export/save-pdf.ts';
+import type { ReviewEngine } from './engine-phase.ts';
 import { LAYOUT_FAILED, type ReviewFlow } from './review-flow.ts';
 import { PREVIEW_NOTICE, ReviewControls, ReviewHint } from './ReviewControls.tsx';
 import { ReviewView } from './ReviewView.tsx';
@@ -41,11 +42,13 @@ function Harness({
   runner,
   arbeiten,
   preview = false,
+  engine,
 }: {
   readonly flow: ReviewFlow;
   readonly runner: Runner;
   readonly arbeiten: readonly Arbeit[];
   readonly preview?: boolean;
+  readonly engine?: ReviewEngine;
 }) {
   const state = useSyncExternalStore(flow.subscribe, flow.getState);
   const runState = useSyncExternalStore(runner.subscribe, runner.getState);
@@ -57,6 +60,7 @@ function Harness({
       entries={runState.entries}
       canRetry
       preview={preview}
+      {...(engine !== undefined && { engine })}
       onBack={() => undefined}
     />
   );
@@ -68,6 +72,10 @@ function buttonNamed(name: string): HTMLButtonElement {
   );
   if (found === undefined) throw new Error(`no button ${name}`);
   return found;
+}
+
+function statusText(): string | null | undefined {
+  return container.querySelector('[role="status"]')?.textContent;
 }
 
 function pageItem(position: number): HTMLElement {
@@ -226,6 +234,36 @@ describe('ReviewView', () => {
       'Problem: Abgebrochen, nicht berichtigt',
     );
   });
+
+  it('says when the correction model is being loaded', async () => {
+    const { pages, h, flow, runner } = setupReview(['a']);
+    const gate = deferred();
+    h.correctGate = gate.promise;
+    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages }];
+    const render = (engine: ReviewEngine) => {
+      act(() =>
+        root.render(<Harness flow={flow} runner={runner} arbeiten={arbeiten} engine={engine} />),
+      );
+    };
+    render({ transcriber: 'ready', corrector: 'idle' });
+    let running: Promise<void> = Promise.resolve();
+    await act(async () => {
+      running = flow.start(pages, DEUTSCH);
+      await waitFor(() => flow.getState().run?.phase === 'correcting');
+    });
+    expect(statusText()).toBe('Korrektur: Seite 1 von 1 · Modellwechsel wird vorbereitet …');
+
+    render({ transcriber: 'idle', corrector: 'starting' });
+    expect(statusText()).toBe('Korrektur: Seite 1 von 1 · Korrekturmodell wird geladen …');
+
+    render({ transcriber: 'idle', corrector: 'ready' });
+    expect(statusText()).toBe('Korrektur: Seite 1 von 1');
+
+    await act(async () => {
+      gate.resolve();
+      await running;
+    });
+  });
 });
 
 const READY_TRANSCRIBER: TranscriberStatus = {
@@ -234,7 +272,11 @@ const READY_TRANSCRIBER: TranscriberStatus = {
   demo: true,
 };
 
-function controls(corrector: CorrectorStatus | null, onStart = vi.fn<() => void>()) {
+function controls(
+  corrector: CorrectorStatus | null,
+  onStart = vi.fn<() => void>(),
+  onSetup?: () => void,
+) {
   act(() =>
     root.render(
       <>
@@ -248,8 +290,9 @@ function controls(corrector: CorrectorStatus | null, onStart = vi.fn<() => void>
           counting={false}
           onStart={onStart}
           onOpen={() => undefined}
+          {...(onSetup !== undefined && { onSetup })}
         />
-        <ReviewHint corrector={corrector} />
+        <ReviewHint corrector={corrector} {...(onSetup !== undefined && { onSetup })} />
       </>,
     ),
   );
@@ -272,6 +315,19 @@ describe('ReviewControls', () => {
     controls({ state: 'needs-model', message: 'Korrekturmodell fehlt.' });
     expect(buttonNamed('Berichtigen').disabled).toBe(true);
     expect(container.querySelector('#review-hint')?.textContent).toBe('Korrekturmodell fehlt.');
+  });
+
+  it('opens the correction model setup instead of starting while the model is missing', () => {
+    const onSetup = vi.fn<() => void>();
+    const onStart = controls(
+      { state: 'needs-model', message: 'Korrekturmodell fehlt.' },
+      undefined,
+      onSetup,
+    );
+    act(() => buttonNamed('Berichtigen').click());
+    act(() => buttonNamed('Korrekturmodell einrichten').click());
+    expect(onSetup).toHaveBeenCalledTimes(2);
+    expect(onStart).not.toHaveBeenCalled();
   });
 });
 

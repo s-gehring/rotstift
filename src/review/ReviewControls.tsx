@@ -17,6 +17,7 @@ interface ControlsProps {
   readonly counting: boolean;
   readonly onStart: () => void;
   readonly onOpen: () => void;
+  readonly onSetup?: () => void;
 }
 
 export function reviewBlocked(
@@ -36,10 +37,13 @@ export function ReviewControls({
   counting,
   onStart,
   onOpen,
+  onSetup,
 }: ControlsProps) {
   const running = state.run !== null;
   const hasResults = Object.keys(state.pages).length > 0;
-  const disabled = reviewBlocked(transcriber, corrector) || pageCount === 0 || counting;
+  const setup = corrector?.state === 'needs-model' ? onSetup : undefined;
+  const disabled =
+    setup === undefined && (reviewBlocked(transcriber, corrector) || pageCount === 0 || counting);
   return (
     <>
       <ProfilePicker value={profile} onChange={onProfile} disabled={running} />
@@ -53,7 +57,7 @@ export function ReviewControls({
           className="primary"
           disabled={disabled}
           aria-describedby="review-hint"
-          onClick={onStart}
+          onClick={setup ?? onStart}
         >
           Berichtigen
         </button>
