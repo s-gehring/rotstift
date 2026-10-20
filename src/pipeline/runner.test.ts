@@ -350,6 +350,28 @@ describe('runner', () => {
     expect(t.runner.getState().entries['b']?.text).toBe('b-text');
   });
 
+  it('enqueues a single page that has no entry yet', async () => {
+    const t = setup();
+    t.runner.setPages([page('a'), page('b'), page('c')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.runner.cancel();
+    expect(t.runner.getState().entries).toEqual({});
+
+    t.runner.enqueue('b');
+    await t.waitForCalls(2);
+    expect(t.rendered.slice(1)).toEqual(['b:0']);
+    expect(t.runner.getState().batch).toEqual({ total: 1, finished: 0 });
+    t.calls[1]?.resolve(t.ok('b-text'));
+
+    await vi.waitFor(() => expect(t.status('b')).toBe('done'));
+    expect(Object.keys(t.runner.getState().entries)).toEqual(['b']);
+    t.runner.enqueue('b');
+    await t.waitForCalls(3);
+    t.runner.enqueue('b');
+    expect(t.runner.getState().batch).toEqual({ total: 1, finished: 0 });
+  });
+
   it('start re-queues failed pages but keeps finished ones', async () => {
     const t = setup();
     t.runner.setPages([page('a'), page('b')]);

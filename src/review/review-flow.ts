@@ -61,7 +61,7 @@ export interface ReviewState {
 
 export type TranscriptionSource = Pick<
   Runner,
-  'start' | 'retry' | 'cancel' | 'getState' | 'subscribe'
+  'start' | 'enqueue' | 'cancel' | 'getState' | 'subscribe'
 >;
 
 export interface ReviewDeps {
@@ -469,8 +469,7 @@ export function createReviewFlow(deps: ReviewDeps) {
       }
       return process([page], profile, () => {
         const entry = transcription.getState().entries[page.id];
-        if (entry === undefined) transcription.start();
-        else if (needsRecognition(entry, page)) transcription.retry(page.id);
+        if (entry === undefined || needsRecognition(entry, page)) transcription.enqueue(page.id);
       });
     },
 

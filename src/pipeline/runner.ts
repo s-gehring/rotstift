@@ -464,6 +464,14 @@ export function createRunner(deps: RunnerDeps) {
       void pump();
     },
 
+    enqueue: (id: string) => {
+      const entry = state.entries[id];
+      const page = pages.find((candidate) => candidate.id === id);
+      if (transcriber === null || page === undefined || (entry && isQueued(entry))) return;
+      enqueue([page]);
+      void pump();
+    },
+
     cancel: () => {
       if (current !== null && current.reason === undefined) {
         current.reason = 'cancel';

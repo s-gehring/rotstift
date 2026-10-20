@@ -136,6 +136,27 @@ describe('createReviewFlow', () => {
     expect(h.log.some((entry) => entry.startsWith('C:'))).toBe(false);
   });
 
+  it('retries only the page that was still waiting for recognition when cancelled', async () => {
+    const { pages, h, flow } = setupReview();
+    const gate = deferred();
+    h.transcribeGate = gate.promise;
+    const running = flow.start(pages, DEUTSCH);
+    await waitFor(() => h.log.includes('T:a'));
+    flow.cancel();
+    await running;
+    h.transcribeGate = null;
+    h.log.length = 0;
+
+    const [, second] = pages;
+    if (second === undefined) throw new Error('missing page');
+    await flow.retry(second);
+
+    expect(h.log).toEqual(['T:b', 'L:b', 'C:Wir gingen heim.']);
+    expect(flow.getState().pages.b?.status).toBe('done');
+    expect(flow.getState().pages.a?.status).toBe('cancelled');
+    expect(flow.getState().pages.c?.status).toBe('cancelled');
+  });
+
   it('cancels while locating lines', async () => {
     const { pages, h, flow } = setupReview(['a', 'b']);
     const gate = deferred();
