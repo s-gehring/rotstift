@@ -372,7 +372,7 @@ describe('a class with several Arbeiten', () => {
       await Promise.resolve();
     });
     expect(writeText).toHaveBeenCalledWith(
-      'Name\tSeiten\tWörter\nAnna\t2\t5\nBen\t1\t1\nGesamt\t3\t6',
+      'Name\tSeiten\tWörter\tHinweis\nAnna\t2\t5\t\nBen\t1\t1\t\nGesamt\t3\t6\t',
     );
     expect(container.textContent).toContain('In die Zwischenablage kopiert.');
   });
@@ -386,10 +386,23 @@ describe('a class with several Arbeiten', () => {
       await Promise.resolve();
     });
     expect(saveCsv).toHaveBeenCalledWith(
-      '\uFEFFName;Seiten;Wörter\r\nAnna;2;5\r\nBen;1;1\r\nGesamt;3;6\r\n',
+      '\uFEFFName;Seiten;Wörter;Hinweis\r\nAnna;2;5;\r\nBen;1;1;\r\nGesamt;3;6;\r\n',
       'Wortzahlen',
     );
     expect(container.textContent).toContain('Gespeichert als „Klasse.csv“.');
+  });
+
+  it('says that an existing file was not overwritten', async () => {
+    vi.mocked(saveCsv).mockResolvedValue({ state: 'exists', fileName: 'klasse.csv' });
+    const runner = mount(sequence(), klasse);
+    await countWords(runner);
+    await act(async () => {
+      button('Als CSV speichern')?.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain(
+      '„klasse.csv“ gibt es bereits und wurde nicht überschrieben',
+    );
   });
 
   it('stays silent when the save dialog is cancelled', async () => {

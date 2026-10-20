@@ -233,7 +233,11 @@ export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
   const save = () => {
     void saveCsv(formatCsv(results), CSV_FILE_NAME).then((outcome) => {
       if (outcome.state === 'saved') announce(`Gespeichert als „${outcome.fileName}“.`);
-      else if (outcome.state === 'failed') announce('Speichern war nicht möglich.');
+      else if (outcome.state === 'exists') {
+        announce(
+          `Die Datei „${outcome.fileName}“ gibt es bereits und wurde nicht überschrieben. Bitte den Dateinamen mit „.csv“ eingeben oder einen anderen Namen wählen.`,
+        );
+      } else if (outcome.state === 'failed') announce('Speichern war nicht möglich.');
     });
   };
 

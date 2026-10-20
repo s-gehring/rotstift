@@ -1,7 +1,7 @@
 import { arbeitenText, classTotals, isComplete, type ArbeitResult } from './summary.ts';
 
-const BOM = '﻿';
-const HEADER = ['Name', 'Seiten', 'Wörter'] as const;
+const BOM = '\uFEFF';
+const HEADER = ['Name', 'Seiten', 'Wörter', 'Hinweis'] as const;
 const FORMULA_START = /^[=+\-@\t\r]/u;
 
 function neutralizeFormula(value: string): string {
@@ -17,21 +17,31 @@ function tsvField(value: string): string {
   return neutralizeFormula(value).replace(/[\t\r\n]+/gu, ' ');
 }
 
-function cells(result: ArbeitResult): [string, string, string] {
+function cells(result: ArbeitResult): string[] {
+  const complete = isComplete(result);
   return [
     result.name,
     String(result.pageCount),
-    result.countedPages === 0 ? '' : String(result.words),
+    complete ? String(result.words) : '',
+    complete ? '' : `Unvollständig: ${result.countedPages} von ${result.pageCount} Seiten gezählt`,
+  ];
+}
+
+function totalCells(results: readonly ArbeitResult[]): string[] {
+  const totals = classTotals(results);
+  const complete = totals.completeArbeiten === totals.arbeiten;
+  return [
+    'Gesamt',
+    String(totals.pages),
+    complete ? String(totals.words) : '',
+    complete
+      ? ''
+      : `Unvollständig: ${totals.completeArbeiten} von ${totals.arbeiten} Arbeiten vollständig gezählt`,
   ];
 }
 
 function tableRows(results: readonly ArbeitResult[]): string[][] {
-  const totals = classTotals(results);
-  return [
-    [...HEADER],
-    ...results.map(cells),
-    ['Gesamt', String(totals.pages), totals.countedPages === 0 ? '' : String(totals.words)],
-  ];
+  return [[...HEADER], ...results.map(cells), totalCells(results)];
 }
 
 export function formatCsv(results: readonly ArbeitResult[]): string {

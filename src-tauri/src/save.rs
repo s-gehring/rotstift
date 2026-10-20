@@ -1,3 +1,5 @@
+use std::fs::OpenOptions;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -8,9 +10,14 @@ const MAX_CSV_BYTES: usize = 8 * 1024 * 1024;
 const FALLBACK_NAME: &str = "Rotstift";
 
 #[derive(Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum SaveError {
     TooLarge,
+    AlreadyExists { file_name: String },
     Io { message: String },
 }
 
@@ -41,19 +48,41 @@ pub fn write_csv(path: &Path, content: &str) -> Result<(), SaveError> {
     if content.len() > MAX_CSV_BYTES {
         return Err(SaveError::TooLarge);
     }
-    let path = if path
+    let has_extension = path
         .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("csv"))
-    {
-        path.to_path_buf()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("csv"));
+    let (path, confirmed) = if has_extension {
+        (path.to_path_buf(), true)
     } else {
         let mut with_extension = path.as_os_str().to_owned();
         with_extension.push(".csv");
-        PathBuf::from(with_extension)
+        (PathBuf::from(with_extension), false)
     };
-    std::fs::write(&path, content.as_bytes()).map_err(|error| SaveError::Io {
-        message: error.to_string(),
-    })
+    let mut options = OpenOptions::new();
+    options.write(true);
+    if confirmed {
+        options.create(true).truncate(true);
+    } else {
+        options.create_new(true);
+    }
+    let mut file = options.open(&path).map_err(|error| {
+        if error.kind() == ErrorKind::AlreadyExists {
+            SaveError::AlreadyExists {
+                file_name: path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            }
+        } else {
+            SaveError::Io {
+                message: error.to_string(),
+            }
+        }
+    })?;
+    file.write_all(content.as_bytes())
+        .map_err(|error| SaveError::Io {
+            message: error.to_string(),
+        })
 }
 
 #[tauri::command]
@@ -129,6 +158,44 @@ mod tests {
         write_csv(&dir.join("klasse"), "a").unwrap();
         assert!(dir.join("klasse.csv").is_file());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn never_overwrites_a_file_the_dialog_did_not_confirm() {
+        let dir = scratch("exists");
+        std::fs::write(dir.join("klasse.csv"), "alt").unwrap();
+        let result = write_csv(&dir.join("klasse"), "neu");
+        assert!(matches!(
+            result,
+            Err(SaveError::AlreadyExists { ref file_name }) if file_name == "klasse.csv"
+        ));
+        assert_eq!(
+            std::fs::read_to_string(dir.join("klasse.csv")).unwrap(),
+            "alt"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn overwrites_the_file_the_dialog_confirmed() {
+        let dir = scratch("confirmed");
+        std::fs::write(dir.join("klasse.csv"), "alt, deutlich länger").unwrap();
+        write_csv(&dir.join("klasse.csv"), "neu").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.join("klasse.csv")).unwrap(),
+            "neu"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn serialises_the_conflict_for_the_frontend() {
+        let json = serde_json::to_value(SaveError::AlreadyExists {
+            file_name: "klasse.csv".into(),
+        })
+        .unwrap();
+        assert_eq!(json["kind"], "alreadyExists");
+        assert_eq!(json["fileName"], "klasse.csv");
     }
 
     #[test]
