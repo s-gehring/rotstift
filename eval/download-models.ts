@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { pipeline } from 'node:stream/promises';
 import { parseArgs } from 'node:util';
+import { CORRECTORS } from './correct-models.ts';
 import { CANDIDATES, fileUrl } from './models.ts';
-import type { Candidate, ModelFile } from './models.ts';
+import type { ModelFile } from './models.ts';
 import { modelsDir } from './paths.ts';
 
 async function sha256(path: string): Promise<string> {
@@ -15,7 +16,12 @@ async function sha256(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-async function download(candidate: Candidate, file: ModelFile, dir: string, verify: boolean) {
+interface Source {
+  repo: string;
+  commit?: string;
+}
+
+async function download(candidate: Source, file: ModelFile, dir: string, verify: boolean) {
   const target = join(dir, file.name);
   if (existsSync(target) && statSync(target).size === file.bytes) {
     if (!verify || (await sha256(target)) === file.sha256) return;
@@ -54,12 +60,24 @@ async function main() {
   const wanted = values.models?.split(',');
   const dir = modelsDir();
   await mkdir(dir, { recursive: true });
-  for (const candidate of CANDIDATES) {
-    if (wanted && !wanted.includes(candidate.id)) continue;
-    for (const file of [candidate.model, candidate.mmproj]) {
-      await download(candidate, file, dir, values.verify);
+  const jobs = [
+    ...CANDIDATES.map((candidate) => ({
+      id: candidate.id,
+      source: candidate,
+      files: [candidate.model, candidate.mmproj],
+    })),
+    ...CORRECTORS.map((corrector) => ({
+      id: corrector.id,
+      source: corrector,
+      files: [corrector.model],
+    })),
+  ];
+  for (const job of jobs) {
+    if (wanted && !wanted.includes(job.id)) continue;
+    for (const file of job.files) {
+      await download(job.source, file, dir, values.verify);
     }
-    console.log(`${candidate.id}: ok`);
+    console.log(`${job.id}: ok`);
   }
 }
 

@@ -108,14 +108,14 @@ export function summarize(run: ModelRun): ModelSummary {
 }
 
 const MISSING = 'n. v.';
-const percent = (value: number) =>
+export const percent = (value: number) =>
   Number.isNaN(value) ? MISSING : `${(value * 100).toFixed(1)} %`;
-const fixed = (value: number, digits = 1) =>
+export const fixed = (value: number, digits = 1) =>
   Number.isNaN(value) ? MISSING : value.toFixed(digits);
 
 const line = (cells: readonly string[]) => `| ${cells.join(' | ')} |`;
 
-function table(header: readonly string[], rows: readonly (readonly string[])[]): string {
+export function table(header: readonly string[], rows: readonly (readonly string[])[]): string {
   return [line(header), line(header.map(() => '---')), ...rows.map(line)].join('\n');
 }
 
