@@ -13,8 +13,16 @@ import type {
 import { CountControls, CountHint } from './CountControls.tsx';
 import { ResultsView } from './ResultsView.tsx';
 import { saveCsv } from './save-csv.ts';
+import type { SaveOutcome } from '../export/save-file.ts';
+import type { SavePdfOptions } from '../export/save-pdf.ts';
+import { saveClassPdf, saveWordCountPdf } from '../export/save-pdf.ts';
 
 vi.mock('./save-csv.ts', () => ({ saveCsv: vi.fn<() => void>() }));
+vi.mock('../export/save-pdf.ts', () => ({
+  saveClassPdf: vi.fn<() => void>(),
+  saveWordCountPdf: vi.fn<() => void>(),
+  saveCorrectedPdf: vi.fn<() => void>(),
+}));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -343,6 +351,30 @@ const sequence = (): TranscriberStatus => ({
     })(),
   },
 });
+function pendingSave() {
+  const pending = deferred<SaveOutcome>();
+  let options: SavePdfOptions | undefined;
+  return {
+    pending,
+    implementation: (_input: unknown, given?: SavePdfOptions) => {
+      options = given;
+      return pending.promise;
+    },
+    options: () => options,
+  };
+}
+
+const flush = () =>
+  act(async () => {
+    await Promise.resolve();
+  });
+
+function firstInput<T>(mock: { mock: { calls: readonly (readonly [T, ...unknown[]])[] } }): T {
+  const call = mock.mock.calls[0];
+  if (call === undefined) throw new Error('Nicht aufgerufen');
+  return call[0];
+}
+
 describe('a class with several Arbeiten', () => {
   const klasse = [
     arbeit('anna', 'Anna', [page('a1'), page('a2')]),
@@ -414,6 +446,186 @@ describe('a class with several Arbeiten', () => {
       await Promise.resolve();
     });
     expect(container.querySelector('.export-actions [role=status]')?.textContent).toBe('');
+  });
+
+  describe('PDF export', () => {
+    it('offers a PDF button per Arbeit and one for the class', async () => {
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      expect(button('Klassen-PDF speichern')?.disabled).toBe(false);
+      const labels = [...container.querySelectorAll('button')]
+        .map((candidate) => candidate.getAttribute('aria-label'))
+        .filter((label) => label?.startsWith('Als PDF speichern'));
+      expect(labels).toEqual(['Als PDF speichern: Anna', 'Als PDF speichern: Ben']);
+    });
+
+    it('keeps the PDF buttons disabled while nothing is counted', async () => {
+      const failing: TranscriberStatus = {
+        state: 'ready',
+        demo: false,
+        transcriber: {
+          transcribe: () => Promise.resolve({ ok: false, error: { kind: 'failed', message: 'x' } }),
+        },
+      };
+      const runner = mount(failing, klasse);
+      await countWords(runner);
+      expect(button('Klassen-PDF speichern')?.disabled).toBe(true);
+      expect(
+        container.querySelector<HTMLButtonElement>('[aria-label="Als PDF speichern: Anna"]')
+          ?.disabled,
+      ).toBe(true);
+    });
+
+    it('saves the word count PDF of one Arbeit with its counted pages', async () => {
+      vi.mocked(saveWordCountPdf).mockResolvedValue({ state: 'saved', fileName: 'Ben.pdf' });
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('[aria-label="Als PDF speichern: Ben"]')
+          ?.click();
+        await Promise.resolve();
+      });
+      const input = firstInput(vi.mocked(saveWordCountPdf));
+      expect(input.title).toBe('Ben');
+      expect(input.pages).toHaveLength(1);
+      expect(input.pages[0]?.transcript?.lines.map((line) => line.text)).toEqual(['sechs']);
+      expect(container.textContent).toContain('Gespeichert als „Ben.pdf“.');
+    });
+
+    it('saves all Arbeiten into one class PDF', async () => {
+      vi.mocked(saveClassPdf).mockResolvedValue({ state: 'saved', fileName: 'Klasse.pdf' });
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      await act(async () => {
+        button('Klassen-PDF speichern')?.click();
+        await Promise.resolve();
+      });
+      const input = firstInput(vi.mocked(saveClassPdf));
+      expect(input.map((entry) => [entry.kind, entry.title, entry.pages.length])).toEqual([
+        ['wordCount', 'Anna', 2],
+        ['wordCount', 'Ben', 1],
+      ]);
+      expect(container.textContent).toContain('Gespeichert als „Klasse.pdf“.');
+    });
+
+    it('shows progress, blocks other exports and returns the focus afterwards', async () => {
+      const save = pendingSave();
+      vi.mocked(saveClassPdf).mockImplementation(save.implementation);
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      const trigger = button('Klassen-PDF speichern');
+      trigger?.focus();
+      act(() => trigger?.click());
+
+      expect(container.querySelector('progress')).not.toBeNull();
+      expect(container.querySelector('.pdf-progress')?.textContent).toContain(
+        'PDF wird vorbereitet',
+      );
+      expect(document.activeElement).toBe(button('Abbrechen'));
+      expect(trigger?.disabled).toBe(true);
+      expect(
+        container.querySelector<HTMLButtonElement>('[aria-label="Als PDF speichern: Anna"]')
+          ?.disabled,
+      ).toBe(true);
+
+      act(() => save.options()?.onProgress?.(2, 3));
+      expect(container.querySelector('.pdf-progress')?.textContent).toContain('Seite 2 von 3');
+      const bar = container.querySelector('progress');
+      expect([bar?.value, bar?.max]).toEqual([2, 3]);
+
+      save.pending.resolve({ state: 'saved', fileName: 'Klasse.pdf' });
+      await flush();
+      expect(container.querySelector('progress')).toBeNull();
+      expect(button('Klassen-PDF speichern')?.disabled).toBe(false);
+      expect(document.activeElement).toBe(button('Klassen-PDF speichern'));
+    });
+
+    it('shows the progress of a single Arbeit next to its own button', async () => {
+      const save = pendingSave();
+      vi.mocked(saveWordCountPdf).mockImplementation(save.implementation);
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      act(() =>
+        container
+          .querySelector<HTMLButtonElement>('[aria-label="Als PDF speichern: Ben"]')
+          ?.click(),
+      );
+      const sections = [...container.querySelectorAll('.arbeit-result')];
+      expect(sections[0]?.querySelector('progress')).toBeNull();
+      expect(sections[1]?.querySelector('progress')).not.toBeNull();
+      save.pending.resolve({ state: 'cancelled' });
+      await flush();
+    });
+
+    it('aborts the export on request and says so', async () => {
+      const save = pendingSave();
+      vi.mocked(saveClassPdf).mockImplementation(save.implementation);
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      act(() => button('Klassen-PDF speichern')?.click());
+      act(() => button('Abbrechen')?.click());
+      expect(save.options()?.signal?.aborted).toBe(true);
+      save.pending.resolve({ state: 'cancelled' });
+      await flush();
+      expect(container.textContent).toContain('Das Speichern wurde abgebrochen.');
+      expect(container.querySelector('progress')).toBeNull();
+    });
+
+    it('aborts a running export when the view disappears', async () => {
+      const save = pendingSave();
+      vi.mocked(saveClassPdf).mockImplementation(save.implementation);
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      act(() => button('Klassen-PDF speichern')?.click());
+      act(() => root.render(<></>));
+      expect(save.options()?.signal?.aborted).toBe(true);
+      save.pending.resolve({ state: 'cancelled' });
+      await flush();
+    });
+
+    it('stays silent when the save dialog is cancelled', async () => {
+      vi.mocked(saveClassPdf).mockResolvedValue({ state: 'cancelled' });
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      await act(async () => {
+        button('Klassen-PDF speichern')?.click();
+        await Promise.resolve();
+      });
+      expect(container.querySelector('.export-actions [role=status]')?.textContent).toBe('');
+    });
+
+    it.each([
+      [
+        { state: 'exists', fileName: 'a.pdf' },
+        '„a.pdf“ gibt es bereits und wurde nicht überschrieben',
+      ],
+      [{ state: 'exists', fileName: 'a.pdf' }, 'Dateinamen mit „.pdf“'],
+      [{ state: 'failed' }, 'Das PDF konnte nicht erstellt oder gespeichert werden.'],
+      [{ state: 'unavailable' }, 'nur in der Rotstift-App möglich'],
+    ] as const)('explains %j in German', async (outcome, expected) => {
+      vi.mocked(saveClassPdf).mockResolvedValue(outcome);
+      const runner = mount(sequence(), klasse);
+      await countWords(runner);
+      await act(async () => {
+        button('Klassen-PDF speichern')?.click();
+        await Promise.resolve();
+      });
+      expect(container.querySelector('.export-actions [role=status]')?.textContent).toContain(
+        expected,
+      );
+    });
+
+    it('does not offer the PDF export while words are being counted', () => {
+      const hanging: TranscriberStatus = {
+        state: 'ready',
+        demo: false,
+        transcriber: { transcribe: () => new Promise(() => undefined) },
+      };
+      const runner = mount(hanging, klasse);
+      act(() => runner.start());
+      expect(button('Klassen-PDF speichern')?.disabled ?? true).toBe(true);
+    });
   });
 
   it('keeps the export buttons disabled until a page is counted', () => {
