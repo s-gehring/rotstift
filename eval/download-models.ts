@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util';
 import { CORRECTORS } from './correct-models.ts';
 import { CANDIDATES, fileUrl } from './models.ts';
 import type { ModelFile } from './models.ts';
+import { candidateTranscribers } from './ocr-registry.ts';
 import { modelsDir } from './paths.ts';
 
 async function sha256(path: string): Promise<string> {
@@ -16,19 +17,13 @@ async function sha256(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-interface Source {
-  repo: string;
-  commit?: string;
-}
-
-async function download(candidate: Source, file: ModelFile, dir: string, verify: boolean) {
+async function download(url: string, file: ModelFile, dir: string, verify: boolean) {
   const target = join(dir, file.name);
   if (existsSync(target) && statSync(target).size === file.bytes) {
     if (!verify || (await sha256(target)) === file.sha256) return;
     throw new Error(`SHA256 mismatch for existing ${target}, delete it and retry`);
   }
 
-  const url = fileUrl(candidate, file);
   console.log(`Downloading ${url} (${(file.bytes / 1e9).toFixed(2)} GB)`);
   const response = await fetch(url);
   if (!response.ok || !response.body) throw new Error(`Download failed: ${response.status} ${url}`);
@@ -63,19 +58,24 @@ async function main() {
   const jobs = [
     ...CANDIDATES.map((candidate) => ({
       id: candidate.id,
-      source: candidate,
-      files: [candidate.model, candidate.mmproj],
+      files: [candidate.model, candidate.mmproj].map((file) => ({
+        file,
+        url: fileUrl(candidate, file),
+      })),
     })),
     ...CORRECTORS.map((corrector) => ({
       id: corrector.id,
-      source: corrector,
-      files: [corrector.model],
+      files: [{ file: corrector.model, url: fileUrl(corrector, corrector.model) }],
+    })),
+    ...candidateTranscribers().map((model) => ({
+      id: model.id,
+      files: [model.files.model, model.files.mmproj].map((file) => ({ file, url: file.url })),
     })),
   ];
   for (const job of jobs) {
     if (wanted && !wanted.includes(job.id)) continue;
-    for (const file of job.files) {
-      await download(job.source, file, dir, values.verify);
+    for (const { file, url } of job.files) {
+      await download(url, file, dir, values.verify);
     }
     console.log(`${job.id}: ok`);
   }

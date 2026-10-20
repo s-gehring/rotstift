@@ -79,7 +79,30 @@ node --experimental-transform-types eval/ocr-score.ts --dataset <Datensatz> --oc
 ```
 
 - `resize-pages.py` verkleinert die Seiten wie `modelImage` in der App (längste Kante `imageMaxEdge` aus `src-tauri/models.json`, JPEG-Qualität 90).
-- `ocr-run.ts` startet das Erkennungsmodell mit den Einstellungen aus `src-tauri/models.json`, schickt die Seite wie `visionMessage` und fordert zusätzlich `logprobs` an. Gespeichert werden Text, Zeit und je Token Bytes und Log-Wahrscheinlichkeit. Für andere Bildgrößen die Seiten mit `resize-pages.py` (bei Bedarf `--upscale`) vorbereiten und `--max-edge <Kante>` angeben, damit die Größe im Ergebnis steht.
+- `ocr-run.ts` startet das Erkennungsmodell mit den Einstellungen aus `src-tauri/models.json` (oder aus `ocr-candidates.json`, siehe unten), schickt die Seite wie `visionMessage` und fordert zusätzlich `logprobs` an. Gespeichert werden Text, Zeit und je Token Bytes und Log-Wahrscheinlichkeit. Für andere Bildgrößen die Seiten mit `resize-pages.py` (bei Bedarf `--upscale`) vorbereiten und `--max-edge <Kante>` angeben, damit die Größe im Ergebnis steht.
 - `ocr-correct.ts` korrigiert mit `correctPage` und `createLlmCorrector` aus `src/correction` (Prompt aus der Registry, Reparaturrunde wie in der App). Quellen: `--ocr` (Transkripte aus `ocr-run.ts`), `--truth <Datensatz> --pages …` (Ground Truth), `--texts fehler,fehlerfrei` (Schülertexte, mit `--noise-from <ocr.json> --dataset <Datensatz> --seeds 1,2,3` zusätzlich mit Lesefehlern in der gemessenen Verteilung). `--prompt` ist `app`, `ocr` (Hinweis auf die Texterkennung) oder `strict` (zusätzlich nur eindeutige Fehler), `--no-thinking` schickt `chat_template_kwargs: {enable_thinking: false}`.
-- `ocr-score.ts` leitet die Markierungen mit `deriveMarks` ab und bewertet sie: Fehlalarme je 100 Wörter auf den Datensatzseiten, getrennt nach Lesefolgefehler (das markierte Wort wurde falsch gelesen) und Korrektor (richtig gelesen und trotzdem markiert), Recall auf den Schülertexten. Gegenmittel sind Nachfilter: `Lesesicherheit < s` macht aus Markierungen auf Wörtern, deren unsicherstes Zeichen eine Token-Wahrscheinlichkeit unter `s` hat, einen Hinweis „unsicher gelesen“; `Wörterbuch` verwirft Markierungen, deren Korrektur ein Wort enthält, das hunspell nicht kennt (Cache in `--dictionary`). `--curve <scads.json>,<gerendert.json>` gibt die Schwellenkurve aus, `--examples <lauf.json>` listet alle Markierungen eines Laufs.
+- `ocr-score.ts` leitet die Markierungen mit `deriveMarks` ab und bewertet sie: Fehlalarme je 100 Wörter auf den Datensatzseiten, getrennt nach Lesefolgefehler (das markierte Wort wurde falsch gelesen) und Korrektor (richtig gelesen und trotzdem markiert), Recall auf den Schülertexten. Gegenmittel sind Nachfilter: `Lesesicherheit < s` macht aus Markierungen auf Wörtern, deren unsicherstes Zeichen eine Token-Wahrscheinlichkeit unter `s` hat, einen Hinweis „unsicher gelesen“; `Wörterbuch` verwirft Markierungen, deren Korrektur ein Wort enthält, das hunspell nicht kennt (Cache in `--dictionary`). `--curve <scads.json>,<gerendert.json>` gibt die Schwellenkurve aus und nennt die Schwelle nach der Regel unten, `--examples <lauf.json>` listet alle Markierungen eines Laufs. Welche Erkennung zu einem Korrekturlauf gehört, steht in dessen Feld `ocrModel`. Für gerenderte Seiten zeigt die Übersicht zusätzlich, wie viele eingebaute Fehler die Erkennung wörtlich erhalten und wie viele sie eigenmächtig verbessert hat.
 - `ocr-word-measures.ts --ocr <ocr-glm.json> --dataset <Datensatz> --rendered <ocr-glm-rendered.json>` vergleicht Maße der Lesesicherheit je Wort (Minimum, Produkt, Mittel je Token und je Zeichen, längenkorrigiert) und die Trennung nach Wortlänge.
+- `ocr-calibration.ts --dataset <Datensatz> --ocr <ocr.json> …` zeigt je Erkennung, wie gut die Lesesicherheit zur Wirklichkeit passt: Wörter je Sicherheitsbereich, Anteil falsch gelesener Wörter darin, AUC und den Kalibrierungsfehler (gewichtetes Mittel des Abstands zwischen Sicherheit und Anteil richtig gelesener Wörter).
+
+### Kandidaten für die Erkennung
+
+`ocr-candidates.json` enthält Erkennungsmodelle im Format der Registry, die (noch) nicht in der App stehen. `ocr-run.ts`, `ocr-threshold.ts` und `download-models.ts` finden sie unter ihrer `id`, etwa:
+
+```bash
+node --experimental-transform-types eval/download-models.ts --models lightonocr-3-0.8b-q8
+```
+
+Steht im Eintrag `"reasoning": "off"`, startet der Server wie in der App mit `--reasoning off`.
+
+### Schwelle der Lesesicherheit
+
+Die Schwelle `request.uncertainBelow` ist je Modell die kleinste, bei der das 95-%-Intervall der Fehlalarme auf fehlerfreien Seiten 1 je 100 Wörter erreicht (`chooseThreshold` in `ocr-score.ts`). Auf ScaDS ergibt das für GLM-OCR 0,95.
+
+Echte Schülerhandschrift fehlt bisher. Selbst geschriebene Seiten gehören nach `~/Rotstift-Testdaten/eigene-schrift/`, nie ins Repo, im Format von [`samples/scans/`](samples/scans): Je Seite ein Foto oder Scan (`.jpg`, `.jpeg`, `.png`) und daneben eine gleichnamige `.txt` mit dem Text Wort für Wort, wie er auf der Seite steht, eingebaute Fehler als `{geschrieben|richtig|Art}`. Seiten ohne Fehlermarke zählen als fehlerfrei. Durchgestrichenes steht nicht in der `.txt`. Welche Seiten gebraucht werden, steht in [docs/evaluations/2026-10-erkennung-genauer.md](../docs/evaluations/2026-10-erkennung-genauer.md#eigene-handschrift-für-die-schwelle). Dann läuft die ganze Prüfung mit einem Befehl:
+
+```bash
+node --experimental-transform-types eval/ocr-threshold.ts --scans ~/Rotstift-Testdaten/eigene-schrift --models glm-ocr-q8,lightonocr-3-0.8b-q8
+```
+
+Der Befehl verkleinert die Seiten je Modell auf `imageMaxEdge` (mit `eval/.venv`, siehe oben), erkennt sie mit Lesesicherheit, korrigiert sie mit Gemma wie in der App und schreibt nach `~/.cache/rotstift/eval/eigene-schrift/` (`--out` ändert das) die Zwischenstände und `bericht.md`: Lesefehler, Kalibrierung und je Schwelle Recall der roten Marken, Recall mit Hinweisen, Hinweise und Fehlalarme je 100 Wörter, dazu die Schwelle nach der Regel und den Wert aus der Registry. Ein abgebrochener Lauf setzt beim nächsten Aufruf fort. `--threads` (Standard 8) und `--thresholds` lassen sich ändern.
