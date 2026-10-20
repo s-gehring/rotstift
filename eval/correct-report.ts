@@ -1,7 +1,7 @@
 import { median, percent, fixed, table } from './report.ts';
 import type { Mark } from '../src/annotations/transcript.ts';
 import { sumScores } from './mark-metrics.ts';
-import type { PageScore } from './mark-metrics.ts';
+import type { PageScore, TypeTotals } from './mark-metrics.ts';
 
 export type Group = 'fehler' | 'fehlerfrei' | 'scads' | 'ocr';
 
@@ -21,6 +21,7 @@ export interface DocResult {
   score: PageScore;
   marks: (Mark & { line: number })[];
   unlocated?: number;
+  dropped?: number;
   recoverable?: number;
   total?: number;
 }
@@ -155,6 +156,102 @@ export function marksByTypeTable(runs: readonly CorrectorRun[]): string {
   );
 }
 
+function typeRatio(
+  run: CorrectorRun,
+  type: string,
+  pick: (counts: TypeTotals) => number,
+  base: (counts: TypeTotals) => number,
+): string {
+  const counts = sumScores(inGroup(run, 'fehler', 'ocr').map((doc) => doc.score)).typeTotals[type];
+  if (!counts || base(counts) === 0) return 'n. v.';
+  return percent(ratio(pick(counts), base(counts)));
+}
+
+export function typeDetailTable(runs: readonly CorrectorRun[]): string {
+  const types = ['R', 'Z', 'G'];
+  return table(
+    [
+      'Modell',
+      ...types.map((type) => `Recall nur Stelle ${type}`),
+      ...types.map((type) => `Precision ${type}`),
+    ],
+    runs.map((run) => [
+      run.label,
+      ...types.map((type) =>
+        typeRatio(
+          run,
+          type,
+          (counts) => counts.located,
+          (counts) => counts.gold,
+        ),
+      ),
+      ...types.map((type) =>
+        typeRatio(
+          run,
+          type,
+          (counts) => counts.matched,
+          (counts) => counts.predicted,
+        ),
+      ),
+    ]),
+  );
+}
+
+export function wilson(successes: number, total: number): [number, number] {
+  if (total === 0) return [Number.NaN, Number.NaN];
+  const z = 1.96;
+  const p = successes / total;
+  const denominator = 1 + (z * z) / total;
+  const center = (p + (z * z) / (2 * total)) / denominator;
+  const margin =
+    (z * Math.sqrt((p * (1 - p)) / total + (z * z) / (4 * total * total))) / denominator;
+  return [center - margin, center + margin];
+}
+
+function interval(successes: number, total: number): string {
+  const [low, high] = wilson(successes, total);
+  return Number.isNaN(low)
+    ? 'n. v.'
+    : `${percent(successes / total)} (${percent(low)} bis ${percent(high)})`;
+}
+
+export function intervalTable(runs: readonly CorrectorRun[]): string {
+  return table(
+    [
+      'Modell',
+      'Recall (95 %-Intervall)',
+      'Precision (95 %-Intervall)',
+      'Recall G (95 %-Intervall)',
+    ],
+    runs.map((run) => {
+      const total = sumScores(inGroup(run, 'fehler', 'ocr').map((doc) => doc.score));
+      const grammar = total.typeTotals['G'];
+      return [
+        run.label,
+        interval(total.matched, total.gold),
+        interval(total.matched, total.predicted),
+        grammar ? interval(grammar.matched, grammar.gold) : 'n. v.',
+      ];
+    }),
+  );
+}
+
+export function droppedTable(runs: readonly CorrectorRun[]): string {
+  return table(
+    ['Modell', 'Verworfene Blöcke', 'je 100 Wörter'],
+    runs.map((run) => {
+      const docs = inGroup(run, 'fehler', 'fehlerfrei', 'scads', 'ocr');
+      if (docs.every((doc) => doc.dropped === undefined)) return [run.label, 'n. v.', 'n. v.'];
+      const count = sum(docs.map((doc) => doc.dropped ?? 0));
+      return [
+        run.label,
+        String(count),
+        fixed((count / Math.max(sum(docs.map((doc) => doc.words)), 1)) * 100),
+      ];
+    }),
+  );
+}
+
 export function residualTable(runs: readonly CorrectorRun[]): string {
   return table(
     ['Modell', 'Wortfehler vorher', 'nach Anwenden der Markierungen'],
@@ -191,6 +288,18 @@ export function correctorReport(runs: readonly CorrectorRun[], heading: string):
     'Recall je Fehlerart:',
     '',
     marksByTypeTable(runs),
+    '',
+    'Textstelle und Precision je Fehlerart:',
+    '',
+    typeDetailTable(runs),
+    '',
+    'Konfidenzintervalle (Wilson):',
+    '',
+    intervalTable(runs),
+    '',
+    'Verworfene Blöcke (mehr als 3 Wörter auf einer Seite des Vergleichs):',
+    '',
+    droppedTable(runs),
     '',
     'Wortfehler gegenüber dem korrigierten Text:',
     '',

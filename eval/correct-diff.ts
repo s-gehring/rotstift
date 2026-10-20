@@ -177,20 +177,32 @@ function fold(text: string): string {
     .replaceAll(/[–—]/g, '-');
 }
 
-export function diffMarks(text: string, corrected: string): Mark[] {
+const oversized = (operation: Operation) =>
+  operation.to - operation.from > MAX_SPAN || operation.by - operation.with > MAX_SPAN;
+
+function alignTokens(text: string, corrected: string) {
   const original = tokenize(text);
   const fixed = fold(corrected)
     .split(/\s+/)
     .filter((word) => word !== '');
-  const marks: Mark[] = [];
   const operations = align(
     original.map((token) => fold(token.text)),
     fixed,
-  )
-    .filter(
-      (operation) =>
-        operation.to - operation.from <= MAX_SPAN && operation.by - operation.with <= MAX_SPAN,
-    )
+  );
+  return { original, fixed, operations };
+}
+
+export function droppedBlocks(text: string, corrected: string): number {
+  return alignTokens(text, corrected).operations.filter(
+    (operation) => operation.kind === 'replace' && oversized(operation),
+  ).length;
+}
+
+export function diffMarks(text: string, corrected: string): Mark[] {
+  const { original, fixed, operations: blocks } = alignTokens(text, corrected);
+  const marks: Mark[] = [];
+  const operations = blocks
+    .filter((operation) => !oversized(operation))
     .flatMap((operation) =>
       operation.kind === 'replace' &&
       operation.to - operation.from === operation.by - operation.with

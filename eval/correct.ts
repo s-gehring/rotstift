@@ -17,6 +17,7 @@ import {
   diffMessages,
   diffRepairMessages,
   diffTranscript,
+  droppedBlocks,
   readCorrectedLines,
 } from './correct-diff.ts';
 import { listMessages, listRepairMessages, listSchema, listToTranscript } from './correct-list.ts';
@@ -227,8 +228,14 @@ async function correct(server: Server, doc: Doc, options: Options): Promise<DocR
     promptTokens,
     generatedTokens,
     firstAccepted,
-    accepted: judgement.transcript !== undefined,
+    ...assess(doc, answer, judgement, options),
     issues,
+  };
+}
+
+function assess(doc: Doc, answer: string, judgement: Judgement, options: Options) {
+  return {
+    accepted: judgement.transcript !== undefined,
     output: answer,
     preservedLines:
       options.format === 'tags' ? preservedLines(doc.input, answer) : doc.input.lines.length,
@@ -237,7 +244,32 @@ async function correct(server: Server, doc: Doc, options: Options): Promise<DocR
     ),
     score: scorePage(doc.input, doc.gold, judgement.transcript),
     ...(options.format === 'list' ? { unlocated: judgement.issues.length } : {}),
+    ...(options.format === 'diff' ? { dropped: dropped(doc, answer) } : {}),
     ...(doc.recoverable === undefined ? {} : { recoverable: doc.recoverable, total: doc.total }),
+  };
+}
+
+function dropped(doc: Doc, answer: string): number {
+  const { corrected } = readCorrectedLines(doc.input, answer);
+  return doc.input.lines.reduce(
+    (count, line) => count + droppedBlocks(line.text, corrected.get(line.number) ?? line.text),
+    0,
+  );
+}
+
+async function rescore(
+  run: CorrectorRun,
+  docs: readonly Doc[],
+  options: Options,
+): Promise<CorrectorRun> {
+  return {
+    ...run,
+    docs: run.docs.flatMap((result) => {
+      const doc = docs.find((entry) => entry.id === result.id);
+      if (!doc) return [];
+      const judgement = judge(doc, result.output, options);
+      return [{ ...result, ...assess(doc, result.output, judgement, options) }];
+    }),
   };
 }
 
@@ -311,6 +343,7 @@ async function main() {
       'server-args': { type: 'string', default: '' },
       'no-repair': { type: 'boolean', default: false },
       out: { type: 'string' },
+      rescore: { type: 'string' },
     },
   });
   const prompt = PROMPT_VARIANTS.find((variant) => variant === values.prompt);
@@ -364,6 +397,14 @@ async function main() {
 
   const runs: CorrectorRun[] = [];
   for (const corrector of correctors) {
+    if (values.rescore) {
+      const source = join(values.rescore, `${corrector.id}.json`);
+      if (!existsSync(source)) continue;
+      const run = await rescore(JSON.parse(await readFile(source, 'utf8')), docs, options);
+      await writeFile(join(out, `${corrector.id}.json`), `${JSON.stringify(run, null, 2)}\n`);
+      runs.push(run);
+      continue;
+    }
     const file = join(out, `${corrector.id}.json`);
     if (existsSync(file)) {
       runs.push(JSON.parse(await readFile(file, 'utf8')));

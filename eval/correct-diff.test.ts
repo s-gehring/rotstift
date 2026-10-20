@@ -88,3 +88,35 @@ describe('readCorrectedLines', () => {
     expect(result.issues).toEqual(['Zeile 2 fehlt in der Ausgabe.']);
   });
 });
+
+const grammar = ([, written, corrected]: [string, string, string]) =>
+  diffMarks(written, corrected).map((mark) => mark.type);
+
+describe('grammar errors from the samples', () => {
+  const cases: [string, string, string][] = [
+    [
+      'case after a preposition',
+      'Wegen dem Regen blieb er daheim.',
+      'Wegen des Regens blieb er daheim.',
+    ],
+    ['verb number', 'Die Kinder möchte nach Hause.', 'Die Kinder möchten nach Hause.'],
+    ['subjunctive', 'Er sagt, er hätte Hunger.', 'Er sagt, er habe Hunger.'],
+    ['mood', 'Sie meint, er ist krank.', 'Sie meint, er sei krank.'],
+    ['dative instead of accusative', 'Dann spricht sie ihm an.', 'Dann spricht sie ihn an.'],
+    ['pronoun case', 'Er gibt ihn das Buch.', 'Er gibt ihm das Buch.'],
+  ];
+
+  it.each(cases.filter(([name]) => ['subjunctive', 'mood'].includes(name)))(
+    'classifies %s as grammar',
+    (...entry) => {
+      expect(grammar(entry)).toEqual(['G']);
+    },
+  );
+
+  it.fails.each(cases.filter(([name]) => !['subjunctive', 'mood'].includes(name)))(
+    'classifies %s as grammar (rule misses it)',
+    (...entry) => {
+      expect(grammar(entry).every((type) => type === 'G')).toBe(true);
+    },
+  );
+});

@@ -1,6 +1,13 @@
 import type { Mark, Transcript, TranscriptLine } from '../src/annotations/transcript.ts';
 import { normalize, wordEdits } from './metrics.ts';
 
+export interface TypeTotals {
+  gold: number;
+  matched: number;
+  located: number;
+  predicted: number;
+}
+
 export interface PageScore {
   gold: number;
   predicted: number;
@@ -8,7 +15,7 @@ export interface PageScore {
   matched: number;
   wrongType: number;
   fixCorrect: number;
-  typeTotals: Record<string, { gold: number; matched: number }>;
+  typeTotals: Record<string, TypeTotals>;
   residualBefore: number;
   residualAfter: number;
 }
@@ -54,6 +61,7 @@ interface LineScore {
   wrongType: number;
   fixCorrect: number;
   matchedGold: Mark[];
+  locatedGold: Mark[];
 }
 
 export function scoreLine(
@@ -79,11 +87,13 @@ export function scoreLine(
   );
   const matched = paired.size;
   let wrongType = 0;
+  const locatedGold = [...paired.keys()];
   for (const expected of gold) {
     if (paired.has(expected)) continue;
     const candidate = predicted.find((entry) => !used.has(entry) && touches(text, entry, expected));
     if (candidate) {
       used.add(candidate);
+      locatedGold.push(expected);
       wrongType += 1;
     }
   }
@@ -91,7 +101,11 @@ export function scoreLine(
   for (const [expected, candidate] of paired) {
     if (applyMarks(text, [candidate]) === applyMarks(text, [expected])) fixCorrect += 1;
   }
-  return { strict, matched, wrongType, fixCorrect, matchedGold: [...paired.keys()] };
+  return { strict, matched, wrongType, fixCorrect, matchedGold: [...paired.keys()], locatedGold };
+}
+
+function typeEntry(totals: Record<string, TypeTotals>, type: string): TypeTotals {
+  return (totals[type] ??= { gold: 0, matched: 0, located: 0, predicted: 0 });
 }
 
 function byNumber(transcript: Transcript | undefined): Map<number, TranscriptLine> {
@@ -126,10 +140,12 @@ export function scorePage(input: Transcript, gold: Transcript, predicted?: Trans
     score.wrongType += result.wrongType;
     score.fixCorrect += result.fixCorrect;
     for (const mark of expected) {
-      const totals = (score.typeTotals[mark.type] ??= { gold: 0, matched: 0 });
+      const totals = typeEntry(score.typeTotals, mark.type);
       totals.gold += 1;
       if (result.matchedGold.includes(mark)) totals.matched += 1;
+      if (result.locatedGold.includes(mark)) totals.located += 1;
     }
+    for (const mark of actual) typeEntry(score.typeTotals, mark.type).predicted += 1;
     corrected += `${applyMarks(line.text, expected)}\n`;
     before += `${line.text}\n`;
     after += `${applyMarks(line.text, actual)}\n`;
@@ -161,9 +177,11 @@ export function sumScores(scores: readonly PageScore[]): PageScore {
     total.residualBefore += score.residualBefore;
     total.residualAfter += score.residualAfter;
     for (const [type, counts] of Object.entries(score.typeTotals)) {
-      const entry = (total.typeTotals[type] ??= { gold: 0, matched: 0 });
+      const entry = typeEntry(total.typeTotals, type);
       entry.gold += counts.gold;
       entry.matched += counts.matched;
+      entry.located += counts.located;
+      entry.predicted += counts.predicted;
     }
   }
   return total;
