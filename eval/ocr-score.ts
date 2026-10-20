@@ -153,6 +153,7 @@ export function recallDocs(run: CorrectRun, ocr: OcrRun | undefined, guards: Gua
     total: 0,
     gold: 0,
     matched: 0,
+    matchedWithHints: 0,
     predicted: 0,
     uncertain: 0,
     words: 0,
@@ -195,6 +196,14 @@ export function recallDocs(run: CorrectRun, ocr: OcrRun | undefined, guards: Gua
     score.gold += pageScore.gold;
     score.matched += pageScore.matched;
     score.predicted += pageScore.predicted;
+    const shown = judged.filter((entry) => entry.verdict !== 'drop');
+    const withHints: Transcript = {
+      lines: input.lines.map((line, index) => ({
+        ...line,
+        marks: shown.filter((entry) => entry.line === index).map((entry) => entry.mark),
+      })),
+    };
+    score.matchedWithHints += scorePage(input, mapped.gold, withHints).matched;
     score.uncertain += uncertain;
     score.words += words;
   }
@@ -253,7 +262,10 @@ function correctionWords(runs: readonly CorrectRun[]): string[] {
   return runs.flatMap((run) =>
     run.docs.flatMap((doc) =>
       deriveMarks(doc.lines.map(normalizeLine), correctedOf(doc), { profile: DEUTSCH }).flatMap(
-        (line) => line.marks.flatMap((mark) => wordsOf(mark.correction)),
+        (line) =>
+          line.marks.flatMap((mark) =>
+            wordsOf(mark.correction).flatMap((word) => [word, ...word.split('-')]),
+          ),
       ),
     ),
   );
@@ -328,15 +340,15 @@ async function main() {
     const source = file.includes('rendered') ? recallOcr : undefined;
     out.push(`### ${file.split('/').at(-1)} (${run.prompt}, ${run.docs.length} Texte)`, '');
     out.push(
-      '| Gegenmittel | Recall | Precision | erreichbare Fehler | Hinweise je 100 Wörter | Fehlalarme je 100 Wörter fehlerfrei | Hinweise fehlerfrei | ungültig |',
-      '| --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| Gegenmittel | Recall | Recall mit Hinweisen | Precision | erreichbare Fehler | Hinweise je 100 Wörter | Fehlalarme je 100 Wörter fehlerfrei | Hinweise fehlerfrei | ungültig |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
     );
     for (const { name, guards } of sets) {
       if (guards.minConfidence !== undefined && !source) continue;
       const score = recallDocs(run, source, guards);
       const clean = score.cleanWords > 0 ? rate(score.cleanAlarms, score.cleanWords) : 'n. v.';
       out.push(
-        `| ${name} | ${percent(score.matched, score.gold)} | ${percent(score.matched, score.predicted)} | ${score.gold} von ${score.total} | ${((100 * score.uncertain) / score.words).toFixed(1)} | ${clean} | ${score.cleanUncertain} | ${score.failed} |`,
+        `| ${name} | ${percent(score.matched, score.gold)} | ${percent(score.matchedWithHints, score.gold)} | ${percent(score.matched, score.predicted)} | ${score.gold} von ${score.total} | ${((100 * score.uncertain) / score.words).toFixed(1)} | ${clean} | ${score.cleanUncertain} | ${score.failed} |`,
       );
     }
     out.push('');
