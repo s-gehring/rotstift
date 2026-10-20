@@ -79,6 +79,7 @@ const STALL_LIMIT_ERROR: TranscribeError = {
 
 const PHASE_ORDER: readonly PagePhase[] = [
   'rendering',
+  'queued',
   'sidecar_start',
   'encoding',
   'request',
@@ -87,6 +88,7 @@ const PHASE_ORDER: readonly PagePhase[] = [
 
 const PHASE_FIELDS: Readonly<Record<PagePhase, string>> = {
   rendering: 'renderMs',
+  queued: 'queueMs',
   sidecar_start: 'sidecarMs',
   encoding: 'encodeMs',
   request: 'requestMs',

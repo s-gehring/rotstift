@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { ModelCallError, type ModelClient } from './client.ts';
 import { describeImport } from './format.ts';
-import { DEFAULT_MODEL_ID, MODELS } from './registry.ts';
+import {
+  CORRECTORS,
+  DEFAULT_MODEL_ID,
+  MODELS,
+  modelFiles,
+  type AnyModelInfo,
+  type CorrectorInfo,
+  type ModelInfo,
+} from './registry.ts';
 import {
   ANY_MODEL,
   activeModel,
@@ -17,8 +25,9 @@ function toDownloadError(error: unknown): DownloadError {
   return error instanceof ModelCallError ? error.error : { kind: 'io' };
 }
 
-export function useModelSetup(client: ModelClient | null) {
+function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models: readonly T[]) {
   const [state, dispatch] = useReducer(setupReducer, INITIAL_SETUP);
+  const choosable = models.some((model) => model.role === 'transcriber');
 
   const verifying = useRef(new Set<string>());
 
@@ -49,9 +58,9 @@ export function useModelSetup(client: ModelClient | null) {
     if (client === null) return;
     try {
       const [statuses, hardware, selectedId] = await Promise.all([
-        Promise.all(MODELS.map((model) => client.status(model.id))),
+        Promise.all(models.map((model) => client.status(model.id))),
         client.hardware().catch(() => null),
-        client.selection().catch(() => null),
+        choosable ? client.selection().catch(() => null) : null,
       ]);
       dispatch({
         type: 'loaded',
@@ -67,7 +76,7 @@ export function useModelSetup(client: ModelClient | null) {
     } catch (error) {
       dispatch({ type: 'error', modelId: ANY_MODEL, error: toDownloadError(error) });
     }
-  }, [client, verify]);
+  }, [client, verify, choosable, models]);
 
   useEffect(() => {
     if (client === null) return undefined;
@@ -92,7 +101,7 @@ export function useModelSetup(client: ModelClient | null) {
     };
   }, [client, refresh]);
 
-  const model = useMemo(() => activeModel(state), [state]);
+  const model = useMemo(() => activeModel(state, models), [state, models]);
   const status = state.statuses[model.id] ?? null;
 
   const guard = useCallback(async (modelId: string, action: () => Promise<void>) => {
@@ -143,10 +152,11 @@ export function useModelSetup(client: ModelClient | null) {
     dispatch({ type: 'note', note: null });
     await guard(model.id, async () => {
       dispatch({ type: 'status', status: await client.remove(model.id) });
+      if (!choosable) return;
       const selectedId = await client.selection().catch(() => null);
       dispatch({ type: 'selected', modelId: selectedId ?? DEFAULT_MODEL_ID });
     });
-  }, [client, guard, model.id]);
+  }, [client, guard, model.id, choosable]);
 
   const importFiles = useCallback(async () => {
     if (client === null) return;
@@ -157,17 +167,19 @@ export function useModelSetup(client: ModelClient | null) {
       if (outcome !== null) {
         dispatch({
           type: 'note',
-          note: describeImport(outcome.imported, outcome.unmatched, 2) || null,
+          note:
+            describeImport(outcome.imported, outcome.unmatched, modelFiles(model).length) || null,
         });
         await refresh();
       }
     });
     dispatch({ type: 'importing', importing: false });
-  }, [client, guard, model.id, refresh]);
+  }, [client, guard, model, refresh]);
 
   return {
     available: client !== null,
     state,
+    models,
     model,
     status,
     error: errorOf(state, model.id),
@@ -185,4 +197,12 @@ export function useModelSetup(client: ModelClient | null) {
   };
 }
 
-export type ModelSetup = ReturnType<typeof useModelSetup>;
+export type ModelSetup<T extends AnyModelInfo = ModelInfo> = ReturnType<typeof useRoleSetup<T>>;
+
+export function useModelSetup(client: ModelClient | null): ModelSetup {
+  return useRoleSetup(client, MODELS);
+}
+
+export function useCorrectorModelSetup(client: ModelClient | null): ModelSetup<CorrectorInfo> {
+  return useRoleSetup(client, CORRECTORS);
+}

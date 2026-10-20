@@ -3,12 +3,29 @@ use std::sync::OnceLock;
 
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::llm::MAX_OUTPUT_TOKENS;
 
 const REGISTRY_JSON: &str = include_str!("../../models.json");
 const MIN_CONTEXT_SIZE: u32 = 1024;
 pub const DEFAULT_MODEL_ID: &str = "glm-ocr-q8";
+pub const DEFAULT_CORRECTOR_ID: &str = "gemma-4-e2b-q4";
+const TEXT_PLACEHOLDER: &str = "{text}";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Role {
+    Transcriber,
+    Corrector,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LineMode {
+    Plain,
+    Numbered,
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -23,7 +40,7 @@ pub struct ModelFile {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelFiles {
     pub model: ModelFile,
-    pub mmproj: ModelFile,
+    pub mmproj: Option<ModelFile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -33,6 +50,7 @@ pub struct ServerParams {
     pub image_max_tokens: Option<u32>,
     pub threads: Option<u32>,
     pub gpu_layers: Option<u32>,
+    pub cpu_repack: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -40,29 +58,34 @@ pub struct ServerParams {
 pub struct RequestParams {
     pub max_output_tokens: u32,
     pub temperature: f32,
-    pub image_max_edge: u32,
+    pub image_max_edge: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ModelEntry {
     pub id: String,
+    pub role: Role,
     pub display_name: String,
     pub license: String,
     pub recommended_ram_gb: u32,
     pub files: ModelFiles,
     pub server: ServerParams,
     pub request: RequestParams,
+    pub line_mode: Option<LineMode>,
+    pub system: Option<String>,
     pub prompt: String,
 }
 
 impl ModelEntry {
     pub fn total_bytes(&self) -> u64 {
-        self.files.model.bytes + self.files.mmproj.bytes
+        self.file_list().iter().map(|file| file.bytes).sum()
     }
 
-    pub fn file_list(&self) -> [&ModelFile; 2] {
-        [&self.files.model, &self.files.mmproj]
+    pub fn file_list(&self) -> Vec<&ModelFile> {
+        std::iter::once(&self.files.model)
+            .chain(self.files.mmproj.as_ref())
+            .collect()
     }
 }
 
@@ -136,9 +159,113 @@ fn validate_file(model: &str, kind: &str, file: &ModelFile) -> Result<(), String
     Ok(())
 }
 
+struct Shape {
+    required: &'static [&'static str],
+    nullable: &'static [&'static str],
+    optional: &'static [&'static str],
+    forbidden: &'static [&'static str],
+}
+
+const TRANSCRIBER_SHAPE: Shape = Shape {
+    required: &["files.mmproj", "request.imageMaxEdge"],
+    nullable: &[
+        "server.threads",
+        "server.gpuLayers",
+        "server.imageMaxTokens",
+    ],
+    optional: &[],
+    forbidden: &["lineMode", "system"],
+};
+
+const CORRECTOR_SHAPE: Shape = Shape {
+    required: &["lineMode"],
+    nullable: &["server.threads", "server.gpuLayers"],
+    optional: &["system"],
+    forbidden: &[
+        "files.mmproj",
+        "server.imageMaxTokens",
+        "request.imageMaxEdge",
+    ],
+};
+
+fn lookup<'a>(entry: &'a Value, path: &str) -> Option<&'a Value> {
+    path.split('.')
+        .try_fold(entry, |value, key| value.as_object()?.get(key))
+}
+
+fn validate_shape(entry: &Value) -> Result<(), String> {
+    let id = entry["id"].as_str().unwrap_or("?");
+    let (role, shape) = match entry["role"].as_str() {
+        Some("transcriber") => ("transcriber", &TRANSCRIBER_SHAPE),
+        Some("corrector") => ("corrector", &CORRECTOR_SHAPE),
+        _ => return Ok(()),
+    };
+    for path in shape.required.iter().chain(shape.nullable) {
+        if lookup(entry, path).is_none() {
+            return Err(format!("model {id}: a {role} needs {path}"));
+        }
+    }
+    for path in shape.required.iter().chain(shape.optional) {
+        if lookup(entry, path).is_some_and(Value::is_null) {
+            return Err(format!("model {id}: {path} must not be null"));
+        }
+    }
+    if let Some(path) = shape
+        .forbidden
+        .iter()
+        .find(|path| lookup(entry, path).is_some())
+    {
+        return Err(format!("model {id}: a {role} takes no {path}"));
+    }
+    Ok(())
+}
+
+fn validate_role(entry: &ModelEntry) -> Result<(), String> {
+    let id = &entry.id;
+    match entry.role {
+        Role::Transcriber => {
+            if entry.files.mmproj.is_none() || entry.request.image_max_edge.is_none() {
+                return Err(format!(
+                    "model {id}: a transcriber needs mmproj and imageMaxEdge"
+                ));
+            }
+            if entry.line_mode.is_some() || entry.system.is_some() {
+                return Err(format!(
+                    "model {id}: lineMode and system belong to correctors"
+                ));
+            }
+        }
+        Role::Corrector => {
+            if entry.files.mmproj.is_some()
+                || entry.server.image_max_tokens.is_some()
+                || entry.request.image_max_edge.is_some()
+            {
+                return Err(format!("model {id}: a corrector takes no image settings"));
+            }
+            if entry.line_mode.is_none() || !entry.prompt.contains(TEXT_PLACEHOLDER) {
+                return Err(format!(
+                    "model {id}: a corrector needs lineMode and {TEXT_PLACEHOLDER} in the prompt"
+                ));
+            }
+            if entry
+                .system
+                .as_ref()
+                .is_some_and(|system| system.trim().is_empty())
+            {
+                return Err(format!("model {id}: system must not be empty"));
+            }
+        }
+    }
+    Ok(())
+}
+
 impl Registry {
     pub fn parse(json: &str) -> Result<Self, String> {
-        let registry: Self = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        if let Some(entries) = value.get("models").and_then(Value::as_array) {
+            entries.iter().try_for_each(validate_shape)?;
+        }
+        let registry: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
         registry.validate()?;
         Ok(registry)
     }
@@ -162,7 +289,10 @@ impl Registry {
                 return Err(format!("duplicate model id {id}"));
             }
             validate_file(id, "model", &entry.files.model)?;
-            validate_file(id, "mmproj", &entry.files.mmproj)?;
+            if let Some(mmproj) = &entry.files.mmproj {
+                validate_file(id, "mmproj", mmproj)?;
+            }
+            validate_role(entry)?;
             for file in entry.file_list() {
                 if !names.insert(file.name.as_str()) {
                     return Err(format!("file name {} is used twice", file.name));
@@ -191,14 +321,19 @@ impl Registry {
             if request.max_output_tokens >= server.context_size {
                 return Err(format!("model {id}: maxOutputTokens must fit the context"));
             }
-            if request.image_max_edge < 64 || !(0.0..=2.0).contains(&request.temperature) {
+            if request.image_max_edge.is_some_and(|edge| edge < 64)
+                || !(0.0..=2.0).contains(&request.temperature)
+            {
                 return Err(format!("model {id}: invalid request parameters"));
             }
         }
-        if self.find(DEFAULT_MODEL_ID).is_none() {
-            return Err(format!(
-                "registry lacks the default model {DEFAULT_MODEL_ID}"
-            ));
+        for (default, role) in [
+            (DEFAULT_MODEL_ID, Role::Transcriber),
+            (DEFAULT_CORRECTOR_ID, Role::Corrector),
+        ] {
+            if self.find(default).is_none_or(|entry| entry.role != role) {
+                return Err(format!("registry lacks the default model {default}"));
+            }
         }
         Ok(())
     }
@@ -219,16 +354,30 @@ pub fn registry() -> Result<&'static Registry, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::json;
 
-    fn json_with(change: impl FnOnce(&mut Value)) -> String {
+    fn json_with(index: usize, change: impl FnOnce(&mut Value)) -> String {
         let mut value: Value = serde_json::from_str(REGISTRY_JSON).unwrap();
-        change(&mut value["models"][0]);
+        change(&mut value["models"][index]);
         value.to_string()
     }
 
     fn rejection(change: impl FnOnce(&mut Value)) -> String {
-        Registry::parse(&json_with(change)).expect_err("registry should be rejected")
+        Registry::parse(&json_with(0, change)).expect_err("registry should be rejected")
+    }
+
+    fn corrector_index() -> usize {
+        registry()
+            .unwrap()
+            .models
+            .iter()
+            .position(|entry| entry.id == DEFAULT_CORRECTOR_ID)
+            .unwrap()
+    }
+
+    fn corrector_rejection(change: impl FnOnce(&mut Value)) -> String {
+        Registry::parse(&json_with(corrector_index(), change))
+            .expect_err("registry should be rejected")
     }
 
     #[test]
@@ -242,20 +391,120 @@ mod tests {
     fn the_bundled_registry_lists_the_default_and_the_stronger_model() {
         let registry = registry().unwrap();
         let ids: Vec<&str> = registry.models.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, ["glm-ocr-q8", "qwen3-vl-4b-q4"]);
+        assert_eq!(ids, ["glm-ocr-q8", "qwen3-vl-4b-q4", "gemma-4-e2b-q4"]);
         let stronger = registry.find("qwen3-vl-4b-q4").unwrap();
         assert_eq!(stronger.recommended_ram_gb, 16);
         assert_eq!(stronger.server.context_size, 4096);
         assert_eq!(stronger.server.image_max_tokens, Some(1024));
-        assert_eq!(stronger.request.image_max_edge, 1536);
+        assert_eq!(stronger.request.image_max_edge, Some(1536));
         assert_eq!(stronger.files.model.bytes, 2_497_281_664);
-        assert_eq!(stronger.files.mmproj.bytes, 453_974_304);
+        assert_eq!(stronger.files.mmproj.as_ref().unwrap().bytes, 453_974_304);
+    }
+
+    #[test]
+    fn the_bundled_corrector_follows_the_evaluation() {
+        let corrector = registry().unwrap().find(DEFAULT_CORRECTOR_ID).unwrap();
+        assert_eq!(corrector.role, Role::Corrector);
+        assert_eq!(corrector.files.mmproj, None);
+        assert_eq!(corrector.file_list().len(), 1);
+        assert_eq!(corrector.total_bytes(), 2_841_481_184);
+        assert_eq!(corrector.server.context_size, 4096);
+        assert!(!corrector.server.cpu_repack);
+        assert_eq!(corrector.line_mode, Some(LineMode::Numbered));
+        assert_eq!(corrector.prompt, TEXT_PLACEHOLDER);
+        assert!(
+            corrector
+                .system
+                .as_ref()
+                .unwrap()
+                .contains("Fach: {subject}.")
+        );
+        let transcriber = registry().unwrap().find(DEFAULT_MODEL_ID).unwrap();
+        assert_eq!(transcriber.role, Role::Transcriber);
+        assert!(transcriber.server.cpu_repack);
     }
 
     #[test]
     fn requires_the_default_model() {
         let error = rejection(|m| m["id"] = json!("renamed"));
         assert!(error.contains("default model"), "{error}");
+        let error = rejection(|m| m["role"] = json!("corrector"));
+        assert!(error.contains("a corrector"), "{error}");
+    }
+
+    #[test]
+    fn requires_a_default_corrector_with_the_corrector_role() {
+        let error = corrector_rejection(|m| m["id"] = json!("renamed"));
+        assert!(error.contains("default model"), "{error}");
+    }
+
+    #[test]
+    fn rejects_unknown_roles_and_a_missing_cpu_repack() {
+        assert!(rejection(|m| m["role"] = json!("painter")).contains("unknown variant"));
+        let error = rejection(|m| {
+            m["server"].as_object_mut().unwrap().remove("cpuRepack");
+        });
+        assert!(error.contains("cpuRepack"), "{error}");
+    }
+
+    #[test]
+    fn a_transcriber_needs_its_projector_and_image_size() {
+        let error = rejection(|m| {
+            m["files"].as_object_mut().unwrap().remove("mmproj");
+        });
+        assert!(error.contains("needs files.mmproj"), "{error}");
+        let error = rejection(|m| {
+            m["request"].as_object_mut().unwrap().remove("imageMaxEdge");
+        });
+        assert!(error.contains("needs request.imageMaxEdge"), "{error}");
+        let error = rejection(|m| {
+            m["server"]
+                .as_object_mut()
+                .unwrap()
+                .remove("imageMaxTokens");
+        });
+        assert!(error.contains("needs server.imageMaxTokens"), "{error}");
+        let error = rejection(|m| {
+            m["server"].as_object_mut().unwrap().remove("threads");
+        });
+        assert!(error.contains("needs server.threads"), "{error}");
+        let error = rejection(|m| m["files"]["mmproj"] = Value::Null);
+        assert!(error.contains("files.mmproj must not be null"), "{error}");
+        let error = rejection(|m| m["lineMode"] = json!("numbered"));
+        assert!(error.contains("takes no lineMode"), "{error}");
+        let error = rejection(|m| m["system"] = Value::Null);
+        assert!(error.contains("takes no system"), "{error}");
+    }
+
+    #[test]
+    fn a_corrector_takes_no_image_settings_and_needs_the_text_placeholder() {
+        let mmproj = registry().unwrap().models[0].files.mmproj.clone();
+        let error = corrector_rejection(|m| m["files"]["mmproj"] = json!(mmproj));
+        assert!(error.contains("takes no files.mmproj"), "{error}");
+        let error = corrector_rejection(|m| m["files"]["mmproj"] = Value::Null);
+        assert!(error.contains("takes no files.mmproj"), "{error}");
+        let error = corrector_rejection(|m| m["server"]["imageMaxTokens"] = Value::Null);
+        assert!(error.contains("takes no server.imageMaxTokens"), "{error}");
+        let error = corrector_rejection(|m| m["request"]["imageMaxEdge"] = json!(1024));
+        assert!(error.contains("takes no request.imageMaxEdge"), "{error}");
+        let error = corrector_rejection(|m| m["system"] = Value::Null);
+        assert!(error.contains("system must not be null"), "{error}");
+        let error = corrector_rejection(|m| {
+            m["server"].as_object_mut().unwrap().remove("gpuLayers");
+        });
+        assert!(error.contains("needs server.gpuLayers"), "{error}");
+        let error = corrector_rejection(|m| m["prompt"] = json!("Korrigiere."));
+        assert!(error.contains("{text}"), "{error}");
+        let error = corrector_rejection(|m| {
+            m.as_object_mut().unwrap().remove("lineMode");
+        });
+        assert!(error.contains("needs lineMode"), "{error}");
+        let error = corrector_rejection(|m| m["lineMode"] = Value::Null);
+        assert!(error.contains("lineMode must not be null"), "{error}");
+        let error = corrector_rejection(|m| m["lineMode"] = json!("diff"));
+        assert!(error.contains("unknown variant"), "{error}");
+        let error = corrector_rejection(|m| m["system"] = json!(" "));
+        assert!(error.contains("system"), "{error}");
     }
 
     #[test]
