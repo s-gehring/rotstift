@@ -133,13 +133,13 @@ describe('layoutOverlay on a page with room', () => {
       ...transcript.lines.map((line) => (line.bbox?.x ?? 0) + (line.bbox?.width ?? 0)),
     );
     expect(codes.map((code) => code.text)).toEqual([
-      'Sb R',
+      'Sb  R',
       'Z',
       'G',
-      'T W',
-      'A W',
-      'Z R R G',
-      'R R R',
+      'T  W',
+      'A  W',
+      'Z  R  R  G',
+      'R  R  R',
     ]);
     for (const code of codes) {
       expect(code.anchor).toBe('start');
@@ -204,11 +204,10 @@ describe('layoutOverlay with too little space between the lines', () => {
     expect(tight).toBeGreaterThan(0);
   });
 
-  it('shrinks and truncates margin text that does not fit', () => {
+  it('writes only the codes when the fixes do not fit into the margin', () => {
     const code = texts(model, 'code').find((item) => item.line === 6);
-    const { right } = box(defined(code));
-    expect(right).toBeLessThanOrEqual(FIXTURE_PAGE.width);
-    expect(code?.text.endsWith('…')).toBe(true);
+    expect(code?.text).toBe('Z  R  R  G');
+    expect(box(defined(code)).right).toBeLessThanOrEqual(FIXTURE_PAGE.width);
   });
 });
 
@@ -252,7 +251,7 @@ describe('layoutOverlay edge cases', () => {
     });
     expect(fixes.length).toBeGreaterThan(0);
     expect(fixes.length).toBeLessThan(6);
-    expect(texts(model, 'code')[0]?.text).toContain('R: ');
+    expect(texts(model, 'code')[0]?.text).toMatch(/^R(?: {2}R)*$/u);
   });
 
   it('skips lines without a bounding box and reports them', () => {
@@ -425,5 +424,78 @@ describe('layoutOverlay edge cases', () => {
     const roomy = texts(layoutOverlay(roomyPage(), options), 'code')[0]?.size ?? 0;
     expect(second.y).toBeLessThan(150);
     expect(second.size).toBeLessThan(roomy);
+  });
+});
+
+function narrowMarginLine(number: number, y: number, types: readonly string[], fix = 'xy') {
+  const words = types.map((_, index) => `w${String.fromCodePoint(97 + index)}`);
+  return {
+    number,
+    bbox: { x: 40, y, width: 860, height: 50 },
+    text: words.join(' '),
+    marks: types.map((type, index) => ({
+      kind: 'error' as const,
+      type,
+      original: words[index] ?? '',
+      correction: fix,
+      offset: index * 3,
+    })),
+  };
+}
+
+describe('layoutOverlay with a narrow margin', () => {
+  const page = { width: 1000, height: 400 };
+  const transcript: Transcript = {
+    lines: [
+      narrowMarginLine(1, 100, ['A', 'A', 'R', 'A', 'A', 'G', 'Z', 'R']),
+      narrowMarginLine(2, 160, [
+        'R',
+        'G',
+        'Z',
+        'A',
+        'T',
+        'W',
+        'R',
+        'G',
+        'Z',
+        'A',
+        'T',
+        'W',
+        'R',
+        'G',
+      ]),
+      narrowMarginLine(3, 220, ['R'], 'Religionsgemeinschaften'),
+    ],
+  };
+  const model = layoutOverlay(transcript, { ...options, page });
+  const codes = texts(model, 'code');
+  const rows = (line: number) =>
+    codes.filter((code) => code.line === line).map((code) => code.text);
+
+  it('keeps every code row inside the page', () => {
+    expect(codes.length).toBeGreaterThan(3);
+    for (const code of codes) {
+      expect(box(code).left).toBeGreaterThan(900);
+      expect(box(code).right).toBeLessThanOrEqual(page.width);
+      expect(code.text).not.toContain('…');
+    }
+  });
+
+  it('separates the codes and wraps them onto a second row', () => {
+    expect(rows(1)).toEqual(['A  A  R  A', 'A  G  Z  R']);
+    const [first, second] = codes.filter((code) => code.line === 1);
+    expect((second?.y ?? 0) - (first?.y ?? 0)).toBeGreaterThan(0);
+  });
+
+  it('shortens the codes with a count when even two rows are too few', () => {
+    const [row] = rows(2);
+    expect(rows(2)).toHaveLength(1);
+    expect(row).toMatch(/^R {2}G(?: {2}\S+)* {2}\+\d+$/u);
+    const shown = (row ?? '').split('  ');
+    expect(shown.length - 1 + Number(shown.at(-1)?.slice(1))).toBe(14);
+  });
+
+  it('writes a long fix in the margin as its code', () => {
+    expect(rows(3)).toEqual(['R']);
   });
 });

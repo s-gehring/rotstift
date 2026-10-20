@@ -31,4 +31,5 @@
 .annotated-page__overlay text {
   font-family: 'Caveat', cursive;
   font-weight: 500;
+  white-space: pre;
 }

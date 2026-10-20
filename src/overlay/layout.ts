@@ -203,7 +203,7 @@ function layoutLine(
   }
 
   items.push(
-    codesItem(line, entries, moved, frame, { codeSize, bandBaseline, bandSize, bandUsable }),
+    ...codesItems(line, entries, moved, frame, { codeSize, bandBaseline, bandSize, bandUsable }),
   );
   return items;
 }
@@ -288,10 +288,81 @@ interface CodeSpace {
   readonly bandUsable: boolean;
 }
 
-function codeTokens(entries: readonly Entry[], moved: ReadonlySet<number>): string[] {
+const CODE_SEPARATOR = '  ';
+const ROW_HEIGHT_EM = 1.05;
+const MAX_CODE_ROWS = 2;
+const ROW_ROOM = 1.2;
+
+interface CodeRows {
+  readonly rows: readonly string[];
+  readonly size: number;
+}
+
+function fixTokens(entries: readonly Entry[], moved: ReadonlySet<number>): string[] {
   return entries.map((entry) =>
     moved.has(entry.index) ? `${entry.code}: ${entry.mark.correction}` : entry.code,
   );
+}
+
+function fitsAt(text: string, size: number, available: number): boolean {
+  return estimateTextWidth(text, size) <= available;
+}
+
+function wrapCodes(codes: readonly string[], size: number, available: number): string[] | null {
+  const rows: string[] = [];
+  let row = '';
+  for (const code of codes) {
+    const candidate = row === '' ? code : `${row}${CODE_SEPARATOR}${code}`;
+    if (fitsAt(candidate, size, available)) {
+      row = candidate;
+    } else {
+      if (row === '' || !fitsAt(code, size, available)) return null;
+      rows.push(row);
+      row = code;
+    }
+  }
+  rows.push(row);
+  return rows;
+}
+
+function shortenCodes(codes: readonly string[], size: number, available: number): string | null {
+  for (let kept = codes.length - 1; kept >= 1; kept -= 1) {
+    const text = [...codes.slice(0, kept), `+${codes.length - kept}`].join(CODE_SEPARATOR);
+    if (fitsAt(text, size, available)) return text;
+  }
+  return null;
+}
+
+function fitCodeRows(
+  entries: readonly Entry[],
+  moved: ReadonlySet<number>,
+  available: number,
+  preferred: number,
+  minimum: number,
+  maxRows = 1,
+): CodeRows {
+  const floor = Math.min(minimum, preferred);
+  const ladder = sizeLadder(preferred, floor);
+  const withFixes = fixTokens(entries, moved).join(CODE_SEPARATOR);
+  const codes = entries.map((entry) => entry.code);
+  const single = codes.join(CODE_SEPARATOR);
+  for (const size of ladder) {
+    if (fitsAt(withFixes, size, available)) return { rows: [withFixes], size };
+  }
+  for (const size of ladder) {
+    if (fitsAt(single, size, available)) return { rows: [single], size };
+  }
+  if (maxRows > 1) {
+    for (const size of ladder) {
+      const rows = wrapCodes(codes, size, available);
+      if (rows !== null && rows.length <= maxRows) return { rows, size };
+    }
+  }
+  const shortened = shortenCodes(codes, floor, available);
+  if (shortened !== null) return { rows: [shortened], size: floor };
+  const last = codes.length > 1 ? `${codes[0] ?? ''}${CODE_SEPARATOR}+${codes.length - 1}` : single;
+  const width = estimateTextWidth(last, 1);
+  return { rows: [last], size: width > 0 ? Math.min(floor, available / width) : floor };
 }
 
 function fitEdgeCodes(
@@ -301,21 +372,23 @@ function fitEdgeCodes(
   codeSize: number,
 ): { text: string; size: number } {
   const available = frame.column.mode === 'edge' ? frame.column.right - frame.textLeft : 0;
-  return fitTokens(
-    codeTokens(entries, moved),
+  const fitted = fitCodeRows(
+    entries,
+    moved,
     available,
     codeSize,
     Math.min(codeSize, MIN_FIX_PIXELS),
   );
+  return { text: fitted.rows.join(CODE_SEPARATOR), size: fitted.size };
 }
 
-function codesItem(
+function codesItems(
   line: LocatedLine,
   entries: readonly Entry[],
   moved: ReadonlySet<number>,
   frame: Frame,
   space: CodeSpace,
-): TextItem {
+): TextItem[] {
   const { bbox } = line;
   const column = frame.column;
   const random = createRandom(seedFor(line.number, 99, 5));
@@ -330,35 +403,41 @@ function codesItem(
   const baseline = bbox.y + bbox.height * BASELINE;
 
   if (column.mode === 'margin') {
-    const available = column.right - column.left;
-    const size = bbox.height * CODE_PREFERRED;
-    const fitted = fitTokens(
-      codeTokens(entries, moved),
-      available,
-      size,
-      bbox.height * MIN_CODE_FRACTION,
+    const minimum = bbox.height * MIN_CODE_FRACTION;
+    const rowsRoom = Math.floor((bbox.height * ROW_ROOM) / (minimum * ROW_HEIGHT_EM));
+    const fitted = fitCodeRows(
+      entries,
+      moved,
+      column.right - column.left,
+      bbox.height * CODE_PREFERRED,
+      minimum,
+      Math.min(MAX_CODE_ROWS, Math.max(1, rowsRoom)),
     );
-    return {
+    const step = fitted.size * ROW_HEIGHT_EM;
+    const first = baseline - (step * (fitted.rows.length - 1)) / 2;
+    return fitted.rows.map((text, row) => ({
       ...common,
-      text: fitted.text,
+      text,
       x: column.left,
-      y: baseline,
+      y: first + row * step,
       size: fitted.size,
       anchor: 'start',
-    };
+    }));
   }
 
   if (!space.bandUsable) {
     const beside = besideText(entries, moved, frame, column.right, space.codeSize);
     if (beside !== null) {
-      return {
-        ...common,
-        text: beside.text,
-        x: frame.page.width - frame.pad,
-        y: baseline,
-        size: beside.size,
-        anchor: 'end',
-      };
+      return [
+        {
+          ...common,
+          text: beside.text,
+          x: frame.page.width - frame.pad,
+          y: baseline,
+          size: beside.size,
+          anchor: 'end',
+        },
+      ];
     }
   }
   const fitted = fitEdgeCodes(
@@ -367,14 +446,16 @@ function codesItem(
     frame,
     space.bandUsable ? space.codeSize : Math.max(space.bandSize, MIN_EDGE_CODE_PIXELS),
   );
-  return {
-    ...common,
-    text: fitted.text,
-    x: column.right,
-    y: space.bandBaseline,
-    size: fitted.size,
-    anchor: 'end',
-  };
+  return [
+    {
+      ...common,
+      text: fitted.text,
+      x: column.right,
+      y: space.bandBaseline,
+      size: fitted.size,
+      anchor: 'end',
+    },
+  ];
 }
 
 function besideText(
@@ -386,30 +467,13 @@ function besideText(
 ): { text: string; size: number } | null {
   const available = frame.page.width - frame.pad - textRight - codeSize * 0.3;
   const floor = Math.min(codeSize, MIN_FIX_PIXELS);
-  const tokens = codeTokens(entries, moved);
-  const text = tokens.join(' ');
-  for (const size of sizeLadder(codeSize, floor)) {
-    if (estimateTextWidth(text, size) <= available) return { text, size };
+  for (const text of [
+    fixTokens(entries, moved).join(CODE_SEPARATOR),
+    entries.map((entry) => entry.code).join(CODE_SEPARATOR),
+  ]) {
+    for (const size of sizeLadder(codeSize, floor)) {
+      if (fitsAt(text, size, available)) return { text, size };
+    }
   }
   return null;
-}
-
-function fitTokens(
-  tokens: readonly string[],
-  available: number,
-  preferred: number,
-  minimum: number,
-): { text: string; size: number } {
-  const floor = Math.min(minimum, preferred);
-  for (const size of sizeLadder(preferred, floor)) {
-    const text = tokens.join(' ');
-    if (estimateTextWidth(text, size) <= available) return { text, size };
-  }
-  let kept = [...tokens];
-  while (kept.length > 1) {
-    kept = kept.slice(0, -1);
-    const text = `${kept.join(' ')} …`;
-    if (estimateTextWidth(text, floor) <= available) return { text, size: floor };
-  }
-  return { text: kept.join(' '), size: floor };
 }

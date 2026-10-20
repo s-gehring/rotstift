@@ -66,7 +66,7 @@ describe('AnnotatedPage', () => {
     const codes = [...container.querySelectorAll('text[data-role="code"]')].map(
       (node) => node.childNodes[0]?.textContent,
     );
-    expect(codes[0]).toBe('Sb R');
+    expect(codes[0]).toBe('Sb  R');
   });
 
   it('describes each mark with the error name for hovering', () => {

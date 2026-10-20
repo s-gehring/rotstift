@@ -79,6 +79,7 @@ interface ResultsViewProps {
   readonly arbeiten: readonly Arbeit[];
   readonly count: WordCount;
   readonly canRetry: boolean;
+  readonly locked?: boolean;
 }
 
 function Thumbnail({ page }: { readonly page: ImportPage }) {
@@ -272,7 +273,7 @@ function ArbeitSection({
   );
 }
 
-export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
+export function ResultsView({ arbeiten, count, canRetry, locked = false }: ResultsViewProps) {
   const { state } = count;
   const [exportMessage, setExportMessage] = useState('');
   const [pdfJob, setPdfJob] = useState<PdfJob | null>(null);
@@ -364,70 +365,80 @@ export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
 
   return (
     <section className="results" aria-labelledby="results-title">
-      <div className="results-header">
-        <h2 id="results-title">Wortzahl</h2>
-        <p className="total" data-testid="total-words">
-          <strong>{formatCount(totals.words)}</strong> {totals.words === 1 ? 'Wort' : 'Wörter'}{' '}
-          gesamt
-          {totals.countedPages < totals.pages && (
-            <span className="hint">
-              {' '}
-              (aus {totals.countedPages} von {totals.pages} Seiten)
-            </span>
-          )}
-        </p>
-        <p className="average" data-testid="average-words">
-          {arbeitenText(totals.arbeiten)}
-          {totals.average !== null && (
-            <>
-              {' · '}Durchschnitt <strong>{formatAverage(totals.average)}</strong> Wörter pro Arbeit
-              {totals.completeArbeiten < totals.arbeiten && (
-                <span className="hint">
-                  {' '}
-                  (aus {totals.completeArbeiten} von {totals.arbeiten} Arbeiten)
-                </span>
-              )}
-            </>
-          )}
-        </p>
-        <div className="export-actions">
-          <button type="button" disabled={totals.countedPages === 0} onClick={save}>
-            Als CSV speichern
-          </button>
-          <button type="button" disabled={totals.countedPages === 0} onClick={copy}>
-            In die Zwischenablage kopieren
-          </button>
-          <button
-            type="button"
-            disabled={pdfBlocked || totals.countedPages === 0}
-            onClick={(event) => saveClassPdfFile(event.currentTarget)}
-          >
-            Klassen-PDF speichern
-          </button>
-          {pdfJob?.scope === CLASS_SCOPE && <PdfProgress job={pdfJob} onCancel={cancelPdf} />}
-          <span role="status">{exportMessage}</span>
+      <fieldset className="lock-area" disabled={locked}>
+        {locked && (
+          <p className="hint">
+            Während der Berichtigung lassen sich Wortzahlen nicht ändern oder speichern.
+          </p>
+        )}
+        <div className="results-header">
+          <h2 id="results-title" tabIndex={-1}>
+            Wortzahl
+          </h2>
+          <p className="total" data-testid="total-words">
+            <strong>{formatCount(totals.words)}</strong> {totals.words === 1 ? 'Wort' : 'Wörter'}{' '}
+            gesamt
+            {totals.countedPages < totals.pages && (
+              <span className="hint">
+                {' '}
+                (aus {totals.countedPages} von {totals.pages} Seiten)
+              </span>
+            )}
+          </p>
+          <p className="average" data-testid="average-words">
+            {arbeitenText(totals.arbeiten)}
+            {totals.average !== null && (
+              <>
+                {' · '}Durchschnitt <strong>{formatAverage(totals.average)}</strong> Wörter pro
+                Arbeit
+                {totals.completeArbeiten < totals.arbeiten && (
+                  <span className="hint">
+                    {' '}
+                    (aus {totals.completeArbeiten} von {totals.arbeiten} Arbeiten)
+                  </span>
+                )}
+              </>
+            )}
+          </p>
+          <div className="export-actions">
+            <button type="button" disabled={totals.countedPages === 0} onClick={save}>
+              Als CSV speichern
+            </button>
+            <button type="button" disabled={totals.countedPages === 0} onClick={copy}>
+              In die Zwischenablage kopieren
+            </button>
+            <button
+              type="button"
+              disabled={pdfBlocked || totals.countedPages === 0}
+              onClick={(event) => saveClassPdfFile(event.currentTarget)}
+            >
+              Klassen-PDF speichern
+            </button>
+            {pdfJob?.scope === CLASS_SCOPE && <PdfProgress job={pdfJob} onCancel={cancelPdf} />}
+            <span role="status">{exportMessage}</span>
+          </div>
+          {note !== null && <p className="hint">{note}</p>}
         </div>
-        {note !== null && <p className="hint">{note}</p>}
-      </div>
-      <ul className="arbeit-results">
-        {arbeiten.map((arbeit) => {
-          const result = results.find((candidate) => candidate.id === arbeit.id);
-          if (result === undefined || result.rows.length === 0) return null;
-          return (
-            <ArbeitSection
-              key={arbeit.id}
-              arbeit={arbeit}
-              result={result}
-              count={count}
-              canRetry={canRetry}
-              pdfJob={pdfJob?.scope === arbeit.id ? pdfJob : null}
-              pdfBlocked={pdfBlocked}
-              onSavePdf={(trigger) => saveArbeitPdf(arbeit, result, trigger)}
-              onCancelPdf={cancelPdf}
-            />
-          );
-        })}
-      </ul>
+        <ul className="arbeit-results">
+          {arbeiten.map((arbeit) => {
+            const result = results.find((candidate) => candidate.id === arbeit.id);
+            if (result === undefined || result.rows.length === 0) return null;
+            return (
+              <ArbeitSection
+                key={arbeit.id}
+                arbeit={arbeit}
+                result={result}
+                count={count}
+                canRetry={canRetry}
+                pdfJob={pdfJob?.scope === arbeit.id ? pdfJob : null}
+                pdfBlocked={pdfBlocked}
+                onSavePdf={(trigger) => saveArbeitPdf(arbeit, result, trigger)}
+                onCancelPdf={cancelPdf}
+              />
+            );
+          })}
+        </ul>
+      </fieldset>
     </section>
   );
 }
