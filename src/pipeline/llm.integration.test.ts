@@ -4,8 +4,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { afterAll, describe, expect, it } from 'vitest';
 import { LlmCallError, type Completion } from '../llm/client.ts';
+import { fitWithin } from '../llm/image.ts';
 import type { ChatRequest, RuntimeStatus } from '../llm/types.ts';
 import { findModel, recommendModel, type ModelInfo } from '../models/registry.ts';
 import { countWords } from '../stats/count-words.ts';
@@ -29,6 +31,17 @@ function selectedModel(): ModelInfo {
 }
 
 const model = selectedModel();
+
+async function modelImage(source: Buffer, maxEdge: number): Promise<string> {
+  const image = await loadImage(source);
+  const size = fitWithin(image, maxEdge);
+  const canvas = createCanvas(size.width, size.height);
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, size.width, size.height);
+  context.drawImage(image, 0, 0, size.width, size.height);
+  return `data:image/jpeg;base64,${canvas.toBuffer('image/jpeg', 90).toString('base64')}`;
+}
 
 function sidecarPath(): string {
   const stamp: { target: string } = JSON.parse(
@@ -54,10 +67,12 @@ function serverArguments(): string[] {
     ['--offline'],
   ];
   const gpuLayers: string | number | null = process.env['ROTSTIFT_GPU_LAYERS'] ?? server.gpuLayers;
+  const threads: string | number | null = process.env['ROTSTIFT_THREADS'] ?? server.threads;
   if (server.imageMaxTokens !== null)
     args.push(['--image-max-tokens', String(server.imageMaxTokens)]);
-  if (server.threads !== null) args.push(['--threads', String(server.threads)]);
+  if (threads !== null) args.push(['--threads', String(threads)]);
   if (gpuLayers !== null) args.push(['--n-gpu-layers', String(gpuLayers)]);
+  if (Number(gpuLayers) === 0) args.push(['--device', 'none']);
   return args.flat();
 }
 
@@ -156,11 +171,10 @@ describe.skipIf(!available)('real sidecar on handwritten pages', () => {
       const rows: string[] = [];
       for (const name of names) {
         const image = readFileSync(join(DATASET, 'images', name));
-        const dataUrl = `data:image/jpeg;base64,${image.toString('base64')}`;
         const page = createLlmTranscriber({
           client: sidecar,
           model,
-          encode: () => Promise.resolve(dataUrl),
+          encode: (_png, maxEdge) => modelImage(image, maxEdge),
         });
         const started = performance.now();
         const result = await page.transcribe(new Blob([image]), new AbortController().signal);

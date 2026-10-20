@@ -16,7 +16,7 @@ export function useWordCount(pages: readonly ImportPage[], status: TranscriberSt
     runner.setPages(pages);
   }, [runner, pages]);
 
-  useEffect(() => () => runner.cancel(), [runner]);
+  useEffect(() => () => runner.dispose(), [runner]);
 
   return { runner, state };
 }
