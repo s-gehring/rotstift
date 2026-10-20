@@ -108,7 +108,7 @@ function readCorrections(file: string): CorrectRun {
   return { ...run, docs: run.docs.filter((doc) => !skipped.has(doc.id)) };
 }
 
-function falseAlarms(
+export function falseAlarms(
   run: CorrectRun,
   ocr: OcrRun | undefined,
   dataset: string,
