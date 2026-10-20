@@ -3,14 +3,15 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelCallError, type ModelClient } from './client.ts';
-import { recommendModel } from './registry.ts';
+import { DEFAULT_MODEL_ID, recommendModel } from './registry.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 import { useModelSetup } from './use-model-setup.ts';
+import { errorOf } from './setup-state.ts';
 import type { ModelState, ModelStatus } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const model = recommendModel(null);
+const model = recommendModel();
 
 const statusOf = (state: ModelState): ModelStatus => ({
   modelId: model.id,
@@ -19,19 +20,27 @@ const statusOf = (state: ModelState): ModelStatus => ({
   totalBytes: 100,
 });
 
-function fakeClient(initial: ModelState, verified: Promise<ModelStatus>) {
+function fakeClient(
+  initial: ModelState,
+  verified: Promise<ModelStatus>,
+  overrides: Partial<ModelClient> = {},
+) {
   const states = { current: initial };
   const verify = vi.fn<ModelClient['verify']>(() => verified);
   const status = vi.fn<ModelClient['status']>(() => Promise.resolve(statusOf(states.current)));
   const client: ModelClient = {
-    status,
+    status: (modelId) =>
+      modelId === model.id ? status(modelId) : Promise.resolve({ ...statusOf('missing'), modelId }),
     hardware: () => Promise.reject(new Error('no hardware')),
     verify,
     startDownload: () => Promise.resolve(undefined),
     cancelDownload: () => Promise.resolve(false),
+    selection: () => Promise.resolve(null),
+    select: () => Promise.resolve(undefined),
     remove: () => Promise.resolve(statusOf('missing')),
     importFiles: () => Promise.resolve(null),
     onDownload: () => Promise.resolve(() => undefined),
+    ...overrides,
   };
   return { client, verify, status, states };
 }
@@ -94,7 +103,7 @@ describe('useModelSetup verification', () => {
     await act(async () => {
       await latest?.refresh();
     });
-    expect(latest?.state.error).toBeNull();
+    expect(latest?.error).toBeNull();
   });
 
   it('does not verify files that are already known to be fine', async () => {
@@ -121,7 +130,7 @@ describe('useModelSetup verification', () => {
     const { client, verify, status } = fakeClient('unverified', failing);
     await mount(client);
     await vi.waitFor(() => expect(container.textContent).toBe('unverified'));
-    expect(latest?.state.error).toEqual({ kind: 'io', detail: 'locked' });
+    expect(latest?.error).toEqual({ kind: 'io', detail: 'locked' });
     expect(status).toHaveBeenCalledTimes(2);
 
     verify.mockResolvedValueOnce(statusOf('ready'));
@@ -130,7 +139,7 @@ describe('useModelSetup verification', () => {
     });
     expect(verify).toHaveBeenCalledTimes(2);
     expect(container.textContent).toBe('ready');
-    expect(latest?.state.error).toBeNull();
+    expect(latest?.error).toBeNull();
   });
 
   it('falls back to unverified when even the status cannot be reloaded', async () => {
@@ -144,3 +153,149 @@ describe('useModelSetup verification', () => {
     await vi.waitFor(() => expect(container.textContent).toBe('unverified'));
   });
 });
+
+describe('useModelSetup model choice', () => {
+  const STRONGER = 'qwen3-vl-4b-q4';
+  const big = { totalRamBytes: 32 * 1024 ** 3, freeDiskBytes: null };
+
+  it('uses the default model when nothing was chosen before', async () => {
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.state.loaded).toBe(true));
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+  });
+
+  it('restores the persisted choice after a restart', async () => {
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+      selection: () => Promise.resolve(STRONGER),
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.model.id).toBe(STRONGER));
+  });
+
+  it('ignores a persisted choice the machine no longer qualifies for', async () => {
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve({ totalRamBytes: 8 * 1024 ** 3, freeDiskBytes: null }),
+      selection: () => Promise.resolve(STRONGER),
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.state.loaded).toBe(true));
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+  });
+
+  it('persists a switch through the backend and then uses the new model', async () => {
+    const select = vi.fn<ModelClient['select']>(() => Promise.resolve(undefined));
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+      select,
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.state.loaded).toBe(true));
+    await act(async () => {
+      await latest?.select(STRONGER);
+    });
+    expect(select).toHaveBeenCalledExactlyOnceWith(STRONGER);
+    expect(latest?.model.id).toBe(STRONGER);
+
+    await act(async () => {
+      await latest?.select(STRONGER);
+    });
+    expect(select).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      await latest?.select(DEFAULT_MODEL_ID);
+    });
+    expect(select).toHaveBeenLastCalledWith(DEFAULT_MODEL_ID);
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+  });
+
+  it('keeps the current model and reports the error when the switch fails', async () => {
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+      select: () => Promise.reject(new ModelCallError({ kind: 'io', detail: 'read-only' })),
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.state.loaded).toBe(true));
+    await act(async () => {
+      await latest?.select(STRONGER);
+    });
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+    expect(latest?.error).toEqual({ kind: 'io', detail: 'read-only' });
+  });
+
+  it('does not switch while any model is downloading, verifying, importing or deleting', async () => {
+    const select = vi.fn<ModelClient['select']>(() => Promise.resolve(undefined));
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+      select,
+      status: (modelId) =>
+        Promise.resolve({
+          ...statusOf(modelId === STRONGER ? 'downloading' : 'ready'),
+          modelId,
+        }),
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.state.loaded).toBe(true));
+    await act(async () => {
+      await latest?.select(STRONGER);
+    });
+    expect(select).not.toHaveBeenCalled();
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+  });
+
+  it('goes back to the default model when the chosen model is deleted', async () => {
+    const saved = { current: STRONGER };
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+      selection: () => Promise.resolve(saved.current),
+      remove: () => {
+        saved.current = DEFAULT_MODEL_ID;
+        return Promise.resolve({ ...statusOf('missing'), modelId: STRONGER });
+      },
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.model.id).toBe(STRONGER));
+    await act(async () => {
+      await latest?.remove();
+    });
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+    expect(latest?.status?.state).toBe('ready');
+  });
+
+  it('shows the error of a failed model only for that model', async () => {
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      hardware: () => Promise.resolve(big),
+      selection: () => Promise.resolve(STRONGER),
+      startDownload: () => Promise.reject(new ModelCallError({ kind: 'network' })),
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.model.id).toBe(STRONGER));
+    await act(async () => {
+      await latest?.download();
+    });
+    expect(latest?.error).toEqual({ kind: 'network' });
+    expect(latest ? errorOf(latest.state, DEFAULT_MODEL_ID) : undefined).toBeNull();
+  });
+
+  it('does nothing without a backend', async () => {
+    await act(async () => {
+      root.render(<NoBackend />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await latest?.select(STRONGER);
+    });
+    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+  });
+});
+
+function NoBackend() {
+  const setup = useModelSetup(null);
+  useEffect(() => {
+    latest = setup;
+  });
+  return null;
+}

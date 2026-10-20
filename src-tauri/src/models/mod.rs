@@ -3,6 +3,7 @@ mod download;
 mod import;
 mod manager;
 pub mod registry;
+mod selection;
 mod system;
 mod verified;
 
