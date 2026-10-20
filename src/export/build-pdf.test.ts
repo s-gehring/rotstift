@@ -1,10 +1,20 @@
 // @vitest-environment happy-dom
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { ENGLISCH } from '../annotations/profile.ts';
+import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
+import type { Transcript } from '../annotations/transcript.ts';
+import { computeStatistics } from '../stats/statistics.ts';
 import { buildClassPdf, buildCorrectedPdf, buildWordCountPdf } from './build-pdf.ts';
-import { bareScan, correctedArbeit, FIXED_DATE, LANDSCAPE, wordCountArbeit } from './fixtures.ts';
+import {
+  bareScan,
+  correctedArbeit,
+  FIXED_DATE,
+  LANDSCAPE,
+  markedPage,
+  plainTranscript,
+  wordCountArbeit,
+} from './fixtures.ts';
 import { installCanvas, readPdf, syntheticScan } from './test-support.ts';
-import type { ClassArbeit } from './types.ts';
+import type { ClassArbeit, PageImageEncoder } from './types.ts';
 
 vi.mock('../import/canvas.ts', () => import('./test-support.ts').then((m) => m.canvasModule));
 vi.mock('../overlay/font.ts', () => import('./test-support.ts').then((m) => m.fontModule));
@@ -55,20 +65,44 @@ describe('buildCorrectedPdf', () => {
   });
 
   it('uses the catalog of the profile language', async () => {
-    const arbeit = await correctedArbeit('Doe, Jane', ENGLISCH);
-    const statistics = { words: 10, errors: 1, errorsByType: { voc: 1 }, errorsPer100Words: 10 };
-    const pdf = await readPdf(await buildCorrectedPdf({ ...arbeit, statistics }, options));
-    const text = pdf.texts[3] ?? '';
+    const transcript: Transcript = {
+      lines: [
+        {
+          number: 1,
+          bbox: { x: 150, y: 260, width: 860, height: 60 },
+          text: 'I goed home now',
+          marks: [{ kind: 'error', type: 'voc', original: 'goed', correction: 'went', offset: 2 }],
+        },
+      ],
+    };
+    const page = await markedPage(transcript);
+    const statistics = computeStatistics(transcript);
+    const arbeit = { title: 'Doe, Jane', profile: ENGLISCH, pages: [page], statistics };
+    const text = (await readPdf(await buildCorrectedPdf(arbeit, options))).texts[1] ?? '';
     expect(text).toContain('Englisch');
-    expect(text).toContain('Fehler pro 100 Wörter 10,0');
+    expect(text).toContain('Fehler pro 100 Wörter 25,0');
     expect(text).not.toContain('Rechtschreibung');
   });
 
   it('says so when there are no errors', async () => {
+    const transcript = plainTranscript('Eins zwei drei vier');
+    const page = await markedPage(transcript);
+    const statistics = computeStatistics(transcript);
+    const arbeit = { title: 'Fehlerfrei', profile: DEUTSCH, pages: [page], statistics };
+    const pdf = await readPdf(await buildCorrectedPdf(arbeit, options));
+    expect(pdf.texts[1]).toContain('Keine Fehler markiert.');
+  });
+
+  it.each([
+    ['the error count', { errors: 99 }],
+    ['the error types', { errorsByType: { Z: 1 } }],
+    ['the word count', { words: 1 }],
+  ])('rejects statistics that contradict %s of the transcripts', async (_name, change) => {
     const arbeit = await correctedArbeit();
-    const statistics = { words: 40, errors: 0, errorsByType: {}, errorsPer100Words: 0 };
-    const pdf = await readPdf(await buildCorrectedPdf({ ...arbeit, statistics }, options));
-    expect(pdf.texts[3]).toContain('Keine Fehler markiert.');
+    const statistics = { ...arbeit.statistics, ...change };
+    await expect(buildCorrectedPdf({ ...arbeit, statistics }, options)).rejects.toThrow(
+      'passt nicht zu den Transkripten',
+    );
   });
 
   it('renders umlauts and falls back for letters outside WinAnsi', async () => {
@@ -93,13 +127,11 @@ describe('buildCorrectedPdf', () => {
 });
 
 const tiny = syntheticScan({ width: 120, height: 170 }, undefined, 'jpeg');
-const cheap = {
-  ...options,
-  encodePage: async () => ({
-    bytes: new Uint8Array(await (await tiny).arrayBuffer()),
-    format: 'jpeg' as const,
-  }),
-};
+const cheapEncoder: PageImageEncoder = async () => ({
+  bytes: new Uint8Array(await (await tiny).arrayBuffer()),
+  format: 'jpeg',
+});
+const cheap = { ...options, encodePage: cheapEncoder };
 
 describe('buildWordCountPdf', () => {
   it('holds the original pages and a summary with words per page and in total', async () => {
@@ -170,5 +202,51 @@ describe('buildClassPdf', () => {
 
   it('rejects an empty class', async () => {
     await expect(buildClassPdf([], options)).rejects.toThrow('keine Arbeiten');
+  });
+
+  it('reports progress per page and yields to the event loop between pages', async () => {
+    const arbeiten = await mixed();
+    const progress: [number, number][] = [];
+    let yielded = false;
+    setTimeout(() => {
+      yielded = true;
+    }, 0);
+    const seen: boolean[] = [];
+    await buildClassPdf(arbeiten, {
+      ...cheap,
+      onProgress: (done, total) => {
+        progress.push([done, total]);
+        seen.push(yielded);
+      },
+    });
+    expect(progress).toEqual(Array.from({ length: 6 }, (_, index) => [index + 1, 6]));
+    expect(seen[1]).toBe(true);
+  });
+
+  it('stops when aborted and does not encode further pages', async () => {
+    const arbeiten = await mixed();
+    const controller = new AbortController();
+    let encoded = 0;
+    const promise = buildClassPdf(arbeiten, {
+      ...options,
+      signal: controller.signal,
+      encodePage: async (page, profile) => {
+        encoded += 1;
+        return cheapEncoder(page, profile);
+      },
+      onProgress: (done) => {
+        if (done === 2) controller.abort(new Error('Abgebrochen'));
+      },
+    });
+    await expect(promise).rejects.toThrow('Abgebrochen');
+    expect(encoded).toBe(2);
+  });
+
+  it('does not start when the signal is already aborted', async () => {
+    const arbeiten = await mixed();
+    const signal = AbortSignal.abort(new Error('Gleich abgebrochen'));
+    await expect(buildClassPdf(arbeiten, { ...cheap, signal })).rejects.toThrow(
+      'Gleich abgebrochen',
+    );
   });
 });

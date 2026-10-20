@@ -1,37 +1,19 @@
-import { createRequire } from 'node:module';
-import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import * as napi from '@napi-rs/canvas';
 import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Transcript } from '../annotations/transcript.ts';
 import { FONT_FAMILY, FONT_WEIGHT } from '../overlay/model.ts';
 
-interface NapiContext {
-  fillStyle: string;
-  font: string;
-  fillRect(x: number, y: number, width: number, height: number): void;
-  fillText(text: string, x: number, y: number): void;
-  drawImage(image: unknown, x: number, y: number, width?: number, height?: number): void;
-  getImageData(x: number, y: number, width: number, height: number): { data: Uint8ClampedArray };
-  createImageData(width: number, height: number): { data: Uint8ClampedArray };
-  putImageData(data: unknown, x: number, y: number): void;
-}
+export { napi };
 
-interface NapiCanvas {
-  width: number;
-  height: number;
-  getContext(kind: '2d'): NapiContext;
-  toBuffer(type: 'image/jpeg' | 'image/png', quality?: number): Buffer;
-}
+type Canvas = napi.Canvas;
 
-interface Napi {
-  createCanvas(width: number, height: number): NapiCanvas;
-  loadImage(source: Buffer): Promise<{ width: number; height: number }>;
-  Path2D: unknown;
-  GlobalFonts: { register(data: Buffer, name: string): unknown };
+function encodeCanvas(canvas: Canvas, type: 'image/jpeg' | 'image/png', quality: number): Buffer {
+  return type === 'image/png'
+    ? canvas.toBuffer('image/png')
+    : canvas.toBuffer('image/jpeg', quality);
 }
-
-const require = createRequire(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
-export const napi: Napi = require('@napi-rs/canvas');
 
 const overlayFontSpec = (size: number): string => `${FONT_WEIGHT} ${size}px "${FONT_FAMILY}"`;
 
@@ -51,9 +33,9 @@ export function installCanvas(): void {
 export const canvasModule = {
   createCanvas: (width: number, height: number) =>
     napi.createCanvas(Math.max(1, Math.round(width)), Math.max(1, Math.round(height))),
-  get2dContext: (canvas: NapiCanvas) => canvas.getContext('2d'),
-  canvasToBlob: async (canvas: NapiCanvas, type: 'image/jpeg' | 'image/png', quality = 0.92) =>
-    new Blob([new Uint8Array(canvas.toBuffer(type, Math.round(quality * 100)))], { type }),
+  get2dContext: (canvas: Canvas) => canvas.getContext('2d'),
+  canvasToBlob: async (canvas: Canvas, type: 'image/jpeg' | 'image/png', quality = 0.92) =>
+    new Blob([new Uint8Array(encodeCanvas(canvas, type, Math.round(quality * 100)))], { type }),
   releaseCanvas: () => undefined,
 };
 
@@ -119,7 +101,7 @@ async function drawScan(
     context.fillText(line.text, line.bbox.x, line.bbox.y + line.bbox.height * 0.78);
   }
   const type = format === 'png' ? 'image/png' : 'image/jpeg';
-  return new Blob([new Uint8Array(canvas.toBuffer(type, 90))], { type });
+  return new Blob([new Uint8Array(encodeCanvas(canvas, type, 90))], { type });
 }
 
 export interface PdfReadBack {
