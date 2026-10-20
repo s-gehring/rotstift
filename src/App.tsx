@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react';
+import { useProfileChoice } from './correction/ProfilePicker.tsx';
+import { useCorrector } from './correction/use-corrector.ts';
+import { flattenPages } from './import/arbeiten.ts';
 import { ImportView } from './import/ImportView.tsx';
 import { useImportPages } from './import/use-import-pages.ts';
 import { ModelManagement } from './models/ModelManagement.tsx';
@@ -12,6 +15,9 @@ import { useTranscriber } from './pipeline/use-transcriber.ts';
 import { CountControls, CountHint } from './results/CountControls.tsx';
 import { ResultsView } from './results/ResultsView.tsx';
 import { useWordCount } from './results/use-word-count.ts';
+import { reviewBlocked, ReviewControls, ReviewHint } from './review/ReviewControls.tsx';
+import { ReviewView } from './review/ReviewView.tsx';
+import { useReview } from './review/use-review.ts';
 
 const modelClient = browserModelClient();
 
@@ -30,39 +36,82 @@ export function App() {
   });
   const count = useWordCount(importState.pages, transcriber);
   const enginePhase = useEnginePhase(transcriber);
-  const switchLocked = isSwitchLocked(count.state, enginePhase);
+  const corrector = useCorrector();
+  const { profile, select: selectProfile } = useProfileChoice();
+  const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
+  const review = useReview(count.runner, pages, corrector);
+  const reviewing = review.state.run !== null;
+  const [view, setView] = useState<'import' | 'review'>('import');
+  const switchLocked = isSwitchLocked(count.state, enginePhase) || reviewing;
   const openSetup = () => {
     setDialogOpen(true);
+  };
+  const startReview = () => {
+    setView('review');
+    void review.flow.start(pages, profile);
   };
 
   return (
     <main className="app">
       <h1>Rotstift</h1>
       <p className="hint">Schülerarbeiten lokal korrigieren.</p>
-      <ImportView
-        importState={importState}
-        actions={
-          <CountControls
-            count={count}
-            status={transcriber}
-            arbeiten={importState.arbeiten}
-            onSetup={openSetup}
+      {view === 'review' ? (
+        <ReviewView
+          arbeiten={importState.arbeiten}
+          flow={review.flow}
+          state={review.state}
+          canRetry={!reviewBlocked(transcriber, corrector)}
+          preview={corrector?.state === 'ready' && corrector.preview}
+          onBack={() => {
+            setView('import');
+          }}
+        />
+      ) : (
+        <>
+          <ImportView
+            importState={importState}
+            actions={
+              <CountControls
+                count={count}
+                status={transcriber}
+                arbeiten={importState.arbeiten}
+                onSetup={openSetup}
+                locked={reviewing}
+              >
+                <ReviewControls
+                  state={review.state}
+                  profile={profile}
+                  onProfile={selectProfile}
+                  transcriber={transcriber}
+                  corrector={corrector}
+                  pageCount={pages.length}
+                  counting={count.state.batch !== null}
+                  onStart={startReview}
+                  onOpen={() => {
+                    setView('review');
+                  }}
+                />
+              </CountControls>
+            }
+            footer={
+              <>
+                <CountHint
+                  count={count}
+                  status={transcriber}
+                  arbeiten={importState.arbeiten}
+                  download={setup.status}
+                />
+                <ReviewHint corrector={corrector} />
+              </>
+            }
           />
-        }
-        footer={
-          <CountHint
-            count={count}
-            status={transcriber}
+          <ResultsView
             arbeiten={importState.arbeiten}
-            download={setup.status}
+            count={count}
+            canRetry={transcriber?.state === 'ready'}
           />
-        }
-      />
-      <ResultsView
-        arbeiten={importState.arbeiten}
-        count={count}
-        canRetry={transcriber?.state === 'ready'}
-      />
+        </>
+      )}
       <ModelManagement setup={setup} onSetup={openSetup} disabled={switchLocked} />
       {setup.available && (
         <ModelSetupDialog

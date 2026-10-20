@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { findPage, flattenPages, type Arbeit } from '../import/arbeiten.ts';
 import { formatMegabytes } from '../models/format.ts';
 import type { ModelStatus } from '../models/types.ts';
@@ -17,6 +17,8 @@ interface CountProps {
 
 interface ControlProps extends CountProps {
   readonly onSetup?: () => void;
+  readonly locked?: boolean;
+  readonly children?: ReactNode;
 }
 
 interface HintProps extends CountProps {
@@ -46,7 +48,14 @@ function finishedText(arbeiten: readonly Arbeit[], count: WordCount): string {
   return parts.filter(Boolean).join(' ');
 }
 
-export function CountControls({ count, status, arbeiten, onSetup }: ControlProps) {
+export function CountControls({
+  count,
+  status,
+  arbeiten,
+  onSetup,
+  locked = false,
+  children,
+}: ControlProps) {
   const pages = useMemo(() => flattenPages(arbeiten), [arbeiten]);
   const { runner, state } = count;
   const running = state.batch !== null;
@@ -92,12 +101,13 @@ export function CountControls({ count, status, arbeiten, onSetup }: ControlProps
       <button
         type="button"
         className="primary"
-        disabled={!running && disabled}
+        disabled={locked || (!running && disabled)}
         aria-describedby="count-hint"
         onClick={running ? cancel : runner.start}
       >
         {running ? 'Abbrechen' : 'Wörter zählen'}
       </button>
+      {children}
       {status?.state === 'needs-model' && (
         <button type="button" onClick={onSetup}>
           {SETUP_BUTTON[status.problem]}
