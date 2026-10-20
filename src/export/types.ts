@@ -39,6 +39,7 @@ export type PageImageEncoder = (
 export interface ExportOptions {
   readonly date?: Date;
   readonly encodePage?: PageImageEncoder;
+  readonly footer?: string;
   readonly onProgress?: (done: number, total: number) => void;
   readonly signal?: AbortSignal;
 }

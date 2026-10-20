@@ -114,7 +114,7 @@ pub fn import_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::registry::{ModelFiles, RequestParams, Role, ServerParams};
+    use crate::models::registry::{ModelFiles, Reasoning, RequestParams, Role, ServerParams};
     use crate::models::verified::has_valid_marker;
 
     fn sha(bytes: &[u8]) -> String {
@@ -149,6 +149,7 @@ mod tests {
                 threads: None,
                 gpu_layers: None,
                 cpu_repack: true,
+                reasoning: Reasoning::Auto,
             },
             request: RequestParams {
                 max_output_tokens: 1024,

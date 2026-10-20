@@ -34,7 +34,13 @@ function record(arbeiten: readonly Arbeit[]) {
   latest = arbeiten;
 }
 
-function Harness({ onChange }: { readonly onChange: (arbeiten: readonly Arbeit[]) => void }) {
+function Harness({
+  onChange,
+  locked = false,
+}: {
+  readonly onChange: (arbeiten: readonly Arbeit[]) => void;
+  readonly locked?: boolean;
+}) {
   const [arbeiten, dispatch] = useReducer(arbeitenReducer, start);
   useEffect(() => {
     onChange(arbeiten);
@@ -49,7 +55,7 @@ function Harness({ onChange }: { readonly onChange: (arbeiten: readonly Arbeit[]
     notices: [],
     dismissNotices: () => undefined,
   };
-  return <ImportView importState={importState} />;
+  return <ImportView importState={importState} locked={locked} />;
 }
 
 let container: HTMLElement;
@@ -165,5 +171,15 @@ describe('Arbeiten in the import view', () => {
     expect(latest[1]?.pages[0]?.rotation).toBe(90);
     act(() => control('Seite 1 von Ben entfernen').click());
     expect(names()).toEqual(['Anna:2', 'Cleo:1']);
+  });
+
+  it('locks rotating, moving and removing while a review runs', () => {
+    act(() => root.render(<Harness onChange={record} locked />));
+    const lock = control('Ben entfernen').closest('fieldset');
+    expect(lock?.disabled).toBe(true);
+    expect(control('Seite 1 von Ben nach rechts drehen').closest('fieldset')).toBe(lock);
+    expect(container.textContent).toContain(
+      'Während der Berichtigung lassen sich die Arbeiten nicht verändern.',
+    );
   });
 });

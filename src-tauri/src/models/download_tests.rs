@@ -13,7 +13,7 @@ use tokio::sync::watch;
 use super::download::{DownloadError, Downloader, FreeSpace, Progress, hex_digest, part_path};
 use super::manager::{DownloadEvent, ModelManager, State, Update, is_ready};
 use super::registry::{
-    ModelEntry, ModelFile, ModelFiles, RequestParams, Role, ServerParams, url_allowed,
+    ModelEntry, ModelFile, ModelFiles, Reasoning, RequestParams, Role, ServerParams, url_allowed,
 };
 use super::verified::{has_valid_marker, marker_path, write_marker};
 
@@ -631,6 +631,7 @@ fn leaked_entry_with_id(id: &str, model: ModelFile, mmproj: ModelFile) -> &'stat
             threads: None,
             gpu_layers: None,
             cpu_repack: true,
+            reasoning: Reasoning::Auto,
         },
         request: RequestParams {
             max_output_tokens: 512,

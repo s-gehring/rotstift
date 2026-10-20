@@ -79,6 +79,13 @@ button.primary:disabled {
   gap: 1rem;
 }
 
+.lock-area {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
 .list-header {
   justify-content: space-between;
   margin-top: 1rem;
