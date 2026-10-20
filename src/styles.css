@@ -446,6 +446,20 @@ button.danger:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.diagnostics {
+  margin-top: 1rem;
+}
+
+.diagnostics-entries {
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

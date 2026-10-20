@@ -606,7 +606,7 @@ describe('runner', () => {
     await t.waitForCalls(1);
     t.calls[0]?.resolve(t.ok('eins', 'zwei'));
     await t.waitForCalls(2);
-    t.calls[1]?.resolve({ ok: false, error: { kind: 'cancelled' } });
+    t.calls[1]?.resolve({ ok: false, error: { kind: 'failed', message: 'x' } });
     await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
 
     const second = vi.fn<PageTranscriber['transcribe']>(() =>

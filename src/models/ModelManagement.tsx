@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatSize } from './format.ts';
+import { DiagnosticsLog, type DiagnosticsSource } from './DiagnosticsLog.tsx';
 import { ModelChoice } from './ModelChoice.tsx';
 import { totalBytes } from './registry.ts';
 import type { ModelState } from './types.ts';
@@ -9,6 +10,7 @@ interface Props {
   readonly setup: ModelSetup;
   readonly onSetup: () => void;
   readonly disabled: boolean;
+  readonly diagnostics?: DiagnosticsSource;
 }
 
 const STATE_TEXT = {
@@ -29,7 +31,7 @@ const BUSY_STATES: ReadonlySet<ModelState> = new Set([
   'deleting',
 ]);
 
-export function ModelManagement({ setup, onSetup, disabled }: Props) {
+export function ModelManagement({ setup, onSetup, disabled, diagnostics }: Props) {
   const { model, status } = setup;
   const [confirming, setConfirming] = useState(false);
   const keepButton = useRef<HTMLButtonElement>(null);
@@ -103,6 +105,7 @@ export function ModelManagement({ setup, onSetup, disabled }: Props) {
             )}
           </div>
         )}
+        <DiagnosticsLog {...(diagnostics && { source: diagnostics })} />
       </details>
     </section>
   );

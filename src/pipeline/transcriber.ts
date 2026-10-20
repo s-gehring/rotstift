@@ -7,8 +7,15 @@ export type TranscribeResult =
   | { readonly ok: true; readonly lines: readonly string[]; readonly startupMs?: number }
   | { readonly ok: false; readonly error: TranscribeError };
 
+export type PagePhase = 'rendering' | 'sidecar_start' | 'encoding' | 'request' | 'parsing';
+
 export interface PageTranscriber {
-  transcribe(png: Blob, signal: AbortSignal): Promise<TranscribeResult>;
+  transcribe(
+    png: Blob,
+    signal: AbortSignal,
+    onPhase?: (phase: PagePhase) => void,
+  ): Promise<TranscribeResult>;
+  recover?(): Promise<void>;
 }
 
 export type EnginePhase = 'idle' | 'starting' | 'ready' | 'failed';

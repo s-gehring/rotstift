@@ -1,3 +1,4 @@
+mod diagnostics;
 mod llm;
 mod models;
 
@@ -12,6 +13,7 @@ pub fn run() {
         .manage(llm::LlmRuntime::new())
         .manage(Arc::new(models::ModelManager::new()))
         .setup(|app| {
+            diagnostics::init(app.handle());
             llm::commands::stop_orphaned_sidecars(app.handle());
             Ok(())
         })
@@ -21,6 +23,10 @@ pub fn run() {
             llm::commands::llm_status,
             llm::commands::llm_chat,
             llm::commands::llm_cancel,
+            diagnostics::commands::diag_log,
+            diagnostics::commands::diag_heartbeat,
+            diagnostics::commands::diag_read,
+            diagnostics::commands::diag_clear,
             models::commands::model_status,
             models::commands::model_selection,
             models::commands::model_select,

@@ -8,11 +8,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::oneshot;
 
 use super::process::{self, RecordGuard};
 use super::request::{ChatRequest, MAX_OUTPUT_TOKENS};
+use crate::diagnostics;
 
 pub const SIDECAR_NAME: &str = "rotstift-llama-server";
 const HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
@@ -258,7 +259,16 @@ impl LlmRuntime {
 
     async fn check_exit(&self) -> Option<LlmError> {
         let exit = take_exited(&mut self.lock())?;
-        let error = exit.error(exit_report(exit.code, &exit.log).await);
+        let report = exit_report(exit.code, &exit.log).await;
+        diagnostics::record(
+            "sidecar_exit",
+            json!({
+                "code": report.code,
+                "duringStartup": exit.during_startup,
+                "stderrTail": diagnostics::stderr_tail(&report.log, &home_dirs()),
+            }),
+        );
+        let error = exit.error(report);
         let mut state = self.lock();
         if state.generation == exit.generation
             && matches!(state.status, RuntimeStatus::Failed { .. })
@@ -276,6 +286,10 @@ impl LlmRuntime {
     }
 
     fn abort_start(&self, generation: u64, error: LlmError) -> LlmError {
+        diagnostics::record(
+            "sidecar_start_failed",
+            json!({ "kind": error_kind(&error) }),
+        );
         let mut state = self.lock();
         if state.generation == generation {
             state.status = RuntimeStatus::Failed {
@@ -338,6 +352,15 @@ impl LlmRuntime {
                 return Err(self.abort_start(generation, error));
             }
         };
+        diagnostics::record(
+            "sidecar_start",
+            json!({
+                "model": options.model,
+                "contextSize": options.context_size,
+                "threads": options.threads,
+                "imageMaxTokens": options.image_max_tokens,
+            }),
+        );
         let log = read_log(child.stderr.take());
         let record = match process::record(&paths.records_dir, &child, &paths.sidecar) {
             Ok(record) => record,
@@ -377,13 +400,22 @@ impl LlmRuntime {
         generation: u64,
         model: String,
     ) -> Result<RuntimeStatus, LlmError> {
-        let deadline = Instant::now() + self.startup_timeout;
+        let began = Instant::now();
+        let deadline = began + self.startup_timeout;
         loop {
             if let Some(error) = self.check_exit().await {
                 return Err(error);
             }
             let port = match self.startup_progress(generation, deadline) {
-                Startup::Finished(outcome) => return outcome,
+                Startup::Finished(outcome) => {
+                    if let Err(LlmError::StartupTimeout) = outcome {
+                        diagnostics::record(
+                            "sidecar_startup_timeout",
+                            json!({ "afterMs": began.elapsed().as_millis() as u64 }),
+                        );
+                    }
+                    return outcome;
+                }
                 Startup::Waiting(port) => port,
             };
             if let Some(port) = port {
@@ -395,6 +427,10 @@ impl LlmRuntime {
                     .await
                     .is_ok_and(|response| response.status().is_success());
                 if healthy {
+                    diagnostics::record(
+                        "sidecar_ready",
+                        json!({ "startupMs": began.elapsed().as_millis() as u64 }),
+                    );
                     return Ok(self.mark_ready(generation, model, port));
                 }
             }
@@ -494,6 +530,7 @@ impl LlmRuntime {
     }
 
     async fn send_chat(&self, request_id: Option<String>, body: Value) -> Result<Value, LlmError> {
+        let guard = diagnostics::ChatGuard::begin(request_id.as_deref());
         let (port, api_key) = self.ready_server().await?;
         let send = self.post_chat(port, api_key, &body);
         let result = match request_id {
@@ -506,10 +543,15 @@ impl LlmRuntime {
                 }
             }
         };
-        match result {
+        let result = match result {
             Err(error @ LlmError::Request(_)) => Err(self.explain_failure(error).await),
             other => other,
-        }
+        };
+        guard.finish(match &result {
+            Ok(_) => "ok",
+            Err(error) => error_kind(error),
+        });
+        result
     }
 
     async fn post_chat(&self, port: u16, api_key: String, body: &Value) -> Result<Value, LlmError> {
@@ -545,6 +587,32 @@ impl LlmRuntime {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
+}
+
+fn error_kind(error: &LlmError) -> &'static str {
+    match error {
+        LlmError::InvalidModelName(_) => "invalidModelName",
+        LlmError::ModelNotFound(_) => "modelNotFound",
+        LlmError::SidecarMissing(_) => "sidecarMissing",
+        LlmError::Environment(_) => "environment",
+        LlmError::SpawnFailed(_) => "spawnFailed",
+        LlmError::ExitedDuringStartup(_) => "exitedDuringStartup",
+        LlmError::ExitedUnexpectedly(_) => "exitedUnexpectedly",
+        LlmError::StartupTimeout => "startupTimeout",
+        LlmError::NotReady => "notReady",
+        LlmError::InvalidRequest(_) => "invalidRequest",
+        LlmError::Cancelled => "cancelled",
+        LlmError::Timeout => "timeout",
+        LlmError::Request(_) => "request",
+        LlmError::Server { .. } => "server",
+    }
+}
+
+fn home_dirs() -> Vec<String> {
+    ["HOME", "USERPROFILE"]
+        .into_iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .collect()
 }
 
 fn request_error(error: reqwest::Error) -> LlmError {

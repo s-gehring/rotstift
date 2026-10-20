@@ -11,7 +11,9 @@ import type {
   TranscribeResult,
 } from './transcriber.ts';
 
-export type EngineClient = Pick<LlmClient, 'status' | 'startModel' | 'complete'>;
+export type EngineClient = Pick<LlmClient, 'status' | 'startModel' | 'complete'> & {
+  readonly stop?: () => unknown;
+};
 
 export interface LlmTranscriberDeps {
   readonly client: EngineClient;
@@ -164,11 +166,24 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
       },
     },
 
-    async transcribe(png, signal): Promise<TranscribeResult> {
+    async recover() {
+      starting = null;
+      setPhase('idle');
       try {
+        await client.stop?.();
+      } catch {
+        return;
+      }
+    },
+
+    async transcribe(png, signal, onPhase): Promise<TranscribeResult> {
+      try {
+        onPhase?.('sidecar_start');
         const startupMs = await untilAbort(ensureRunning(), signal);
+        onPhase?.('encoding');
         const image = await encode(png, model.request.imageMaxEdge);
         signal.throwIfAborted();
+        onPhase?.('request');
         const answer = await client.complete(
           {
             messages: [visionMessage(model.prompt, [image])],
@@ -177,6 +192,7 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
           },
           { signal },
         );
+        onPhase?.('parsing');
         if (answer.finishReason === 'length') return incomplete(INCOMPLETE_MESSAGE);
         const { lines, removedThinking } = parseTranscript(answer.text);
         if (removedThinking && lines.length === 0) return incomplete(INCOMPLETE_MESSAGE);
