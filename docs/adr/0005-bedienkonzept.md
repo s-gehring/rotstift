@@ -27,13 +27,13 @@ Das Fenster hat eine Kopfzeile und darunter genau eine von zwei Ansichten.
 
 ### Ablauf und Hauptaktion
 
-| Zustand            | Hauptaktion oben rechts                                                                 |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| Keine Arbeiten     | keine, die Ablagefläche füllt das Fenster                                               |
-| Arbeiten geladen   | Fach-Auswahl und „Korrigieren“, im Pfeilmenü daneben „Nur Wörter zählen“                |
+| Zustand            | Hauptaktion oben rechts                                                                  |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| Keine Arbeiten     | keine, die Ablagefläche füllt das Fenster                                                |
+| Arbeiten geladen   | Fach-Auswahl und „Korrigieren“, im Pfeilmenü daneben „Nur Wörter zählen“                 |
 | Lauf               | Fortschritt in der Kopfzeile („Seite 12 von 61“, Restzeit sobald schätzbar), „Abbrechen“ |
-| Fertig             | „Exportieren“ mit Menü                                                                  |
-| Neue Arbeiten dazu | wieder „Korrigieren“ bzw. „Wörter zählen“, läuft nur für das Fehlende                   |
+| Fertig             | „Exportieren“ mit Menü                                                                   |
+| Neue Arbeiten dazu | wieder „Korrigieren“ bzw. „Wörter zählen“, läuft nur für das Fehlende                    |
 
 - **Korrigieren** erkennt den Text und korrigiert ihn. Die Wortzahl fällt dabei mit ab. **Nur Wörter zählen** erkennt nur und braucht kein Korrekturmodell. Die zuletzt gewählte Art bleibt die Hauptaktion.
 - **Fach** ist eine kleine Auswahl links neben dem Knopf (Deutsch, Englisch). Die Sprache folgt aus dem Fach und wird nicht gesondert gewählt. Welche Kürzel markiert werden, steht nicht in der Oberfläche.

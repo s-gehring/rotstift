@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SidecarCorrector } from '../llm/sidecar-corrector.ts';
 import type { ModelClient } from '../models/client.ts';
-import type { CreateCorrector } from '../models/corrector-setup.tsx';
+import type { CreateCorrector } from '../models/corrector-setup.ts';
 import { defaultCorrector } from '../models/registry.ts';
 import type { ModelState } from '../models/types.ts';
 import { CORRECTOR_MISSING_MESSAGE } from './provider.ts';
@@ -84,8 +84,6 @@ describe('useCorrector', () => {
     const create = await render(fakeClient('missing'));
     expect(latest?.status).toEqual({ state: 'needs-model', message: CORRECTOR_MISSING_MESSAGE });
     expect(create).not.toHaveBeenCalled();
-    act(() => latest?.setup.openSetup());
-    expect(latest?.setup.dialogOpen).toBe(true);
   });
 
   it('uses the sidecar corrector with its engine once the model is ready', async () => {

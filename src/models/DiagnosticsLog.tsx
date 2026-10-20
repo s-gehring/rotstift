@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { clearDiagnostics, readDiagnostics } from '../pipeline/diagnostics.ts';
+import { Button } from '../ui/Button.tsx';
 
 export interface DiagnosticsSource {
   readonly read: () => Promise<readonly string[]>;
@@ -45,13 +46,7 @@ export function DiagnosticsLog({
         if (opened) load();
       }}
     >
-      <summary>Diagnoseprotokoll</summary>
-      <p>
-        Das Protokoll enthält nur technische Angaben, zum Beispiel wie lange eine Seite gebraucht
-        hat oder ob die Texterkennung neu gestartet wurde. Es enthält keine Schülertexte, keine
-        Namen, keine Dateinamen und keine Bilder und wird nicht versendet. Bei Problemen können Sie
-        es kopieren und selbst per E-Mail schicken.
-      </p>
+      <summary>Protokoll</summary>
       {open && (
         <>
           {failed && <p role="alert">Das Protokoll konnte nicht gelesen werden.</p>}
@@ -60,9 +55,8 @@ export function DiagnosticsLog({
               {lines.length === 0 ? 'Noch keine Einträge.' : text}
             </pre>
           )}
-          <div className="dialog-actions">
-            <button
-              type="button"
+          <div className="diagnostics-actions">
+            <Button
               disabled={lines === null || lines.length === 0}
               onClick={() => {
                 source.copy(text).then(
@@ -76,27 +70,25 @@ export function DiagnosticsLog({
               }}
             >
               Kopieren
-            </button>
-            <button type="button" onClick={load}>
-              Aktualisieren
-            </button>
-            <button
-              type="button"
-              className="danger"
+            </Button>
+            <Button onClick={load}>Aktualisieren</Button>
+            <Button
+              variant="quiet"
+              className="is-danger"
               disabled={lines === null || lines.length === 0}
               onClick={() => {
                 setConfirming(true);
               }}
             >
               Protokoll löschen
-            </button>
+            </Button>
           </div>
           {confirming && (
             <div className="confirm" role="alertdialog" aria-label="Protokoll löschen">
-              <p>Das Diagnoseprotokoll wirklich löschen? Das lässt sich nicht rückgängig machen.</p>
-              <button
-                type="button"
-                className="danger"
+              <p>Protokoll wirklich löschen?</p>
+              <Button
+                variant="quiet"
+                className="is-danger"
                 onClick={() => {
                   setConfirming(false);
                   source.clear().then(load, () => {
@@ -105,15 +97,14 @@ export function DiagnosticsLog({
                 }}
               >
                 Endgültig löschen
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
                 onClick={() => {
                   setConfirming(false);
                 }}
               >
                 Behalten
-              </button>
+              </Button>
             </div>
           )}
           <p role="status">

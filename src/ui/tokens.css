@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light dark;
+
+  --color-bg: #f3f0e9;
+  --color-surface: #faf8f3;
+  --color-raised: #ffffff;
+  --color-sunken: #ebe7de;
+  --color-border: #dcd6ca;
+  --color-border-strong: #bfb8a9;
+  --color-text: #24221e;
+  --color-text-muted: #6d685e;
+  --color-hover: rgb(36 34 30 / 6%);
+  --color-pressed: rgb(36 34 30 / 11%);
+  --color-red: #d11f2a;
+  --color-red-hover: #b71922;
+  --color-red-text: #b3151f;
+  --color-red-soft: #fbe8e9;
+  --color-on-red: #ffffff;
+  --color-focus: #2e5bba;
+  --color-page: #ffffff;
+  --color-backdrop: rgb(30 27 22 / 42%);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius: 6px;
+
+  --shadow-sm: 0 1px 2px rgb(40 32 20 / 10%);
+  --shadow-md: 0 4px 14px rgb(40 32 20 / 14%), 0 1px 3px rgb(40 32 20 / 10%);
+  --shadow-lg: 0 18px 48px rgb(40 32 20 / 22%), 0 2px 6px rgb(40 32 20 / 10%);
+  --shadow-page: 0 1px 3px rgb(40 32 20 / 18%);
+
+  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-size: 14px;
+  --font-size-sm: 12px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --line-height: 1.45;
+
+  --control-height: 30px;
+  --header-height: 52px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1b1a18;
+    --color-surface: #23221f;
+    --color-raised: #2c2a27;
+    --color-sunken: #171614;
+    --color-border: #3a3732;
+    --color-border-strong: #57524a;
+    --color-text: #ebe7df;
+    --color-text-muted: #a29d93;
+    --color-hover: rgb(235 231 223 / 7%);
+    --color-pressed: rgb(235 231 223 / 13%);
+    --color-red: #d11f2a;
+    --color-red-hover: #e0333d;
+    --color-red-text: #ff7a80;
+    --color-red-soft: #3a1d1e;
+    --color-focus: #8fb0ff;
+    --color-backdrop: rgb(0 0 0 / 55%);
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 35%);
+    --shadow-md: 0 6px 18px rgb(0 0 0 / 45%), 0 1px 3px rgb(0 0 0 / 35%);
+    --shadow-lg: 0 20px 56px rgb(0 0 0 / 55%), 0 2px 6px rgb(0 0 0 / 35%);
+    --shadow-page: 0 1px 4px rgb(0 0 0 / 50%);
+  }
+}

@@ -46,12 +46,10 @@ async function openLog() {
 }
 
 describe('DiagnosticsLog', () => {
-  it('explains that no student data is logged and reads nothing until opened', () => {
+  it('stays collapsed as "Protokoll" and reads nothing until opened', () => {
     const fake = source([]);
     act(() => root.render(<DiagnosticsLog source={fake} />));
-    expect(container.textContent).toContain('Diagnoseprotokoll');
-    expect(container.textContent).toContain('keine Schülertexte');
-    expect(container.textContent).toContain('keine Dateinamen');
+    expect(container.querySelector('summary')?.textContent).toBe('Protokoll');
     expect(fake.read).not.toHaveBeenCalled();
   });
 
