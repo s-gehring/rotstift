@@ -260,6 +260,14 @@ export function deriveMarksDetailed(
     }
   }
 
+  function isGrammarSubstitution(op: Op): boolean {
+    return (
+      op.type === 'sub' &&
+      op.o.kind === 'word' &&
+      classifyWordChange(op.o.text, op.c.text, profile.language) === 'grammar'
+    );
+  }
+
   function emitSubstitution(o: OriginalToken, c: CorrectedToken) {
     if (o.kind === 'punct') {
       addError([o], c.text, 'punctuation');
@@ -276,7 +284,23 @@ export function deriveMarksDetailed(
       const op = at(ops, index);
       let next = index + 1;
       if (op.type === 'sub') {
-        emitSubstitution(op.o, op.c);
+        while (
+          next < range.end &&
+          isGrammarSubstitution(at(ops, next - 1)) &&
+          isGrammarSubstitution(at(ops, next))
+        ) {
+          next += 1;
+        }
+        if (next - index > 1) {
+          const run = ops.slice(index, next);
+          addError(
+            run.flatMap((item) => originalOf(item) ?? []),
+            sliceCorrected(run.flatMap((item) => correctedOf(item) ?? [])),
+            'grammar',
+          );
+        } else {
+          emitSubstitution(op.o, op.c);
+        }
       } else if (op.type === 'del') {
         while (next < range.end && at(ops, next).type === 'del') next += 1;
         addDeletion(ops.slice(index, next).flatMap((item) => originalOf(item) ?? []));

@@ -113,6 +113,35 @@ describe('deriveMarks types', () => {
   });
 });
 
+describe('deriveMarks grammar versus spelling', () => {
+  it.each([
+    ['Viele Eltern möchte das.', 'Viele Eltern möchten das.', ['möchte', 'möchten']],
+    ['Sie gibt ihn ein Buch.', 'Sie gibt ihm ein Buch.', ['ihn', 'ihm']],
+    ['Dann spricht sie ihm nicht an.', 'Dann spricht sie ihn nicht an.', ['ihm', 'ihn']],
+    ['Wegen dem Regen sind wir da.', 'Wegen des Regens sind wir da.', ['dem Regen', 'des Regens']],
+    ['Er sagt, er hätte es gesehen.', 'Er sagt, er habe es gesehen.', ['hätte', 'habe']],
+    ['Er sagt, alles ist in Ordnung.', 'Er sagt, alles sei in Ordnung.', ['ist', 'sei']],
+  ])('marks %j as one G mark', (line, corrected, [original, correction]) => {
+    const marks = marksOf([line], corrected)[0] ?? [];
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toMatchObject({ type: 'G', original, correction });
+  });
+
+  it('keeps R for letter errors in the stem', () => {
+    expect(marksOf(['Der Hunt bellt.'], 'Der Hund bellt.')).toEqual([
+      [error('R', 'Hunt', 'Hund', 4)],
+    ]);
+    expect(marksOf(['Sie hat gefreud.'], 'Sie hat gefreut.')).toEqual([
+      [error('R', 'gefreud.'.slice(0, 7), 'gefreut', 8)],
+    ]);
+  });
+
+  it('does not merge neighbouring grammar and spelling changes', () => {
+    const marks = marksOf(['Wegen dem Rägen.'], 'Wegen des Regens.')[0] ?? [];
+    expect(marks.map((mark) => mark.type)).toEqual(['G', 'R']);
+  });
+});
+
 describe('deriveMarks structure', () => {
   it('keeps the original lines untouched and numbers every line', () => {
     const lines = ['Erste  Zeile mit  Abstand', '', 'Zweite zeile'];
