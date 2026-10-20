@@ -6,7 +6,7 @@ import type { Bbox, Transcript } from '../annotations/transcript.ts';
 import { computeStatistics } from '../stats/statistics.ts';
 import type { Statistics } from '../stats/statistics.ts';
 import type { CorrectError, Corrector } from './corrector.ts';
-import { deriveMarks } from './derive.ts';
+import { deriveMarksDetailed } from './derive.ts';
 import type { DeriveOptions } from './derive.ts';
 
 export interface CorrectPageInput {
@@ -24,6 +24,7 @@ export type CorrectPageResult =
       readonly transcript: Transcript;
       readonly statistics: Statistics;
       readonly correctedText: string;
+      readonly droppedMarks: number;
     }
   | { readonly ok: false; readonly error: CorrectError };
 
@@ -31,8 +32,10 @@ function normalizeLine(line: string): string {
   return line.replaceAll(/\s+/gu, ' ').trim();
 }
 
-function failed(message: string): CorrectPageResult {
-  return { ok: false, error: { kind: 'failed', message } };
+const INVALID_MESSAGE = 'Die Korrekturmarkierungen konnten nicht erstellt werden';
+
+function invalid(detail: string): CorrectPageResult {
+  return { ok: false, error: { kind: 'failed', message: INVALID_MESSAGE, detail } };
 }
 
 export async function correctPage(input: CorrectPageInput): Promise<CorrectPageResult> {
@@ -45,27 +48,27 @@ export async function correctPage(input: CorrectPageInput): Promise<CorrectPageR
     : { ok: true as const, correctedText: lines.join('\n') };
   if (!answer.ok) return answer;
 
-  const derived = deriveMarks(lines, answer.correctedText, {
+  const derived = deriveMarksDetailed(lines, answer.correctedText, {
     profile,
     maxChangedRun: input.maxChangedRun,
   });
   const transcript: Transcript = {
-    lines: derived.map((line, index) => {
+    lines: derived.lines.map((line, index) => {
       const bbox = bboxes?.[index];
       return bbox === undefined ? line : { ...line, bbox };
     }),
   };
 
   const checked = transcriptSchema.safeParse(transcript);
-  if (!checked.success) return failed(checked.error.issues[0]?.message ?? 'Ungültiges Ergebnis');
+  if (!checked.success) return invalid(checked.error.issues[0]?.message ?? 'Ungültiges Ergebnis');
 
   const source: Transcript = {
     lines: transcript.lines.map((line) => ({ ...line, marks: [] })),
   };
   const reparsed = parseTranscript(serializeTranscript(transcript), { profile, source });
-  if (!reparsed.ok) return failed(formatIssues(reparsed.issues));
+  if (!reparsed.ok) return invalid(formatIssues(reparsed.issues));
   if (serializeTranscript(reparsed.transcript) !== serializeTranscript(transcript)) {
-    return failed('Die Markierungen überstehen das Speichern nicht unverändert');
+    return invalid('Die Markierungen überstehen das Speichern nicht unverändert');
   }
 
   return {
@@ -73,5 +76,6 @@ export async function correctPage(input: CorrectPageInput): Promise<CorrectPageR
     transcript,
     statistics: computeStatistics(transcript),
     correctedText: answer.correctedText,
+    droppedMarks: derived.droppedOverlaps,
   };
 }

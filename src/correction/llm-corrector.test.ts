@@ -3,11 +3,18 @@ import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import { LlmCallError } from '../llm/client.ts';
 import type { ChatOptions, Completion } from '../llm/client.ts';
 import type { ChatRequest, LlmError } from '../llm/types.ts';
-import { cleanAnswer, createLlmCorrector, renderPrompt } from './llm-corrector.ts';
+import {
+  cleanAnswer,
+  createLlmCorrector,
+  numberLines,
+  readNumberedLines,
+  renderPrompt,
+} from './llm-corrector.ts';
 import type { CorrectorConfig } from './llm-corrector.ts';
 
 const config: CorrectorConfig = {
-  promptTemplate: 'Fach: {{subject}}, Sprache: {{language}}\n---\n{{text}}',
+  promptTemplate: 'Fach: {subject}, Sprache: {language}\n---\n{text}',
+  lineMode: 'plain',
   maxOutputTokens: 512,
   temperature: 0.1,
 };
@@ -89,7 +96,7 @@ describe('createLlmCorrector', () => {
     const { client } = clientReturning('x');
     expect(() =>
       createLlmCorrector({ client, config: { ...config, promptTemplate: 'nichts' } }),
-    ).toThrow('{{text}}');
+    ).toThrow('{text}');
   });
 
   it('reports a cut off answer', async () => {
@@ -135,5 +142,88 @@ describe('createLlmCorrector', () => {
     const { client } = clientFailing(new Error('kaputt'));
     const result = await createLlmCorrector({ client, config }).correct(['x'], DEUTSCH, signal());
     expect(result).toEqual({ ok: false, error: { kind: 'failed', message: 'kaputt' } });
+  });
+});
+
+const numbered: CorrectorConfig = {
+  system: 'Du korrigierst. Fach: {subject}.',
+  promptTemplate: '{text}',
+  lineMode: 'numbered',
+  maxOutputTokens: 512,
+  temperature: 0,
+};
+
+describe('numbered lines', () => {
+  it('numbers by line position and skips empty lines', () => {
+    expect(numberLines(['Er kam', '', 'spät.'])).toBe('1: Er kam\n3: spät.');
+  });
+
+  it('reads the corrected lines back without their numbers', () => {
+    expect(readNumberedLines(['Er kam', '', 'spät'], '1: Er kam,\n3. Spät.')).toEqual({
+      correctedText: 'Er kam,\n\nSpät.',
+      issues: [],
+    });
+  });
+
+  it('reports missing lines and ignores unknown numbers and duplicates', () => {
+    const read = readNumberedLines(['a', 'b'], '1: x\n1: y\n7: z');
+    expect(read.issues).toEqual(['Zeile 2 fehlt in der Ausgabe.']);
+  });
+
+  it('keeps numbers inside the line text', () => {
+    expect(readNumberedLines(['Am 12. März'], '1: Am 12. März').correctedText).toBe('Am 12. März');
+  });
+});
+
+describe('createLlmCorrector in numbered mode', () => {
+  it('sends system and numbered lines and returns text without numbers', async () => {
+    const { client, complete } = clientReturning('1: Er kam\n2: spät.');
+    const result = await createLlmCorrector({ client, config: numbered }).correct(
+      ['Er kam', 'spät.'],
+      DEUTSCH,
+      signal(),
+    );
+    expect(result).toEqual({ ok: true, correctedText: 'Er kam\nspät.' });
+    expect(complete.mock.calls[0]?.[0].messages).toEqual([
+      { role: 'system', content: 'Du korrigierst. Fach: Deutsch.' },
+      { role: 'user', content: '1: Er kam\n2: spät.' },
+    ]);
+  });
+
+  it('asks again once when lines are missing', async () => {
+    const complete = vi
+      .fn<Complete>()
+      .mockResolvedValueOnce({ text: '1: Er kam', finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: '1: Er kam\n2: spät.', finishReason: 'stop' });
+    const result = await createLlmCorrector({ client: { complete }, config: numbered }).correct(
+      ['Er kam', 'spät'],
+      DEUTSCH,
+      signal(),
+    );
+    expect(result).toEqual({ ok: true, correctedText: 'Er kam\nspät.' });
+    expect(complete).toHaveBeenCalledTimes(2);
+    const repair = complete.mock.calls[1]?.[0].messages;
+    expect(repair?.slice(-2)).toEqual([
+      { role: 'assistant', content: '1: Er kam' },
+      {
+        role: 'user',
+        content:
+          'Die Ausgabe ist nicht gültig:\n- Zeile 2 fehlt in der Ausgabe.\nGib alle Zeilen noch einmal mit ihrer Nummer aus.',
+      },
+    ]);
+  });
+
+  it('fails when lines are still missing after the repair', async () => {
+    const { client, complete } = clientReturning('1: Er kam');
+    const result = await createLlmCorrector({ client, config: numbered }).correct(
+      ['Er kam', 'spät'],
+      DEUTSCH,
+      signal(),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: { kind: 'failed', message: 'Die Antwort des Modells enthält nicht alle Zeilen' },
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 });

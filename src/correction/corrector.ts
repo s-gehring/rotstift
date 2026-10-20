@@ -3,7 +3,7 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 export type CorrectError =
   | { readonly kind: 'unavailable'; readonly message: string }
   | { readonly kind: 'cancelled' }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed'; readonly message: string; readonly detail?: string };
 
 export type CorrectResult =
   | { readonly ok: true; readonly correctedText: string }

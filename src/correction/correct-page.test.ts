@@ -28,6 +28,7 @@ describe('correctPage', () => {
     ]);
     expect(result.statistics).toMatchObject({ words: 11, errors: 2, errorsByType: { Z: 1, R: 1 } });
     expect(result.correctedText).toBe(CORRECTED);
+    expect(result.droppedMarks).toBe(0);
   });
 
   it('produces a transcript that survives the HTML round trip', async () => {
@@ -72,6 +73,24 @@ describe('correctPage', () => {
       corrector: createFakeCorrector({ error: { kind: 'unavailable', message: 'weg' } }),
     });
     expect(result).toEqual({ ok: false, error: { kind: 'unavailable', message: 'weg' } });
+  });
+
+  it('reports a fixed message and keeps the details apart', async () => {
+    const result = await correctPage({
+      lines: ['Eins'],
+      bboxes: [{ x: 0, y: 0, width: -1, height: 1 }],
+      profile: DEUTSCH,
+      corrector: createFakeCorrector('Eins'),
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        kind: 'failed',
+        message: 'Die Korrekturmarkierungen konnten nicht erstellt werden',
+      },
+    });
+    if (result.ok || result.error.kind !== 'failed') throw new Error('expected failure');
+    expect(result.error.detail).toContain('Breite');
   });
 
   it('applies the collapse limit', async () => {

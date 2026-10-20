@@ -120,16 +120,31 @@ function findMoves(ops: readonly Op[], hunks: readonly Range[]) {
   return moves;
 }
 
-function spanOf(tokens: readonly OriginalToken[]): Span {
-  const first = at(at(tokens, 0).parts, 0);
-  let end = first.end;
-  outer: for (const token of tokens) {
+interface Segment {
+  span: Span;
+  weight: number;
+}
+
+function segmentsOf(tokens: readonly OriginalToken[]): Segment[] {
+  const segments: Segment[] = [];
+  for (const token of tokens) {
     for (const part of token.parts) {
-      if (part.line !== first.line) break outer;
-      end = Math.max(end, part.end);
+      const weight = 1 / token.parts.length;
+      const last = segments.at(-1);
+      if (last?.span.line === part.line) {
+        last.span = { ...last.span, end: Math.max(last.span.end, part.end) };
+        last.weight += weight;
+      } else {
+        segments.push({ span: part, weight });
+      }
     }
   }
-  return { line: first.line, start: first.start, end };
+  return segments;
+}
+
+export interface DerivedMarks {
+  lines: TranscriptLine[];
+  droppedOverlaps: number;
 }
 
 export function deriveMarks(
@@ -137,6 +152,14 @@ export function deriveMarks(
   correctedText: string,
   options: DeriveOptions,
 ): TranscriptLine[] {
+  return deriveMarksDetailed(lines, correctedText, options).lines;
+}
+
+export function deriveMarksDetailed(
+  lines: readonly string[],
+  correctedText: string,
+  options: DeriveOptions,
+): DerivedMarks {
   const { profile } = options;
   const maxChangedRun = options.maxChangedRun ?? DEFAULT_MAX_CHANGED_RUN;
   const joined = joinCorrected(correctedText);
@@ -153,8 +176,18 @@ export function deriveMarks(
   function addError(tokens: readonly OriginalToken[], correction: string, role: MarkRole) {
     const type = codeFor(profile, role);
     if (type === null || tokens.length === 0) return;
-    const span = spanOf(tokens);
-    addErrorAt(span, correction, type);
+    const segments = segmentsOf(tokens);
+    const words = correction === '' ? [] : correction.split(' ');
+    const total = segments.reduce((sum, segment) => sum + segment.weight, 0);
+    let given = 0;
+    let seen = 0;
+    segments.forEach((segment, index) => {
+      seen += segment.weight;
+      const upto =
+        index === segments.length - 1 ? words.length : Math.round((words.length * seen) / total);
+      addErrorAt(segment.span, words.slice(given, upto).join(' '), type);
+      given = upto;
+    });
   }
 
   function addErrorAt(span: Span, correction: string, type: string) {
@@ -174,17 +207,7 @@ export function deriveMarks(
     const role: MarkRole = tokens.every((token) => token.kind === 'punct')
       ? 'punctuation'
       : 'wording';
-    let line = -1;
-    let group: OriginalToken[] = [];
-    for (const token of tokens) {
-      if (firstLine(token) !== line && group.length > 0) {
-        addError(group, '', role);
-        group = [];
-      }
-      line = firstLine(token);
-      group.push(token);
-    }
-    addError(group, '', role);
+    addError(tokens, '', role);
   }
 
   function anchorFor(start: number, end: number, punctuationOnly: boolean): Anchor {
@@ -342,11 +365,14 @@ export function deriveMarks(
     cursor = last + 1;
   }
 
-  return lines.map((text, line) => ({
-    number: line + 1,
-    text,
-    marks: withoutOverlaps(at(marksByLine, line)),
-  }));
+  let droppedOverlaps = 0;
+  const derived = lines.map((text, line) => {
+    const all = at(marksByLine, line);
+    const marks = withoutOverlaps(all);
+    droppedOverlaps += all.length - marks.length;
+    return { number: line + 1, text, marks };
+  });
+  return { lines: derived, droppedOverlaps };
 }
 
 function precedes(a: Mark, b: Mark): boolean {
