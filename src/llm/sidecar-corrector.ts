@@ -2,7 +2,7 @@ import type { Corrector, CorrectResult } from '../correction/corrector.ts';
 import { createLlmCorrector, type CorrectorConfig } from '../correction/llm-corrector.ts';
 import type { CorrectorInfo } from '../models/registry.ts';
 import type { EngineMonitor } from '../pipeline/transcriber.ts';
-import { createLlmClient, type LlmClient } from './client.ts';
+import { createLlmClient, LlmCallError, type LlmClient } from './client.ts';
 import { sharedEngine, type EngineLease, type LlmEngine } from './engine.ts';
 
 export interface SidecarCorrectorOptions {
@@ -30,6 +30,18 @@ export function createSidecarCorrector(
   const engine = options.engine ?? sharedEngine();
   const client = options.client ?? createLlmClient();
   const config = correctorConfig(model);
+  const watched: Pick<LlmClient, 'complete'> = {
+    async complete(request, chatOptions) {
+      try {
+        return await client.complete(request, chatOptions);
+      } catch (error) {
+        if (error instanceof LlmCallError && error.error.kind === 'exitedUnexpectedly') {
+          engine.markFailed(model.id);
+        }
+        throw error;
+      }
+    },
+  };
 
   return {
     engine: engine.monitor(model.id),
@@ -37,7 +49,7 @@ export function createSidecarCorrector(
     async correct(lines, profile, signal): Promise<CorrectResult> {
       const leases: EngineLease[] = [];
       const corrector = createLlmCorrector({
-        client,
+        client: watched,
         config,
         prepare: async (prepareSignal) => {
           leases.push(await engine.acquire(model, prepareSignal));

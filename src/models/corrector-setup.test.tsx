@@ -111,7 +111,7 @@ afterEach(() => {
 
 describe('useCorrectorSetup', () => {
   it('reports a missing corrector and opens its own setup dialog', async () => {
-    const { client, selection } = fakeClient({ [transcriber.id]: 'ready' });
+    const { client, selection, status } = fakeClient({ [transcriber.id]: 'ready' });
     const { create } = fakeCreate();
     await mount(client, create);
     await vi.waitFor(() => expect(latest?.setup.status?.state).toBe('missing'));
@@ -120,6 +120,7 @@ describe('useCorrectorSetup', () => {
     expect(latest?.corrector).toBeNull();
     expect(create).not.toHaveBeenCalled();
     expect(selection).not.toHaveBeenCalled();
+    expect(new Set(status.mock.calls.map(([modelId]) => modelId))).toEqual(new Set([corrector.id]));
 
     const dialog = container.querySelector('dialog');
     expect(dialog?.hasAttribute('open')).toBe(false);

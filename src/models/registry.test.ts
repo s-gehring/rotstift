@@ -160,6 +160,11 @@ describe('registry', () => {
     expect(parse(transcriber, { ...corrector, files: withProjector })).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, prompt: 'Korrigiere.' })).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, lineMode: 'diff' })).toThrow(ZodError);
+    expect(parse(transcriber, { ...corrector, system: null })).toThrow(ZodError);
+    const withImageTokens = { ...corrector.server, imageMaxTokens: null };
+    expect(parse(transcriber, { ...corrector, server: withImageTokens })).toThrow(ZodError);
+    const { threads: _threads, ...withoutThreads } = transcriber.server;
+    expect(parse({ ...transcriber, server: withoutThreads }, corrector)).toThrow(ZodError);
     const { cpuRepack: _dropped, ...server } = corrector.server;
     expect(parse(transcriber, { ...corrector, server })).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, id: 'other-corrector' })).toThrow(

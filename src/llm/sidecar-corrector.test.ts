@@ -172,4 +172,28 @@ describe('createSidecarCorrector', () => {
     });
     expect(onUnavailable).toHaveBeenCalledOnce();
   });
+
+  it('marks a crashed corrector as failed and starts it again for the next text', async () => {
+    const { client, calls } = runtime();
+    const engine = createLlmEngine(client);
+    const instance = createSidecarCorrector(corrector, { engine, client });
+    client.complete.mockRejectedValueOnce(
+      new LlmCallError({ kind: 'exitedUnexpectedly', detail: { code: 9, log: '' } }),
+    );
+    expect(await instance.correct(lines, DEUTSCH, signal())).toMatchObject({
+      ok: false,
+      error: { kind: 'failed' },
+    });
+    expect(instance.engine.getPhase()).toBe('failed');
+    client.status.mockResolvedValueOnce({
+      state: 'failed',
+      error: { kind: 'exitedUnexpectedly', detail: { code: 9, log: '' } },
+    });
+    expect(await instance.correct(lines, DEUTSCH, signal())).toMatchObject({ ok: true });
+    expect(instance.engine.getPhase()).toBe('ready');
+    expect(calls.filter((call) => call.startsWith('start'))).toEqual([
+      `start ${corrector.id}`,
+      `start ${corrector.id}`,
+    ]);
+  });
 });

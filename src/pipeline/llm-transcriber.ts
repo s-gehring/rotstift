@@ -110,14 +110,16 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
     engine: engine.monitor(model.id),
 
     async recover() {
-      await engine.reset();
+      await engine.reset(model.id);
     },
 
     async transcribe(png, signal, onPhase): Promise<TranscribeResult> {
       let lease: EngineLease | null = null;
       try {
-        onPhase?.('sidecar_start');
-        lease = await engine.acquire(model, signal);
+        lease = await engine.acquire(model, signal, {
+          onWaiting: () => onPhase?.('queued'),
+          onStarting: () => onPhase?.('sidecar_start'),
+        });
         onPhase?.('encoding');
         const image = await encode(png, model.request.imageMaxEdge);
         signal.throwIfAborted();

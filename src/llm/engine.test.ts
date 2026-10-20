@@ -28,18 +28,23 @@ function fakeRuntime() {
   const calls: string[] = [];
   const gates: Partial<Record<string, Promise<void>>> = {};
   let status: RuntimeStatus = { state: 'stopped' };
+  let generation = 0;
   const client = {
     status: vi.fn<EngineClient['status']>(() => Promise.resolve(status)),
     startModel: vi.fn<EngineClient['startModel']>(async (modelId) => {
       const model = ids[modelId] ?? modelId;
       calls.push(`start ${modelId}`);
+      generation += 1;
+      const own = generation;
       status = { state: 'starting', model };
       await gates[modelId];
+      if (own !== generation) return status;
       status = { state: 'ready', model, port: 1 };
       return status;
     }),
     stop: vi.fn<() => Promise<RuntimeStatus>>(() => {
       calls.push('stop');
+      generation += 1;
       status = { state: 'stopped' };
       return Promise.resolve(status);
     }),
@@ -69,14 +74,18 @@ describe('createLlmEngine', () => {
     const monitor = engine.monitor(transcriber.id);
     expect(monitor.getPhase()).toBe('idle');
 
-    const [first, second] = await Promise.all([
-      engine.acquire(transcriber, signal()),
-      engine.acquire(transcriber, signal()),
-    ]);
-    expect(calls).toEqual([`start ${transcriber.id}`]);
+    const first = await engine.acquire(transcriber, signal());
+    let waited = false;
+    const second = engine.acquire(transcriber, signal(), {
+      onWaiting: () => {
+        waited = true;
+      },
+    });
+    expect(waited).toBe(true);
     expect(monitor.getPhase()).toBe('ready');
     first.release();
-    second.release();
+    (await second).release();
+    expect(calls).toEqual([`start ${transcriber.id}`]);
 
     (await engine.acquire(transcriber, signal())).release();
     expect(calls).toEqual([`start ${transcriber.id}`]);
@@ -235,11 +244,81 @@ describe('createLlmEngine', () => {
     stuck.release();
     stuck.release();
     expect(calls).toEqual([`start ${transcriber.id}`, 'stop', `start ${corrector.id}`]);
-    const twice = await Promise.all([
-      engine.acquire(corrector, signal()),
-      engine.acquire(corrector, signal()),
-    ]);
-    for (const lease of twice) lease.release();
+    (await engine.acquire(corrector, signal())).release();
     expect(client.startModel).toHaveBeenCalledTimes(2);
+  });
+
+  it('abandons a switch that hangs when it is reset and serves the waiting requests afresh', async () => {
+    const { client, calls, gates } = fakeRuntime();
+    const engine = createLlmEngine(client);
+    const hung = deferred<undefined>();
+    gates[transcriber.id] = hung.promise;
+    const page = new AbortController();
+    const stuck = engine.acquire(transcriber, page.signal);
+    await vi.waitFor(() => expect(calls).toEqual([`start ${transcriber.id}`]));
+
+    let correctorGranted = false;
+    const correction = engine.acquire(corrector, signal()).then((lease) => {
+      correctorGranted = true;
+      return lease;
+    });
+    page.abort();
+    await expect(stuck).rejects.toBeInstanceOf(LlmCallError);
+    await engine.reset(transcriber.id);
+    const lease = await correction;
+    expect(correctorGranted).toBe(true);
+    expect(calls).toEqual([`start ${transcriber.id}`, 'stop', `start ${corrector.id}`]);
+
+    delete gates[transcriber.id];
+    const next = engine.acquire(transcriber, signal());
+    hung.resolve(undefined);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(engine.monitor(corrector.id).getPhase()).toBe('ready');
+    expect(calls).toHaveLength(3);
+    lease.release();
+    (await next).release();
+    expect(calls).toEqual([
+      `start ${transcriber.id}`,
+      'stop',
+      `start ${corrector.id}`,
+      'stop',
+      `start ${transcriber.id}`,
+    ]);
+    expect(engine.monitor(transcriber.id).getPhase()).toBe('ready');
+  });
+
+  it('does not stop a server that runs another model when a waiting caller resets', async () => {
+    const { client, calls } = fakeRuntime();
+    const engine = createLlmEngine(client);
+    const correction = await engine.acquire(corrector, signal());
+    const page = engine.acquire(transcriber, signal());
+    await engine.reset(transcriber.id);
+    expect(client.stop).not.toHaveBeenCalled();
+    expect(engine.monitor(corrector.id).getPhase()).toBe('ready');
+    correction.release();
+    (await page).release();
+    expect(calls).toEqual([`start ${corrector.id}`, 'stop', `start ${transcriber.id}`]);
+  });
+
+  it('reports waiting and starting separately and counts only the start as startup time', async () => {
+    const { client } = fakeRuntime();
+    let clock = 0;
+    const started = client.startModel.getMockImplementation();
+    client.startModel.mockImplementation(async (modelId) => {
+      clock += 2500;
+      return (await started?.(modelId)) ?? { state: 'stopped' };
+    });
+    const engine = createLlmEngine(client, () => clock);
+    const correction = await engine.acquire(corrector, signal());
+    const events: string[] = [];
+    const page = engine.acquire(transcriber, signal(), {
+      onWaiting: () => events.push('waiting'),
+      onStarting: () => events.push('starting'),
+    });
+    clock += 60_000;
+    correction.release();
+    expect((await page).startupMs).toBe(2500);
+    expect(events).toEqual(['waiting', 'starting']);
   });
 });

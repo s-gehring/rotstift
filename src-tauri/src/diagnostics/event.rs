@@ -22,6 +22,7 @@ const UI_EVENTS: &[&str] = &[
 
 const UI_WORDS: &[&str] = &[
     "rendering",
+    "queued",
     "sidecar_start",
     "encoding",
     "request",

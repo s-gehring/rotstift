@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { ModelCallError, type ModelClient } from './client.ts';
 import { describeImport } from './format.ts';
 import {
-  ALL_MODELS,
   CORRECTORS,
   DEFAULT_MODEL_ID,
   MODELS,
@@ -59,7 +58,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     if (client === null) return;
     try {
       const [statuses, hardware, selectedId] = await Promise.all([
-        Promise.all(ALL_MODELS.map((model) => client.status(model.id))),
+        Promise.all(models.map((model) => client.status(model.id))),
         client.hardware().catch(() => null),
         choosable ? client.selection().catch(() => null) : null,
       ]);
@@ -72,8 +71,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
         selectedId,
       });
       for (const status of statuses) {
-        if (status.state === 'unverified' && models.some((model) => model.id === status.modelId))
-          void verify(status.modelId);
+        if (status.state === 'unverified') void verify(status.modelId);
       }
     } catch (error) {
       dispatch({ type: 'error', modelId: ANY_MODEL, error: toDownloadError(error) });

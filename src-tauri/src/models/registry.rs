@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::llm::MAX_OUTPUT_TOKENS;
 
@@ -158,6 +159,67 @@ fn validate_file(model: &str, kind: &str, file: &ModelFile) -> Result<(), String
     Ok(())
 }
 
+struct Shape {
+    required: &'static [&'static str],
+    nullable: &'static [&'static str],
+    optional: &'static [&'static str],
+    forbidden: &'static [&'static str],
+}
+
+const TRANSCRIBER_SHAPE: Shape = Shape {
+    required: &["files.mmproj", "request.imageMaxEdge"],
+    nullable: &[
+        "server.threads",
+        "server.gpuLayers",
+        "server.imageMaxTokens",
+    ],
+    optional: &[],
+    forbidden: &["lineMode", "system"],
+};
+
+const CORRECTOR_SHAPE: Shape = Shape {
+    required: &["lineMode"],
+    nullable: &["server.threads", "server.gpuLayers"],
+    optional: &["system"],
+    forbidden: &[
+        "files.mmproj",
+        "server.imageMaxTokens",
+        "request.imageMaxEdge",
+    ],
+};
+
+fn lookup<'a>(entry: &'a Value, path: &str) -> Option<&'a Value> {
+    path.split('.')
+        .try_fold(entry, |value, key| value.as_object()?.get(key))
+}
+
+fn validate_shape(entry: &Value) -> Result<(), String> {
+    let id = entry["id"].as_str().unwrap_or("?");
+    let (role, shape) = match entry["role"].as_str() {
+        Some("transcriber") => ("transcriber", &TRANSCRIBER_SHAPE),
+        Some("corrector") => ("corrector", &CORRECTOR_SHAPE),
+        _ => return Ok(()),
+    };
+    for path in shape.required.iter().chain(shape.nullable) {
+        if lookup(entry, path).is_none() {
+            return Err(format!("model {id}: a {role} needs {path}"));
+        }
+    }
+    for path in shape.required.iter().chain(shape.optional) {
+        if lookup(entry, path).is_some_and(Value::is_null) {
+            return Err(format!("model {id}: {path} must not be null"));
+        }
+    }
+    if let Some(path) = shape
+        .forbidden
+        .iter()
+        .find(|path| lookup(entry, path).is_some())
+    {
+        return Err(format!("model {id}: a {role} takes no {path}"));
+    }
+    Ok(())
+}
+
 fn validate_role(entry: &ModelEntry) -> Result<(), String> {
     let id = &entry.id;
     match entry.role {
@@ -199,7 +261,11 @@ fn validate_role(entry: &ModelEntry) -> Result<(), String> {
 
 impl Registry {
     pub fn parse(json: &str) -> Result<Self, String> {
-        let registry: Self = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        let value: Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        if let Some(entries) = value.get("models").and_then(Value::as_array) {
+            entries.iter().try_for_each(validate_shape)?;
+        }
+        let registry: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
         registry.validate()?;
         Ok(registry)
     }
@@ -288,7 +354,7 @@ pub fn registry() -> Result<&'static Registry, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::json;
 
     fn json_with(index: usize, change: impl FnOnce(&mut Value)) -> String {
         let mut value: Value = serde_json::from_str(REGISTRY_JSON).unwrap();
@@ -363,7 +429,7 @@ mod tests {
         let error = rejection(|m| m["id"] = json!("renamed"));
         assert!(error.contains("default model"), "{error}");
         let error = rejection(|m| m["role"] = json!("corrector"));
-        assert!(error.contains("image settings"), "{error}");
+        assert!(error.contains("a corrector"), "{error}");
     }
 
     #[test]
@@ -386,30 +452,55 @@ mod tests {
         let error = rejection(|m| {
             m["files"].as_object_mut().unwrap().remove("mmproj");
         });
-        assert!(error.contains("needs mmproj"), "{error}");
+        assert!(error.contains("needs files.mmproj"), "{error}");
         let error = rejection(|m| {
             m["request"].as_object_mut().unwrap().remove("imageMaxEdge");
         });
-        assert!(error.contains("needs mmproj"), "{error}");
+        assert!(error.contains("needs request.imageMaxEdge"), "{error}");
+        let error = rejection(|m| {
+            m["server"]
+                .as_object_mut()
+                .unwrap()
+                .remove("imageMaxTokens");
+        });
+        assert!(error.contains("needs server.imageMaxTokens"), "{error}");
+        let error = rejection(|m| {
+            m["server"].as_object_mut().unwrap().remove("threads");
+        });
+        assert!(error.contains("needs server.threads"), "{error}");
+        let error = rejection(|m| m["files"]["mmproj"] = Value::Null);
+        assert!(error.contains("files.mmproj must not be null"), "{error}");
         let error = rejection(|m| m["lineMode"] = json!("numbered"));
-        assert!(error.contains("belong to correctors"), "{error}");
+        assert!(error.contains("takes no lineMode"), "{error}");
+        let error = rejection(|m| m["system"] = Value::Null);
+        assert!(error.contains("takes no system"), "{error}");
     }
 
     #[test]
     fn a_corrector_takes_no_image_settings_and_needs_the_text_placeholder() {
         let mmproj = registry().unwrap().models[0].files.mmproj.clone();
         let error = corrector_rejection(|m| m["files"]["mmproj"] = json!(mmproj));
-        assert!(error.contains("image settings"), "{error}");
-        let error = corrector_rejection(|m| m["server"]["imageMaxTokens"] = json!(512));
-        assert!(error.contains("image settings"), "{error}");
+        assert!(error.contains("takes no files.mmproj"), "{error}");
+        let error = corrector_rejection(|m| m["files"]["mmproj"] = Value::Null);
+        assert!(error.contains("takes no files.mmproj"), "{error}");
+        let error = corrector_rejection(|m| m["server"]["imageMaxTokens"] = Value::Null);
+        assert!(error.contains("takes no server.imageMaxTokens"), "{error}");
         let error = corrector_rejection(|m| m["request"]["imageMaxEdge"] = json!(1024));
-        assert!(error.contains("image settings"), "{error}");
+        assert!(error.contains("takes no request.imageMaxEdge"), "{error}");
+        let error = corrector_rejection(|m| m["system"] = Value::Null);
+        assert!(error.contains("system must not be null"), "{error}");
+        let error = corrector_rejection(|m| {
+            m["server"].as_object_mut().unwrap().remove("gpuLayers");
+        });
+        assert!(error.contains("needs server.gpuLayers"), "{error}");
         let error = corrector_rejection(|m| m["prompt"] = json!("Korrigiere."));
         assert!(error.contains("{text}"), "{error}");
         let error = corrector_rejection(|m| {
             m.as_object_mut().unwrap().remove("lineMode");
         });
-        assert!(error.contains("lineMode"), "{error}");
+        assert!(error.contains("needs lineMode"), "{error}");
+        let error = corrector_rejection(|m| m["lineMode"] = Value::Null);
+        assert!(error.contains("lineMode must not be null"), "{error}");
         let error = corrector_rejection(|m| m["lineMode"] = json!("diff"));
         assert!(error.contains("unknown variant"), "{error}");
         let error = corrector_rejection(|m| m["system"] = json!(" "));

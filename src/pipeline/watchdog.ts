@@ -4,6 +4,7 @@ export const WATCHDOG = {
   floorMs: 300_000,
   ceilingMs: 600_000,
   startupLimitMs: 330_000,
+  queueLimitMs: 1_800_000,
   factor: 4,
   minSamples: 3,
 } as const;
@@ -33,6 +34,7 @@ export function phaseLimitMs(
   attemptNo = 1,
 ): number {
   if (phase === 'sidecar_start') return WATCHDOG.startupLimitMs;
+  if (phase === 'queued') return WATCHDOG.queueLimitMs;
   return attemptNo > 1 ? WATCHDOG.ceilingMs : pageLimitMs(durationsMs);
 }
 

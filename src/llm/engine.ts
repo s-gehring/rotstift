@@ -13,17 +13,22 @@ export interface EngineLease {
   release(): void;
 }
 
+export interface AcquireEvents {
+  readonly onWaiting?: () => void;
+  readonly onStarting?: () => void;
+}
+
 export interface LlmEngine {
-  acquire(model: EngineModel, signal: AbortSignal): Promise<EngineLease>;
+  acquire(model: EngineModel, signal: AbortSignal, events?: AcquireEvents): Promise<EngineLease>;
   monitor(modelId: string): EngineMonitor;
   markFailed(modelId: string): void;
-  reset(): Promise<void>;
+  reset(modelId?: string): Promise<void>;
   loadedModel(): string | null;
 }
 
 interface Waiter {
   readonly model: EngineModel;
-  readonly began: number;
+  readonly events: AcquireEvents;
   readonly resolve: (lease: EngineLease) => void;
   readonly reject: (error: unknown) => void;
   detach: () => void;
@@ -39,7 +44,7 @@ export function createLlmEngine(
   const queue: Waiter[] = [];
   let loaded: string | null = null;
   let phase: EnginePhase = 'idle';
-  let holders = 0;
+  let holder = false;
   let epoch = 0;
   let ensuring: number | null = null;
 
@@ -53,88 +58,80 @@ export function createLlmEngine(
   const lease = (startupMs: number): EngineLease => {
     const own = epoch;
     let released = false;
-    holders += 1;
+    holder = true;
     return {
       startupMs,
       release() {
         if (released) return;
         released = true;
         if (own !== epoch) return;
-        holders -= 1;
+        holder = false;
         pump();
       },
     };
   };
 
-  const settleHead = (modelId: string, settle: (waiter: Waiter) => void) => {
-    while (queue[0]?.model.id === modelId) {
-      const waiter = queue.shift();
-      if (waiter === undefined) return;
-      waiter.detach();
-      settle(waiter);
-    }
+  const take = (waiter: Waiter): boolean => {
+    if (queue[0] !== waiter) return false;
+    queue.shift();
+    waiter.detach();
+    return true;
   };
 
-  const ensure = async (model: EngineModel) => {
+  const ensure = async (waiter: Waiter) => {
+    const { model } = waiter;
     const own = epoch;
-    let switched = false;
+    let startupMs = 0;
     try {
       const status = await client.status();
       if (own !== epoch) return;
       const serving = status.state === 'ready' && status.model === model.files.model.name;
       if (!serving) {
-        switched = true;
+        const began = now();
         set(model.id, 'starting');
+        if (queue[0] === waiter) waiter.events.onStarting?.();
         if (status.state === 'ready' || status.state === 'starting') await client.stop?.();
         const started = await client.startModel(model.id);
         if (own !== epoch) return;
         if (started.state !== 'ready') {
           throw new LlmCallError(started.state === 'failed' ? started.error : { kind: 'notReady' });
         }
+        startupMs = now() - began;
       }
       set(model.id, 'ready');
-      const at = now();
-      settleHead(model.id, (waiter) => {
-        waiter.resolve(lease(switched ? at - waiter.began : 0));
-      });
+      if (take(waiter)) waiter.resolve(lease(startupMs));
     } catch (error) {
       if (own !== epoch) return;
       set(model.id, 'failed');
-      settleHead(model.id, (waiter) => {
-        waiter.reject(error);
-      });
+      for (let failed = queue[0]; failed?.model.id === model.id; failed = queue[0]) {
+        take(failed);
+        failed.reject(error);
+      }
     }
   };
 
   function pump() {
-    if (ensuring === epoch) return;
+    if (ensuring === epoch || holder) return;
     const head = queue[0];
     if (head === undefined) return;
-    if (holders > 0) {
-      if (head.model.id === loaded && phase === 'ready') {
-        settleHead(head.model.id, (waiter) => {
-          waiter.resolve(lease(0));
-        });
-      }
-      return;
-    }
     const own = epoch;
     ensuring = own;
-    void ensure(head.model).finally(() => {
+    void ensure(head).finally(() => {
       if (ensuring === own) ensuring = null;
       pump();
     });
   }
 
   return {
-    acquire(model, signal) {
+    acquire(model, signal, events = {}) {
       if (signal.aborted) return Promise.reject(cancelled());
       return new Promise<EngineLease>((resolve, reject) => {
-        const waiter: Waiter = { model, began: now(), resolve, reject, detach: () => undefined };
+        const waiter: Waiter = { model, events, resolve, reject, detach: () => undefined };
         const onAbort = () => {
           const index = queue.indexOf(waiter);
           if (index === -1) return;
           queue.splice(index, 1);
+          waiter.detach();
           reject(cancelled());
           pump();
         };
@@ -142,7 +139,9 @@ export function createLlmEngine(
           signal.removeEventListener('abort', onAbort);
         };
         signal.addEventListener('abort', onAbort, { once: true });
+        const busy = queue.length > 0 || holder || ensuring === epoch;
         queue.push(waiter);
+        if (busy) events.onWaiting?.();
         pump();
       });
     },
@@ -161,9 +160,10 @@ export function createLlmEngine(
       if (loaded === modelId) set(modelId, 'failed');
     },
 
-    async reset() {
+    async reset(modelId) {
+      if (modelId !== undefined && loaded !== null && loaded !== modelId) return;
       epoch += 1;
-      holders = 0;
+      holder = false;
       set(null, 'idle');
       await Promise.resolve(client.stop?.()).catch(() => undefined);
       pump();

@@ -12,7 +12,8 @@ export type TranscribeResult =
   | { readonly ok: true; readonly lines: readonly string[]; readonly startupMs?: number }
   | { readonly ok: false; readonly error: TranscribeError };
 
-export type PagePhase = 'rendering' | 'sidecar_start' | 'encoding' | 'request' | 'parsing';
+export type PagePhase =
+  'rendering' | 'queued' | 'sidecar_start' | 'encoding' | 'request' | 'parsing';
 
 export interface PageTranscriber {
   transcribe(
