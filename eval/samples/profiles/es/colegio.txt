@@ -1,0 +1,3 @@
+Me llamo Pablo y tengo catorce años. Voy al {colejio|colegio|R} desde hace dos años. Mi escuela es bastante grande y las aulas son muy {limpio|limpias|G}. Los lunes tenemos {matematicas|matemáticas|R}, inglés y {historía|historia|R}. No me gustan las matemáticas porque son muy {dificiles|difíciles|R}. Mi asignatura favorita {son|es|G} el deporte. El profesor de inglés es muy {simpatico|simpático|R} y yo {hago|saco|W} buenas notas en su clase. Mis amigos son Luis{|,|Z} Marta y Pedro. Creo{,||Z} que el colegio es importante para el futuro.
+
+{|¿|Z}Cómo es tu colegio?

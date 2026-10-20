@@ -3,7 +3,10 @@ import {
   BUILT_IN_PROFILES,
   DEUTSCH,
   ENGLISCH,
+  FRANZOESISCH,
   getBuiltInProfile,
+  SACHFACH,
+  SPANISCH,
   profileSchema,
 } from './profile.ts';
 
@@ -37,7 +40,7 @@ describe('profileSchema', () => {
   });
 
   it('rejects an unsupported language', () => {
-    expect(profileSchema.safeParse({ ...DEUTSCH, language: 'fr' }).success).toBe(false);
+    expect(profileSchema.safeParse({ ...DEUTSCH, language: 'it' }).success).toBe(false);
   });
 });
 
@@ -45,10 +48,22 @@ describe('built-in profiles', () => {
   it('allow every catalog type of their language', () => {
     expect(DEUTSCH.allowedTypes).toContain('Bz');
     expect(ENGLISCH.allowedTypes).toContain('voc');
+    expect(FRANZOESISCH.allowedTypes).toEqual(['R', 'Z', 'G', 'W', 'Sb', 'T', 'M', 'Präp']);
+    expect(SPANISCH.allowedTypes).toEqual(FRANZOESISCH.allowedTypes);
+  });
+
+  it('offers the Sachfach profile in German with spelling, punctuation and grammar only', () => {
+    expect(SACHFACH).toMatchObject({ language: 'de', allowedTypes: ['R', 'Z', 'G'] });
+    expect(new Set(BUILT_IN_PROFILES.map((profile) => profile.id)).size).toBe(
+      BUILT_IN_PROFILES.length,
+    );
   });
 
   it('can be found by id', () => {
     expect(getBuiltInProfile('englisch')).toBe(ENGLISCH);
+    expect(getBuiltInProfile('franzoesisch')).toBe(FRANZOESISCH);
+    expect(getBuiltInProfile('spanisch')).toBe(SPANISCH);
+    expect(getBuiltInProfile('sachfach')).toBe(SACHFACH);
     expect(getBuiltInProfile('latein')).toBeUndefined();
   });
 });

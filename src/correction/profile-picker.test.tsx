@@ -80,6 +80,9 @@ describe('ProfilePicker', () => {
     expect([...field('Fach').options].map((option) => option.text)).toEqual([
       'Deutsch',
       'Englisch',
+      'Französisch',
+      'Spanisch',
+      'Sachfach',
     ]);
     expect(field('Sprache').value).toBe('de');
     expect(field('Sprache').disabled).toBe(true);

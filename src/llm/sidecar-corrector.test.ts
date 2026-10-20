@@ -69,7 +69,12 @@ describe('createSidecarCorrector', () => {
     });
     const [request] = client.complete.mock.calls[0] ?? [];
     expect(request?.messages).toEqual([
-      { role: 'system', content: corrector.system?.replace('{subject}', DEUTSCH.subject) },
+      {
+        role: 'system',
+        content: corrector.system
+          ?.replace('{subject}', DEUTSCH.subject)
+          .replace('{language}', 'Deutsch'),
+      },
       { role: 'user', content: '1: Ich gehe gerne in die schule.\n3: Dann spielen wir fusball.' },
     ]);
     expect(request?.max_tokens).toBe(2048);

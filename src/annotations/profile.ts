@@ -52,7 +52,37 @@ export const ENGLISCH: CorrectionProfile = {
   allowedTypes: allKinds('en'),
 };
 
-export const BUILT_IN_PROFILES: readonly CorrectionProfile[] = [DEUTSCH, ENGLISCH];
+export const FRANZOESISCH: CorrectionProfile = {
+  id: 'franzoesisch',
+  name: 'Französisch',
+  subject: 'Französisch',
+  language: 'fr',
+  allowedTypes: allKinds('fr'),
+};
+
+export const SPANISCH: CorrectionProfile = {
+  id: 'spanisch',
+  name: 'Spanisch',
+  subject: 'Spanisch',
+  language: 'es',
+  allowedTypes: allKinds('es'),
+};
+
+export const SACHFACH: CorrectionProfile = {
+  id: 'sachfach',
+  name: 'Sachfach',
+  subject: 'Sachfach',
+  language: 'de',
+  allowedTypes: ['R', 'Z', 'G'],
+};
+
+export const BUILT_IN_PROFILES: readonly CorrectionProfile[] = [
+  DEUTSCH,
+  ENGLISCH,
+  FRANZOESISCH,
+  SPANISCH,
+  SACHFACH,
+];
 
 export function getBuiltInProfile(id: string): CorrectionProfile | undefined {
   return BUILT_IN_PROFILES.find((profile) => profile.id === id);

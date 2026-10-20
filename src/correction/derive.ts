@@ -14,6 +14,7 @@ export const DEFAULT_MAX_CHANGED_RUN = 3;
 const BRIDGE_WORDS = 1;
 const COLLAPSE_DENSITY = 0.6;
 const MAX_MOVE_WORDS = 4;
+const OPENING_PUNCTUATION = new Set(['¿', '¡', '«', '„', '(', '[']);
 
 export interface DeriveOptions {
   profile: CorrectionProfile;
@@ -211,7 +212,12 @@ export function deriveMarksDetailed(
     addError(tokens, '', role);
   }
 
-  function anchorFor(start: number, end: number, punctuationOnly: boolean): Anchor {
+  function anchorFor(
+    start: number,
+    end: number,
+    punctuationOnly: boolean,
+    opening: boolean,
+  ): Anchor {
     let previous: OriginalToken | null = null;
     for (let index = start - 1; index >= 0 && previous === null; index -= 1) {
       previous = originalOf(at(ops, index));
@@ -222,6 +228,7 @@ export function deriveMarksDetailed(
     }
     const previousEnd = previous?.parts.at(-1);
     const nextStart = next?.parts[0];
+    if (opening && nextStart) return { line: nextStart.line, offset: nextStart.start };
     if (punctuationOnly && previousEnd) return { line: previousEnd.line, offset: previousEnd.end };
     if (nextStart && (!previousEnd || previousEnd.line === nextStart.line)) {
       return { line: nextStart.line, offset: nextStart.start };
@@ -235,7 +242,8 @@ export function deriveMarksDetailed(
     const type = codeFor(profile, punctuationOnly ? 'punctuation' : 'wording');
     const correction = sliceCorrected(tokens);
     if (type === null || correction === '' || lines.length === 0) return;
-    const anchor = anchorFor(range.start, range.end, punctuationOnly);
+    const opening = punctuationOnly && tokens.every((token) => OPENING_PUNCTUATION.has(token.text));
+    const anchor = anchorFor(range.start, range.end, punctuationOnly, opening);
     at(marksByLine, anchor.line).push({
       kind: 'omission',
       type,

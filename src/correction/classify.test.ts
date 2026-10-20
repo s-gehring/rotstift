@@ -14,6 +14,19 @@ describe('classifyWordChange', () => {
     ['like', 'likes', 'en', 'grammar'],
     ['recieved', 'received', 'en', 'spelling'],
     ['big', 'huge', 'en', 'wording'],
+    ['gateau', 'gâteau', 'fr', 'spelling'],
+    ['a', 'à', 'fr', 'spelling'],
+    ['content', 'contentes', 'fr', 'grammar'],
+    ['devrait', 'devraient', 'fr', 'grammar'],
+    ['est', 'a', 'fr', 'grammar'],
+    ['fait', 'pris', 'fr', 'wording'],
+    ['colejio', 'colegio', 'es', 'spelling'],
+    ['Despues', 'Después', 'es', 'spelling'],
+    ['bonito', 'bonitas', 'es', 'grammar'],
+    ['usa', 'usan', 'es', 'grammar'],
+    ['compró', 'compraron', 'es', 'grammar'],
+    ['pero', 'perro', 'es', 'spelling'],
+    ['miré', 'vi', 'es', 'wording'],
   ] as const)('%s to %s (%s) is %s', (original, correction, language, role) => {
     expect(classifyWordChange(original, correction, language)).toBe(role);
   });

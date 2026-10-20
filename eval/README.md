@@ -83,3 +83,16 @@ node --experimental-transform-types eval/ocr-score.ts --dataset <Datensatz> --oc
 - `ocr-correct.ts` korrigiert mit `correctPage` und `createLlmCorrector` aus `src/correction` (Prompt aus der Registry, Reparaturrunde wie in der App). Quellen: `--ocr` (Transkripte aus `ocr-run.ts`), `--truth <Datensatz> --pages …` (Ground Truth), `--texts fehler,fehlerfrei` (Schülertexte, mit `--noise-from <ocr.json> --dataset <Datensatz> --seeds 1,2,3` zusätzlich mit Lesefehlern in der gemessenen Verteilung). `--prompt` ist `app`, `ocr` (Hinweis auf die Texterkennung) oder `strict` (zusätzlich nur eindeutige Fehler), `--no-thinking` schickt `chat_template_kwargs: {enable_thinking: false}`.
 - `ocr-score.ts` leitet die Markierungen mit `deriveMarks` ab und bewertet sie: Fehlalarme je 100 Wörter auf den Datensatzseiten, getrennt nach Lesefolgefehler (das markierte Wort wurde falsch gelesen) und Korrektor (richtig gelesen und trotzdem markiert), Recall auf den Schülertexten. Gegenmittel sind Nachfilter: `Lesesicherheit < s` macht aus Markierungen auf Wörtern, deren unsicherstes Zeichen eine Token-Wahrscheinlichkeit unter `s` hat, einen Hinweis „unsicher gelesen“; `Wörterbuch` verwirft Markierungen, deren Korrektur ein Wort enthält, das hunspell nicht kennt (Cache in `--dictionary`). `--curve <scads.json>,<gerendert.json>` gibt die Schwellenkurve aus, `--examples <lauf.json>` listet alle Markierungen eines Laufs.
 - `ocr-word-measures.ts --ocr <ocr-glm.json> --dataset <Datensatz> --rendered <ocr-glm-rendered.json>` vergleicht Maße der Lesesicherheit je Wort (Minimum, Produkt, Mittel je Token und je Zeichen, längenkorrigiert) und die Trennung nach Wortlänge.
+
+## Korrekturprofile (Fremdsprachen und Sachfach)
+
+Misst die App-Kette ab dem Text für ein Profil: Prompt aus der Registry, `createLlmCorrector`, `correctPage`, `deriveMarks`. Der Bericht steht in [docs/evaluations/2026-10-profile.md](../docs/evaluations/2026-10-profile.md).
+
+```bash
+node --experimental-transform-types eval/profiles.ts --set fr --out <Ergebnis.json>
+```
+
+- **Proben:** `samples/profiles/<fr|es|en|sachfach>/*.txt` im Format `{geschrieben|richtig|Art}`. Art ist `R`, `Z`, `G` oder `W` (Wortwahl), im Englischen `sp`, `p`, `gr` oder `voc`. `--set de` nimmt die deutschen Texte aus `samples/texts`. Jeder Text läuft einmal mit Fehlern und einmal korrigiert (Fehlalarme).
+- **Optionen:** `--set` (fr, es, en, de, sachfach), `--model` (Standard `gemma-4-e2b-q4`), `--threads` (4), `--variant` (`app` ist der Prompt der Registry, `plain` lässt die Sätze zur Sprache weg), `--only` (Textnamen), `--out`. `PROFILES_DEBUG=1` gibt die Antworten des Modells aus.
+- **Ausgabe:** Eine JSON-Datei mit allen Marken und Werten je Seite und die Kennzahlen auf der Konsole: Recall und Precision je nach Stelle sowie Art und Stelle, Korrektur richtig, Wortfehler vorher und nachher, Fehlalarme je 100 Wörter und die Zählung je Art.
+- `profiles.test.ts` prüft ohne Modell, dass eine perfekte Korrektur der Proben jede Marke an die richtige Stelle setzt und wie viele die vorgesehene Art bekommen.

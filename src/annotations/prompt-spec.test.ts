@@ -51,7 +51,9 @@ describe('buildSpecification', () => {
 
 describe('renderExample', () => {
   it.each(BUILT_IN_PROFILES)('renders examples for $id that the parser accepts', (profile) => {
-    for (const kind of CATALOG[profile.language].kinds) {
+    for (const kind of CATALOG[profile.language].kinds.filter((entry) =>
+      profile.allowedTypes.includes(entry.code),
+    )) {
       const result = parseTranscript(renderExample(kind), { profile });
       expect(result.ok, `${profile.id}/${kind.code}`).toBe(true);
     }
