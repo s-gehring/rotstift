@@ -2,6 +2,7 @@
 import { act, useSyncExternalStore } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flattenPages, type Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { createRunner, type Runner } from '../pipeline/runner.ts';
 import type {
@@ -11,6 +12,9 @@ import type {
 } from '../pipeline/transcriber.ts';
 import { CountControls, CountHint } from './CountControls.tsx';
 import { ResultsView } from './ResultsView.tsx';
+import { saveCsv } from './save-csv.ts';
+
+vi.mock('./save-csv.ts', () => ({ saveCsv: vi.fn<() => void>() }));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -29,6 +33,12 @@ function page(id: string): ImportPage {
 
 const initialPages = [page('a'), page('b')];
 
+function arbeit(id: string, name: string, pages: readonly ImportPage[]): Arbeit {
+  return { id, name, pages };
+}
+
+const initialArbeiten = [arbeit('x', 'Aufsatz', initialPages)];
+
 const transcriber: PageTranscriber = {
   transcribe: () => Promise.resolve({ ok: true, lines: ['eins zwei drei'] }),
 };
@@ -38,19 +48,19 @@ const ready: TranscriberStatus = { state: 'ready', transcriber, demo: false };
 function App({
   runner,
   status,
-  pages,
+  arbeiten,
 }: {
   runner: Runner;
   status: TranscriberStatus | null;
-  pages: readonly ImportPage[];
+  arbeiten: readonly Arbeit[];
 }) {
   const state = useSyncExternalStore(runner.subscribe, runner.getState);
   const count = { runner, state };
   return (
     <>
-      <CountControls count={count} status={status} pages={pages} />
-      <CountHint count={count} status={status} pages={pages} />
-      <ResultsView pages={pages} count={count} canRetry={status?.state === 'ready'} />
+      <CountControls count={count} status={status} arbeiten={arbeiten} />
+      <CountHint count={count} status={status} arbeiten={arbeiten} />
+      <ResultsView arbeiten={arbeiten} count={count} canRetry={status?.state === 'ready'} />
     </>
   );
 }
@@ -69,15 +79,15 @@ afterEach(() => {
   container.remove();
 });
 
-function show(runner: Runner, status: TranscriberStatus | null, pages: readonly ImportPage[]) {
-  runner.setPages(pages);
-  act(() => root.render(<App runner={runner} status={status} pages={pages} />));
+function show(runner: Runner, status: TranscriberStatus | null, arbeiten: readonly Arbeit[]) {
+  runner.setPages(flattenPages(arbeiten));
+  act(() => root.render(<App runner={runner} status={status} arbeiten={arbeiten} />));
 }
 
-function mount(status: TranscriberStatus | null) {
+function mount(status: TranscriberStatus | null, arbeiten: readonly Arbeit[] = initialArbeiten) {
   const runner = createRunner({ render: () => Promise.resolve(new Blob()) });
   runner.setTranscriber(status?.state === 'ready' ? status.transcriber : null);
-  show(runner, status, initialPages);
+  show(runner, status, arbeiten);
   return runner;
 }
 
@@ -136,7 +146,7 @@ describe('with a missing model', () => {
         <CountControls
           count={{ runner, state: runner.getState() }}
           status={status}
-          pages={initialPages}
+          arbeiten={initialArbeiten}
           onSetup={onSetup}
         />,
       ),
@@ -160,7 +170,7 @@ describe('with a missing model', () => {
         <CountHint
           count={count}
           status={{ state: 'needs-model', problem: 'downloading' }}
-          pages={initialPages}
+          arbeiten={initialArbeiten}
           download={download}
         />,
       ),
@@ -243,10 +253,10 @@ describe('with a transcriber', () => {
     await countWords(runner);
     type(textarea(), 'von Hand');
 
-    const rotated = [{ ...page('a'), rotation: 90 as const }, page('b')];
+    const rotated = [arbeit('x', 'Aufsatz', [{ ...page('a'), rotation: 90 as const }, page('b')])];
     show(runner, ready, rotated);
     expect(container.querySelector('#count-hint')?.textContent).toContain(
-      'Seite 1 wurde nach Ihrer Bearbeitung gedreht und nicht neu erkannt.',
+      'Seite 1 von Aufsatz wurde nach Ihrer Bearbeitung gedreht und nicht neu erkannt.',
     );
 
     act(() => button('Neu erkennen')?.click());
@@ -316,5 +326,98 @@ describe('with a transcriber', () => {
     const runner = mount(ready);
     await countWords(runner);
     expect(container.textContent).not.toContain('Keine Schrift erkannt');
+  });
+});
+
+const text = (testId: string) =>
+  [...container.querySelectorAll(`[data-testid=${testId}]`)].map((node) => node.textContent);
+
+const sequence = (): TranscriberStatus => ({
+  state: 'ready',
+  demo: false,
+  transcriber: {
+    transcribe: (() => {
+      const texts = [['eins zwei'], ['drei vier fünf'], ['sechs']];
+      let call = 0;
+      return () => Promise.resolve({ ok: true, lines: texts[call++] ?? [] } as TranscribeResult);
+    })(),
+  },
+});
+describe('a class with several Arbeiten', () => {
+  const klasse = [
+    arbeit('anna', 'Anna', [page('a1'), page('a2')]),
+    arbeit('ben', 'Ben', [page('b1')]),
+  ];
+
+  it('shows the words per Arbeit, the class total and the average', async () => {
+    const runner = mount(sequence(), klasse);
+    await countWords(runner);
+    expect(text('arbeit-words')).toEqual(['5 Wörter', '1 Wort']);
+    expect(text('total-words')[0]).toContain('6');
+    expect(text('average-words')[0]).toContain('2 Arbeiten');
+    expect(text('average-words')[0]).toContain('Durchschnitt 3 Wörter pro Arbeit');
+    expect([...container.querySelectorAll('h3')].map((heading) => heading.textContent)).toEqual([
+      'Anna',
+      'Ben',
+    ]);
+  });
+
+  it('copies a tab separated table', async () => {
+    const writeText = vi.fn<(value: string) => Promise<void>>(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const runner = mount(sequence(), klasse);
+    await countWords(runner);
+    await act(async () => {
+      button('In die Zwischenablage kopieren')?.click();
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledWith(
+      'Name\tSeiten\tWörter\tHinweis\nAnna\t2\t5\t\nBen\t1\t1\t\nGesamt\t3\t6\t',
+    );
+    expect(container.textContent).toContain('In die Zwischenablage kopiert.');
+  });
+
+  it('hands the CSV text to the save command and reports where it was saved', async () => {
+    vi.mocked(saveCsv).mockResolvedValue({ state: 'saved', fileName: 'Klasse.csv' });
+    const runner = mount(sequence(), klasse);
+    await countWords(runner);
+    await act(async () => {
+      button('Als CSV speichern')?.click();
+      await Promise.resolve();
+    });
+    expect(saveCsv).toHaveBeenCalledWith(
+      '\uFEFFName;Seiten;Wörter;Hinweis\r\nAnna;2;5;\r\nBen;1;1;\r\nGesamt;3;6;\r\n',
+      'Wortzahlen',
+    );
+    expect(container.textContent).toContain('Gespeichert als „Klasse.csv“.');
+  });
+
+  it('says that an existing file was not overwritten', async () => {
+    vi.mocked(saveCsv).mockResolvedValue({ state: 'exists', fileName: 'klasse.csv' });
+    const runner = mount(sequence(), klasse);
+    await countWords(runner);
+    await act(async () => {
+      button('Als CSV speichern')?.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain(
+      '„klasse.csv“ gibt es bereits und wurde nicht überschrieben',
+    );
+  });
+
+  it('stays silent when the save dialog is cancelled', async () => {
+    vi.mocked(saveCsv).mockResolvedValue({ state: 'cancelled' });
+    const runner = mount(sequence(), klasse);
+    await countWords(runner);
+    await act(async () => {
+      button('Als CSV speichern')?.click();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('.export-actions [role=status]')?.textContent).toBe('');
+  });
+
+  it('keeps the export buttons disabled until a page is counted', () => {
+    mount(ready, klasse);
+    expect(container.querySelector('.results')).toBeNull();
   });
 });
