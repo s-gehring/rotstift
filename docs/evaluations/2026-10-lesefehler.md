@@ -14,6 +14,7 @@ Frage: Wie viele Markierungen setzt „Berichtigen“ auf fehlerfreier Handschri
 
 - **Wörterbuch** (hunspell de_DE, Korrekturen verwerfen, die kein Wort sind): 11,3 → 9,7, zusammen mit der Lesesicherheit 0,9 nur 1,90 → 1,85. Es verwirft aber auch eine echte Korrektur („hinterhergerant“ → „hinterhergerannt“, igerman98 kennt das Wort nicht), Recall auf Schülertext 86 % → 84 %.
 - **Prompt mit Hinweis auf die Texterkennung** (`ocr`) und zusätzlich „nur eindeutige Fehler“ (`strict`): 11,3 → 10,7 und 10,4, Recall 86 % → 84 % (je ein Fehler weniger). Alle Unterschiede liegen in den Intervallen.
+- **Größeres Bild:** Die ScaDS-Seiten sind fast alle kleiner als 1152 px, die Verkleinerung kostet nichts (Original: 19,3 % statt 20,0 % falsch gelesene Wörter). Vergrößern auf 1536 px senkt die Zeichenfehlerrate von 6,9 % auf 5,7 %, die falsch gelesenen Wörter nur auf 18,7 %, bei 4,5-facher Zeit.
 - **Qwen3-VL 4B als Erkennung:** Liest nur 11 % der Wörter falsch (GLM-OCR auf denselben 19 Seiten 20 %), ohne Gegenmittel 4,6 Fehlalarme je 100 Wörter. Mit Lesesicherheit 0,9 sind es 1,9 wie bei GLM-OCR, aber mit einem Viertel der Hinweise (48 statt 176). Kosten: 1,9-mal so lange je Seite, 5,3 statt 2,3 GB Peak-RAM, eine von 20 Seiten endet in einer Wiederholungsschleife.
 
 **Nebenbefund 1, für 0.2.0 wichtig: Die App lässt Gemma denken, und das macht die Korrektur schlechter.** Der Registry-Request schaltet das Denken von Gemma 4 nicht ab. Gemma erzeugt dann im Median 1653 Token je Seite statt rund 230, braucht auf simon-pc 99 s statt 17 s (Mac: 33 bis 49 s statt 6 s), und 3 von 20 ScaDS-Seiten scheitern mit „Die Antwort des Modells war unvollständig“, weil das Denken die 2048 Ausgabe-Token aufbraucht. Auf den getippten Schülertexten sinkt der Recall von 86 % auf 70 % und die Präzision von 97 % auf 70 %, auf ScaDS steigen die Fehlalarme von 11,3 auf 12,4 je 100 Wörter.
@@ -22,19 +23,22 @@ Frage: Wie viele Markierungen setzt „Berichtigen“ auf fehlerfreier Handschri
 
 ## Empfehlung
 
-1. **Denken für das Korrekturmodell abschalten (vor 0.2.0).** In `src-tauri/src/llm/runtime.rs` beim Start des Korrektors `--reasoning off` an den llama-server übergeben (in `b11537` vorhanden), am besten gesteuert über ein neues Feld im `server`-Block des Gemma-Eintrags in `src-tauri/models.json` (etwa `"reasoning": "off"`). Ein Server-Flag ist besser als `chat_template_kwargs` im Request: Es gilt auch für die Reparaturrunde, und die Request-Allowlist bleibt eng.
+1. **Denken für das Korrekturmodell abschalten (vor 0.2.0).** In `src-tauri/src/llm/runtime.rs` beim Start des Korrektors `--reasoning off` an den llama-server übergeben (in `b11537` vorhanden), am besten gesteuert über ein neues Feld im `server`-Block des Gemma-Eintrags in `src-tauri/models.json` (etwa `"reasoning": "off"`). Ein Server-Flag ist besser als `chat_template_kwargs` im Request: Es gilt auch für die Reparaturrunde, und die Request-Allowlist bleibt eng. Getestet auf dem Mac mit Gemma 4 E2B: `--reasoning off` und `chat_template_kwargs: {"enable_thinking": false}` liefern dieselbe Antwort (18 Token, leeres `reasoning_content`, ohne Schalter 355 Token). `--reasoning-budget 0` nicht verwenden: Das Denken endet sofort, aber Gemma schreibt dann eine Erklärung in die Antwort.
 2. **Sternchen-Fix übernehmen** (in diesem PR, `src/correction/llm-corrector.ts`, getestet): Korrektor-Fehlalarme auf der Ground Truth 2,97 → 2,46 je 100 Wörter.
 3. **Lesesicherheit einbauen, Schwelle 0,95 für GLM-OCR.**
    - `src-tauri/src/llm/request.rs`: In `ChatRequest` zusätzlich `logprobs: Option<bool>` erlauben (mit `skip_serializing_if = "Option::is_none"`). `top_logprobs` und `n_probs` sind nicht nötig. Die Antwort reicht `post_chat` schon heute ungefiltert durch.
    - `src/llm/types.ts`: `logprobs` im Request, `choices[].logprobs.content[]` mit `bytes` und `logprob` in `ChatResponse`.
-   - `src/pipeline/llm-transcriber.ts`: `logprobs: true` senden und aus der Antwort mit `charProbabilities` und `lineProbabilities` aus `src/correction/reading-confidence.ts` (in diesem PR, getestet) je Transkriptzeile die Zeichenwahrscheinlichkeiten bilden. Speichern genügt je Wort das Minimum, die Token selbst nicht.
-   - Nach `correctPage`: Marken mit `markConfidence(...) < 0,95` nicht als Fehler zeigen, sondern als Hinweis „unsicher gelesen“ mit dem Korrekturvorschlag, optisch klar von der roten Marke getrennt und nicht in der Fehlerstatistik. Die Darstellung gehört zu `src/review` und `src/overlay`, das Feld zu `src/results`.
+   - `src/pipeline/llm-transcriber.ts`: `logprobs: true` senden und aus der Antwort mit `charProbabilities` und `lineProbabilities` aus `src/correction/reading-confidence.ts` (in diesem PR, getestet) je Transkriptzeile die Zeichenwahrscheinlichkeiten bilden. Speichern genügt je Wort das Minimum, die Token selbst nicht. Ein anderes Wortmaß oder eine Schwelle je Wortlänge trennt nicht besser (siehe [Wortmaß und Wortlänge](#wortmaß-und-wortlänge)).
+   - Nach `correctPage`: Marken mit `markConfidence(...) < 0,95` nicht als Fehler zeigen, sondern als Hinweis „unsicher gelesen“ mit dem Korrekturvorschlag. Das Feld gehört zu `src/results`, die Darstellung zu `src/review` und `src/overlay`.
+   - **Darstellung:** Hinweise nur in der Prüfansicht und dezent, etwa grau gepunktet unterstrichen, der Vorschlag erst beim Antippen. Ein Klick macht daraus eine rote Marke, ein zweiter verwirft ihn. Nicht im PDF-Export und nicht in der Fehlerstatistik. Im Seitenkopf genügt die Zahl („7 Stellen unsicher gelesen“), damit die Lehrkraft entscheidet, ob sie hinsieht. Mit dieser Darstellung sind 5 bis 10 Hinweise je 100 Wörter vertretbar, als rote Marken wären sie es nicht.
+   - Die Zahl der Hinweise lässt sich über die Schwelle kaum senken (0,7: 8,0 statt 10,0 je 100 Wörter, dafür 3,3 statt 1,3 Fehlalarme). Sie folgt aus der Lesefehlerrate: Weniger Hinweise gibt es nur mit einer besseren Erkennung (Qwen3-VL: 2,7 je 100 Wörter).
    - Die Schwelle hängt vom Modell ab (Qwen3-VL ist anders kalibriert) und gehört deshalb in den Transkriptions-Eintrag der Registry, etwa `request.uncertainBelow: 0.95`.
    - Erwartung auf Erwachsenenschrift: 1,3 statt 11,3 Fehlalarme und rund 10 Hinweise je 100 Wörter, auf Schülerschrift weniger Hinweise (gerenderte Seiten: 5 je 100 Wörter).
 4. **Kein Wörterbuch einbauen.** Neben der Lesesicherheit bringt es fast nichts und kostet echte Fehler. Falls es später für andere Zwecke gebraucht wird: `dictionary-de` 3.0.0 (igerman98, GPL-2.0 OR GPL-3.0, also GPL-3.0-kompatibel, 1,1 MB) mit dem Rust-Crate `spellbook` 0.3.5 (MPL-2.0, ebenfalls kompatibel) lädt in 8 ms, prüft ein Wort in 7 µs und braucht 7 MB RAM (Mac, M4 Pro).
 5. **Prompt nicht ändern.** Die Varianten `ocr` und `strict` liegen im Rauschen und kosten je einen echten Fehler.
 6. **Qwen3-VL 4B nicht als Standard**, aber als 16-GB-Option mit dem Argument „deutlich weniger unsichere Stellen“ beschreiben. Seine Schwelle müsste eigens gewählt werden (bei 0,9: 1,9 Fehlalarme und 2,7 Hinweise je 100 Wörter).
-7. **Gemma mit Bild für unsichere Wörter:** Nicht weiterverfolgen. Gemma 4 E2B mit `mmproj` kann ein unsicheres Wort im Bild nachlesen, liest aber nur 3 von 15 falsch gelesenen Wörtern richtig und wiederholt meist die falsche Lesung. Der Hinweis „unsicher gelesen“ ist billiger und ehrlicher.
+7. **`imageMaxEdge` für GLM-OCR bei 1152 lassen.** Weder das Original noch eine Vergrößerung lohnt sich (siehe [Bildgröße](#bildgröße)).
+8. **Gemma mit Bild für unsichere Wörter:** Nicht weiterverfolgen. Gemma 4 E2B mit `mmproj` kann ein unsicheres Wort im Bild nachlesen, liest aber nur 3 von 15 falsch gelesenen Wörtern richtig und wiederholt meist die falsche Lesung. Der Hinweis „unsicher gelesen“ ist billiger und ehrlicher.
 
 ## Messergebnisse
 
@@ -50,6 +54,18 @@ Frage: Wie viele Markierungen setzt „Berichtigen“ auf fehlerfreier Handschri
 Auf dem Mac (M4 Pro, 4 Threads, nur CPU) braucht GLM-OCR für die Seiten 000 bis 002 16,5, 12,4 und 6,9 s bei 2,7 GB Peak-RAM. Die Linux-Messung ohne `logprobs` ([2026-10-linux-simon-pc.md](2026-10-linux-simon-pc.md)) lag bei 23 s je Seite mit 8 Threads, die Wahrscheinlichkeiten kosten also keine messbare Zeit.
 
 Typische Lesefehler (gekürzt): „Zusammenkunft“ als „Lusammenkunft“, „Geschlecht“ als „Geschoht“, „Personenstandsgesetz“ als „Poisonenstandsgesetz“. Die letzten beiden liest GLM-OCR mit Wahrscheinlichkeit 0,99 bis 1,0, die Lesesicherheit kann sie nicht abfangen.
+
+### Bildgröße
+
+Kostet die Verkleinerung auf 1152 px Lesefehler? Nein: Die ScaDS-Bilder sind schon klein (längste Kante 702 bis 1143 px, nur 008 mit 1342 und 015 mit 1563 px sind größer), die App verkleinert also fast nichts. Geprüft wurden deshalb das Original und eine Vergrößerung auf 1536 px (bikubisch, `eval/resize-pages.py --upscale`). Verglichen auf den 19 Seiten ohne 008, weil GLM-OCR 008 im Original in eine Wiederholungsschleife schickt. simon-pc, 8 Threads.
+
+| Bild                       | Zeichenfehlerrate | falsch gelesene Wörter | s/Seite (Mittel, simon-pc) | Bild-Token (Median) | Peak-RAM simon-pc |
+| -------------------------- | ----------------- | ---------------------- | -------------------------- | ------------------- | ----------------- |
+| verkleinert auf 1152 (App) | 6,9 % (6,5–7,3)   | 20,0 % (18,2–21,9)     | 21,5                       | 968                 | 2,3 GB            |
+| Original                   | 6,7 % (6,3–7,1)   | 19,3 % (17,6–21,1)     | 25,5 (008: Schleife)       | 968                 | 2,4 GB            |
+| vergrößert auf 1536        | 5,7 % (5,4–6,1)   | 18,7 % (17,0–20,5)     | 95,7                       | 2151                | 2,6 GB            |
+
+Das Vergrößern senkt die Zeichenfehlerrate messbar, die Zahl falsch gelesener Wörter aber nur um 1,3 Punkte (Intervalle überlappen), bei 4,5-facher Zeit. Ein billiger Hebel ist das nicht. Die hohe Zeichenfehlerrate des Piloten (17 % auf den Seiten 000 bis 002) lag an diesen drei Seiten; auf allen 20 Seiten sind es 7,1 %. Dass die Wortzahl trotzdem fast stimmt, ist kein Widerspruch: GLM-OCR liest fast jedes Wort, aber jedes fünfte falsch.
 
 ### Fehlalarme auf ScaDS, GLM-OCR, Prompt der App
 
@@ -85,6 +101,20 @@ Lesesicherheit allein, Prompt der App. Recall auf den 16 gerenderten Seiten (155
 | 0,99     | 0,77 (0,47–1,26)                 | 10,6                           | 47 % (39–55)                   | 6,7                                |
 
 Bis 0,5 kostet die Schwelle keinen roten Treffer, darüber wandern echte Schülerfehler in die Hinweise: GLM-OCR liest falsch geschriebene Wörter unsicherer als richtige, vermutlich weil sein Sprachwissen die richtige Schreibung erwartet. Auf den gerenderten Seiten liegen bei 0,9 28 % der 121 Fehlerwörter unter der Schwelle, aber nur 10 % der 1890 übrigen Wörter (bei 0,7: 18 % gegenüber 5 %). Beispiele: „vieleicht“ 0,54, „erlaubnis“ 0,65, „nähmlich“ 0,75, dagegen „Schockolade“ und „hinterhergerant“ 1,00. Die Hinweise auf ScaDS wachsen ab 0,7 kaum noch, die Fehlalarme fallen weiter. 0,95 ist der Kompromiss: Fehlalarme nahe am Ziel, etwas mehr Hinweise als bei 0,9.
+
+### Wortmaß und Wortlänge
+
+Trennt eine andere Zusammenfassung der Token-Wahrscheinlichkeiten je Wort besser als das Minimum? Grundlage sind alle Wörter der 20 GLM-OCR-Seiten (1956, davon 400 falsch gelesen) und der 16 gerenderten Seiten (2033, davon 143 mit einem Schülerfehler, gezählt einschließlich Auslassungen am Wort). Gut ist ein Maß, das falsch gelesene Wörter erfasst, richtig gelesene und echte Schülerfehler aber nicht.
+
+| Maß je Wort                                         | AUC falsch gegen richtig gelesen | Schwelle für 70 % der Lesefehler | richtig gelesen darunter | Schülerfehler darunter |
+| --------------------------------------------------- | -------------------------------- | -------------------------------- | ------------------------ | ---------------------- |
+| Minimum der Token (App-Vorschlag)                   | 0,890                            | 0,70                             | 10 %                     | 15 %                   |
+| Produkt der Token (Wortwahrscheinlichkeit)          | 0,896                            | 0,66                             | 10 %                     | 15 %                   |
+| geometrisches Mittel je Token                       | 0,884                            | 0,83                             | 11 %                     | 9 %                    |
+| Produkt hoch 1/Zeichenzahl                          | 0,894                            | 0,94                             | 10 %                     | 10 %                   |
+| Minimum, für Wörter über 6 Zeichen längenkorrigiert | 0,888                            | 0,78                             | 10 %                     | 15 %                   |
+
+Alle Maße liegen innerhalb von 0,012 AUC. Die beiden gemittelten Maße erfassen bei gleicher Lesefehlerquote etwas weniger Schülerfehler (13 bis 14 statt 21 von 143), das ist aber nur ein Unterschied von sieben Wörtern auf vier Texten. Eine Schwelle je Wortlänge hilft nicht: Lange Wörter sind öfter falsch gelesen (30 bis 34 % ab 7 Zeichen gegenüber 8 % bis 3 Zeichen), und unter 0,95 fallen dort sowohl die Lesefehler (90 bis 96 %) als auch viele richtig gelesene Wörter (46 bis 60 %). Eine niedrigere Schwelle für lange Wörter senkt beides gleichmäßig. Das Minimum bleibt, weil es am einfachsten zu erklären ist. Das Mittel je Zeichen ist der Kandidat, den eine Messung auf echter Schülerhandschrift prüfen sollte.
 
 ### Prompt-Varianten und Obergrenze ohne Lesefehler
 
@@ -133,7 +163,7 @@ Die drei ungültigen Seiten (002, 009, 015) fehlen in der Spalte „an“ auch i
 | Rechner    | Threads | Denken | s/Seite (Median)                 | erzeugte Token je Seite                  | Peak-RAM               |
 | ---------- | ------- | ------ | -------------------------------- | ---------------------------------------- | ---------------------- |
 | simon-pc   | 8       | aus    | 16,9 (ScaDS, GLM-OCR)            | 226                                      | 3,1 GB (`--no-repack`) |
-| simon-pc   | 8       | an     | 99,0 (ScaDS, GLM-OCR)            | 1653 (1115 bis 3808, mit Reparaturrunde) | 3,1 GB                 |
+| simon-pc   | 8       | an     | 99,0 (ScaDS, GLM-OCR)            | 1653 (1115 bis 3808, mit Reparaturrunde) | 2,9 GB                 |
 | Mac M4 Pro | 4       | aus    | 5,5 bis 7,2 (3 Seiten)           | 229 bis 275                              | 3,1 GB                 |
 | Mac M4 Pro | 4       | an     | 33 bis 49 (3 Seiten, 1 ungültig) | 1398 bis 2048                            | 3,1 GB                 |
 

@@ -48,10 +48,12 @@ async function main() {
       pages: { type: 'string' },
       threads: { type: 'string', default: '8' },
       out: { type: 'string' },
+      'max-edge': { type: 'string' },
     },
   });
   if (!values.images || !values.out) throw new Error('--images und --out angeben');
   const model = transcriber(values.model);
+  const maxEdge = values['max-edge'] ? Number(values['max-edge']) : model.request.imageMaxEdge;
   const threads = Number(values.threads);
   const wanted = values.pages?.split(',');
   const names = readdirSync(values.images)
@@ -104,7 +106,7 @@ async function main() {
         model: model.id,
         peak,
         threads,
-        maxEdge: model.request.imageMaxEdge,
+        maxEdge,
         pages,
       });
     }
@@ -115,7 +117,7 @@ async function main() {
     model: model.id,
     peak,
     threads,
-    maxEdge: model.request.imageMaxEdge,
+    maxEdge,
     pages,
   });
 }
