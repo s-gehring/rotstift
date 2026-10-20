@@ -7,11 +7,11 @@ import { ModelSetupDialog, progressMilestone } from './ModelSetupDialog.tsx';
 import { recommendModel, type ModelInfo } from './registry.ts';
 import { INITIAL_SETUP, type SetupState } from './setup-state.ts';
 import type { ModelSetup } from './use-model-setup.ts';
-import type { ModelState } from './types.ts';
+import type { DownloadError, ModelState } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-const registered = recommendModel(null);
+const registered = recommendModel();
 const model: ModelInfo = {
   ...registered,
   files: {
@@ -21,13 +21,21 @@ const model: ModelInfo = {
 };
 const GIB = 1024 ** 3;
 
-function fakeSetup(state: ModelState, downloaded = 0, extra: Partial<SetupState> = {}): ModelSetup {
+function fakeSetup(
+  state: ModelState,
+  downloaded = 0,
+  extra: Partial<SetupState> = {},
+  error: DownloadError | null = null,
+): ModelSetup {
   const total = model.files.model.bytes + model.files.mmproj.bytes;
   return {
     available: true,
     state: { ...INITIAL_SETUP, loaded: true, ...extra },
     model,
     status: { modelId: model.id, state, downloadedBytes: downloaded, totalBytes: total },
+    error,
+    samples: [],
+    select: vi.fn<(modelId: string) => Promise<void>>(() => Promise.resolve()),
     download: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     cancel: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     remove: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -57,8 +65,19 @@ const button = (label: string) =>
     candidate.textContent.startsWith(label),
   );
 
-function renderDialog(setup: ModelSetup) {
-  act(() => root.render(<ModelSetupDialog setup={setup} open={false} onClose={() => undefined} />));
+const radios = () => [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+
+function renderDialog(setup: ModelSetup, switchDisabled = false) {
+  act(() =>
+    root.render(
+      <ModelSetupDialog
+        setup={setup}
+        open={false}
+        onClose={() => undefined}
+        switchDisabled={switchDisabled}
+      />,
+    ),
+  );
 }
 
 describe('ModelSetupDialog', () => {
@@ -186,7 +205,7 @@ describe('ModelSetupDialog', () => {
   });
 
   it('resumes partial downloads and shows understandable errors', () => {
-    renderDialog(fakeSetup('missing', 300_000_000, { error: { kind: 'network', detail: 'x' } }));
+    renderDialog(fakeSetup('missing', 300_000_000, {}, { kind: 'network', detail: 'x' }));
     expect(button('Download fortsetzen')).toBeDefined();
     expect(container.querySelector('.error-text')?.textContent).toContain('Internetverbindung');
   });
@@ -256,5 +275,80 @@ describe('ModelManagement', () => {
     expect(button('Modell löschen')).toBeUndefined();
     act(() => button('Texterkennung einrichten')?.click());
     expect(onSetup).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ModelChoice', () => {
+  const big = { hardware: { totalRamBytes: 16 * GIB, freeDiskBytes: 50 * GIB } };
+  const small = { hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: 50 * GIB } };
+
+  it('offers only the default model below 16 GB', () => {
+    renderDialog(fakeSetup('missing', 0, small));
+    expect(radios()).toHaveLength(0);
+    renderDialog(fakeSetup('missing'));
+    expect(radios()).toHaveLength(0);
+  });
+
+  it('offers both models from 16 GB with size, speed and accuracy in German', () => {
+    renderDialog(fakeSetup('missing', 0, big));
+    expect(radios()).toHaveLength(2);
+    expect(radios().map((radio) => radio.checked)).toEqual([true, false]);
+    const text = container.querySelector('.model-choice')?.textContent ?? '';
+    expect(text).toContain('GLM-OCR (Q8_0) (Standard)');
+    expect(text).toContain('Qwen3-VL 4B Instruct (Q4_K_M), 3,0 GB');
+    expect(text).toContain('Etwa doppelt so langsam');
+    expect(text).toContain('Nur zum Wörterzählen geeignet');
+  });
+
+  it('switches the model from the dialog and from the management section', () => {
+    const setup = fakeSetup('ready', 1_552_000_000, big);
+    renderDialog(setup);
+    act(() => radios()[1]?.click());
+    expect(setup.select).toHaveBeenLastCalledWith('qwen3-vl-4b-q4');
+
+    act(() =>
+      root.render(<ModelManagement setup={setup} onSetup={() => undefined} disabled={false} />),
+    );
+    expect(radios()).toHaveLength(2);
+    act(() => radios()[1]?.click());
+    expect(setup.select).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the choice visible when the active model needs more memory than detected', () => {
+    const stronger = { ...model, id: 'qwen3-vl-4b-q4', recommendedRamGb: 16 };
+    renderDialog({ ...fakeSetup('ready', 1000, small), model: stronger });
+    expect(radios()).toHaveLength(2);
+    expect(radios().map((radio) => radio.checked)).toEqual([false, true]);
+    renderDialog({ ...fakeSetup('ready', 1000), model: stronger });
+    expect(radios()).toHaveLength(2);
+  });
+
+  it.each(['downloading', 'verifying', 'importing', 'deleting'] as const)(
+    'blocks switching while a model is %s',
+    (running) => {
+      const other = {
+        modelId: 'qwen3-vl-4b-q4',
+        state: running,
+        downloadedBytes: 1,
+        totalBytes: 2,
+      };
+      renderDialog(fakeSetup('ready', 1000, { ...big, statuses: { [other.modelId]: other } }));
+      expect(container.querySelector('fieldset')?.disabled).toBe(true);
+      expect(container.textContent).toContain('geladen, geprüft, importiert oder gelöscht');
+    },
+  );
+
+  it('blocks switching while words are being counted', () => {
+    const setup = fakeSetup('ready', 1_552_000_000, big);
+    renderDialog(setup, true);
+    expect(container.querySelector('fieldset')?.disabled).toBe(true);
+    expect(container.textContent).toContain('kann das Modell nicht gewechselt werden');
+    act(() =>
+      root.render(<ModelManagement setup={setup} onSetup={() => undefined} disabled={true} />),
+    );
+    expect(container.querySelector('fieldset')?.disabled).toBe(true);
+    renderDialog(setup, false);
+    expect(container.querySelector('fieldset')?.disabled).toBe(false);
+    expect(container.textContent).not.toContain('kann das Modell nicht gewechselt werden');
   });
 });

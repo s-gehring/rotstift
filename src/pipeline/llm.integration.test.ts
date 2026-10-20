@@ -7,7 +7,7 @@ import process from 'node:process';
 import { afterAll, describe, expect, it } from 'vitest';
 import { LlmCallError, type Completion } from '../llm/client.ts';
 import type { ChatRequest, RuntimeStatus } from '../llm/types.ts';
-import { recommendModel } from '../models/registry.ts';
+import { findModel, recommendModel, type ModelInfo } from '../models/registry.ts';
 import { countWords } from '../stats/count-words.ts';
 import { createLlmTranscriber, type EngineClient } from './llm-transcriber.ts';
 
@@ -19,7 +19,16 @@ const MODELS_DIR = process.env['ROTSTIFT_MODELS_DIR'] ?? join(CACHE, 'models');
 const PAGES = Number(process.env['ROTSTIFT_PAGES'] ?? '3');
 const BINARIES = join(import.meta.dirname, '..', '..', 'src-tauri', 'binaries');
 const LIBRARY_VAR = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
-const model = recommendModel(null);
+const MODEL_ID = process.env['ROTSTIFT_MODEL'];
+
+function selectedModel(): ModelInfo {
+  if (MODEL_ID === undefined) return recommendModel();
+  const found = findModel(MODEL_ID);
+  if (found === undefined) throw new Error(`Unknown ROTSTIFT_MODEL: ${MODEL_ID}`);
+  return found;
+}
+
+const model = selectedModel();
 
 function sidecarPath(): string {
   const stamp: { target: string } = JSON.parse(

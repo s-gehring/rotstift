@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ImportPage, Rotation } from '../import/pages.ts';
-import { createRunner, isOutdated, startablePages } from './runner.ts';
+import { createRunner, isCounting, isOutdated, isSwitchLocked, startablePages } from './runner.ts';
 import type { PageTranscriber, TranscribeResult } from './transcriber.ts';
 
 function page(id: string, rotation: Rotation = 0): ImportPage {
@@ -597,6 +597,50 @@ describe('runner', () => {
       await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
       expect(t.calls).toHaveLength(3);
     });
+  });
+
+  it('keeps counted pages when the transcriber is swapped and uses the new one for the rest', async () => {
+    const t = setup();
+    t.runner.setPages([page('a'), page('b')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    t.calls[0]?.resolve(t.ok('eins', 'zwei'));
+    await t.waitForCalls(2);
+    t.calls[1]?.resolve({ ok: false, error: { kind: 'cancelled' } });
+    await vi.waitFor(() => expect(t.runner.getState().batch).toBeNull());
+
+    const second = vi.fn<PageTranscriber['transcribe']>(() =>
+      Promise.resolve({ ok: true, lines: ['drei'] }),
+    );
+    t.runner.setTranscriber({ transcribe: second });
+    expect(t.runner.getState().entries['a']).toMatchObject({ status: 'done', text: 'eins\nzwei' });
+
+    t.runner.start();
+    await vi.waitFor(() => expect(t.status('b')).toBe('done'));
+    expect(second).toHaveBeenCalledOnce();
+    expect(t.runner.getState().entries['a']?.text).toBe('eins\nzwei');
+    expect(t.runner.getState().entries['b']?.text).toBe('drei');
+  });
+
+  it('locks the model switch while counting, retrying a single page or starting the engine', async () => {
+    const t = setup();
+    expect(isSwitchLocked(t.runner.getState(), 'idle')).toBe(false);
+    expect(isSwitchLocked(t.runner.getState(), 'starting')).toBe(true);
+    expect(isSwitchLocked(t.runner.getState(), 'ready')).toBe(false);
+
+    t.runner.setPages([page('a')]);
+    t.runner.start();
+    await t.waitForCalls(1);
+    expect(isCounting(t.runner.getState())).toBe(true);
+    expect(isSwitchLocked(t.runner.getState(), 'ready')).toBe(true);
+    t.calls[0]?.resolve(t.ok('eins'));
+    await vi.waitFor(() => expect(isCounting(t.runner.getState())).toBe(false));
+
+    t.runner.retry('a');
+    await t.waitForCalls(2);
+    expect(isSwitchLocked(t.runner.getState(), 'ready')).toBe(true);
+    t.calls[1]?.resolve(t.ok('zwei'));
+    await vi.waitFor(() => expect(isSwitchLocked(t.runner.getState(), 'ready')).toBe(false));
   });
 
   it('notifies subscribers and stops after unsubscribe', async () => {

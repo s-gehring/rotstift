@@ -480,3 +480,26 @@ button.danger:hover:not(:disabled) {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+.model-choice {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.model-choice legend {
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+
+.model-choice label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0.5rem 0;
+}
+
+.model-choice input {
+  margin-top: 0.3rem;
+}

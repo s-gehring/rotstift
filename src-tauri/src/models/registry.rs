@@ -8,6 +8,7 @@ use crate::llm::MAX_OUTPUT_TOKENS;
 
 const REGISTRY_JSON: &str = include_str!("../../models.json");
 const MIN_CONTEXT_SIZE: u32 = 1024;
+pub const DEFAULT_MODEL_ID: &str = "glm-ocr-q8";
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -194,6 +195,11 @@ impl Registry {
                 return Err(format!("model {id}: invalid request parameters"));
             }
         }
+        if self.find(DEFAULT_MODEL_ID).is_none() {
+            return Err(format!(
+                "registry lacks the default model {DEFAULT_MODEL_ID}"
+            ));
+        }
         Ok(())
     }
 
@@ -230,6 +236,26 @@ mod tests {
         let registry = registry().unwrap();
         assert!(!registry.models.is_empty());
         assert!(registry.find("does-not-exist").is_none());
+    }
+
+    #[test]
+    fn the_bundled_registry_lists_the_default_and_the_stronger_model() {
+        let registry = registry().unwrap();
+        let ids: Vec<&str> = registry.models.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["glm-ocr-q8", "qwen3-vl-4b-q4"]);
+        let stronger = registry.find("qwen3-vl-4b-q4").unwrap();
+        assert_eq!(stronger.recommended_ram_gb, 16);
+        assert_eq!(stronger.server.context_size, 4096);
+        assert_eq!(stronger.server.image_max_tokens, Some(1024));
+        assert_eq!(stronger.request.image_max_edge, 1536);
+        assert_eq!(stronger.files.model.bytes, 2_497_281_664);
+        assert_eq!(stronger.files.mmproj.bytes, 453_974_304);
+    }
+
+    #[test]
+    fn requires_the_default_model() {
+        let error = rejection(|m| m["id"] = json!("renamed"));
+        assert!(error.contains("default model"), "{error}");
     }
 
     #[test]

@@ -26,12 +26,14 @@ Geplant:
 
 ## Erster Start
 
-Zum Wörterzählen liest Rotstift die Handschrift mit einem KI-Modell, das auf dem eigenen Rechner läuft. Das Modell (rund 1,4 GB) wird beim ersten Mal heruntergeladen:
+Zum Wörterzählen liest Rotstift die Handschrift mit einem KI-Modell, das auf dem eigenen Rechner läuft. Das Standardmodell GLM-OCR (rund 1,4 GB) wird beim ersten Mal heruntergeladen:
 
 1. Seiten laden und auf „Texterkennung einrichten“ klicken. Solange das Modell fehlt, ist „Wörter zählen“ ausgegraut.
 2. Im Dialog stehen Größe und Quelle. Der Download ist einmalig, danach arbeitet Rotstift komplett offline, und es werden keine Schülerdaten übertragen.
 3. Der Download zeigt Fortschritt und Restzeit, lässt sich abbrechen und später an derselben Stelle fortsetzen. Rotstift prüft die Datei per SHA256, bevor sie benutzt wird.
 4. Unter „Texterkennung verwalten“ lässt sich das Modell wieder löschen.
+
+Ab 16 GB Arbeitsspeicher bietet Rotstift zusätzlich Qwen3-VL 4B (rund 3 GB) an, im Einrichtungsdialog und unter „Texterkennung verwalten“. Es zählt genauer, braucht aber etwa doppelt so lange und ist nur zum Wörterzählen gedacht. Beide Modelle können nebeneinander installiert sein, die Wahl bleibt gespeichert. Beim Wechsel wird der laufende Erkennungsprozess beendet, bereits gezählte Seiten behalten ihr Ergebnis. Der Wechsel ist gesperrt, solange gezählt wird, die Texterkennung startet oder ein Modell geladen, geprüft, importiert oder gelöscht wird. Wird das gewählte Modell gelöscht, gilt wieder GLM-OCR.
 
 Rechner ohne Internet (etwa in Schulen): Beide Modelldateien (`.gguf`) auf einem anderen Rechner von Hugging Face herunterladen, per USB-Stick übertragen und im Dialog über „Modell aus Datei importieren“ auswählen. Rotstift erkennt die Dateien am Hash und übernimmt nur passende.
 

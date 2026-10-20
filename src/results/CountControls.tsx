@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ImportPage } from '../import/pages.ts';
 import { formatMegabytes } from '../models/format.ts';
 import type { ModelStatus } from '../models/types.ts';
 import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages } from '../pipeline/runner.ts';
-import type { EnginePhase, ModelProblem, TranscriberStatus } from '../pipeline/transcriber.ts';
+import type { ModelProblem, TranscriberStatus } from '../pipeline/transcriber.ts';
+import { useEnginePhase } from '../pipeline/use-engine-phase.ts';
 import { buildRows, countedPages, pagesText, totalWords, wordsText } from './summary.ts';
 import type { WordCount } from './use-word-count.ts';
 
@@ -20,16 +21,6 @@ interface ControlProps extends CountProps {
 
 interface HintProps extends CountProps {
   readonly download?: ModelStatus | null;
-}
-
-const NO_ENGINE = {
-  getPhase: (): EnginePhase => 'idle',
-  subscribe: () => () => undefined,
-};
-
-function useEnginePhase(status: TranscriberStatus | null): EnginePhase {
-  const engine = (status?.state === 'ready' ? status.engine : undefined) ?? NO_ENGINE;
-  return useSyncExternalStore(engine.subscribe, engine.getPhase);
 }
 
 function useNow(active: boolean): number {
