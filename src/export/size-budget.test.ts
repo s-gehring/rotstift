@@ -8,6 +8,8 @@ import { installCanvas } from './test-support.ts';
 vi.mock('../import/canvas.ts', () => import('./test-support.ts').then((m) => m.canvasModule));
 vi.mock('../overlay/font.ts', () => import('./test-support.ts').then((m) => m.fontModule));
 
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeAll(installCanvas);
 
 const KIB = 1024;

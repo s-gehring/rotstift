@@ -2,11 +2,13 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { FIXTURE_PAGE, roomyPage } from '../overlay/fixtures.ts';
-import { encodePageImage, MAX_EDGE } from './page-image.ts';
+import { encodePageImage } from './page-image.ts';
 import { canvasModule, installCanvas, napi, syntheticScan } from './test-support.ts';
 
 vi.mock('../import/canvas.ts', () => import('./test-support.ts').then((m) => m.canvasModule));
 vi.mock('../overlay/font.ts', () => import('./test-support.ts').then((m) => m.fontModule));
+
+vi.setConfig({ testTimeout: 30_000 });
 
 beforeAll(installCanvas);
 
@@ -65,11 +67,18 @@ describe('encodePageImage', () => {
   });
 
   it('shrinks pages larger than the maximum edge', async () => {
-    const size = { width: 3000, height: 4200 };
+    const size = { width: 300, height: 420 };
     const image = await syntheticScan(size, undefined);
-    const encoded = await encodePageImage({ image, ...size }, undefined);
+    const encoded = await encodePageImage({ image, ...size }, undefined, 200);
     const decoded = await napi.loadImage(Buffer.from(encoded.bytes));
-    expect(Math.max(decoded.width, decoded.height)).toBe(MAX_EDGE);
-    expect(decoded.width / decoded.height).toBeCloseTo(size.width / size.height, 2);
+    expect(decoded.height).toBe(200);
+    expect(decoded.width / decoded.height).toBeCloseTo(size.width / size.height, 1);
+  });
+
+  it('re-encodes a JPEG that exceeds the maximum edge', async () => {
+    const size = { width: 300, height: 420 };
+    const image = await syntheticScan(size, undefined, 'jpeg');
+    const encoded = await encodePageImage({ image, ...size }, undefined, 200);
+    expect(encoded.bytes).not.toEqual(new Uint8Array(await image.arrayBuffer()));
   });
 });

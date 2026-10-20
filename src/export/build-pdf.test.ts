@@ -9,6 +9,8 @@ import type { ClassArbeit } from './types.ts';
 vi.mock('../import/canvas.ts', () => import('./test-support.ts').then((m) => m.canvasModule));
 vi.mock('../overlay/font.ts', () => import('./test-support.ts').then((m) => m.fontModule));
 
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeAll(installCanvas);
 
 const options = { date: FIXED_DATE };

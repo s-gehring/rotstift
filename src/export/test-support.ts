@@ -102,8 +102,9 @@ async function drawScan(
   context.fillRect(0, 0, size.width, size.height);
   const grain = context.getImageData(0, 0, size.width, size.height);
   const random = noise(size.width * 31 + size.height);
-  for (let index = 0; index < grain.data.length; index += 4) {
-    const shift = Math.round((random() + random() - 1) * 14);
+  const table = Array.from({ length: 65_536 }, () => Math.round((random() + random() - 1) * 14));
+  for (let index = 0, step = 0; index < grain.data.length; index += 4, step += 1) {
+    const shift = table[step & 0xffff] ?? 0;
     for (let channel = 0; channel < 3; channel += 1) {
       grain.data[index + channel] = (grain.data[index + channel] ?? 0) + shift;
     }

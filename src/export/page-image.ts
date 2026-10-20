@@ -28,15 +28,16 @@ function layoutMarks(
 export async function encodePageImage(
   page: ExportPage,
   profile: CorrectionProfile | undefined,
+  maxEdge = MAX_EDGE,
 ): Promise<PageImage> {
   const model = layoutMarks(page, profile);
   const source = new Uint8Array(await page.image.arrayBuffer());
   const longEdge = Math.max(page.width, page.height);
-  if (model === null && isJpeg(source) && longEdge <= MAX_EDGE) {
+  if (model === null && isJpeg(source) && longEdge <= maxEdge) {
     return { bytes: source, format: 'jpeg' };
   }
   if (model !== null) await ensureOverlayFont();
-  const scale = Math.min(1, MAX_EDGE / longEdge);
+  const scale = Math.min(1, maxEdge / longEdge);
   const bitmap = await createImageBitmap(page.image);
   const canvas = createCanvas(page.width * scale, page.height * scale);
   try {
