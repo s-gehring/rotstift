@@ -22,6 +22,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "ROTSTIFT_INTEGRATION=1 vitest run src/pipeline/llm.integration.test.ts",
+    "test:integration:layout": "ROTSTIFT_INTEGRATION=1 vitest run src/layout/layout.integration.test.ts",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm check:rust"
   },
@@ -39,6 +40,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "happy-dom": "^21.0.3",
+    "jpeg-js": "^0.4.4",
     "oxlint": "^1.88.0",
     "oxlint-tsgolint": "~7.0.2004",
     "prettier": "^3.9.10",
