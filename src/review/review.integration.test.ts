@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { buildCorrectedPdf } from '../export/build-pdf.ts';
 import { installCanvas, napi } from '../export/test-support.ts';
+import type { Transcript } from '../annotations/transcript.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { locateLines } from '../layout/locate-lines.ts';
@@ -15,7 +16,9 @@ import { fitWithin } from '../llm/image.ts';
 import { CACHE, GIB, MODELS_DIR, NodeSidecar } from '../llm/node-sidecar.ts';
 import { createSidecarCorrector } from '../llm/sidecar-corrector.ts';
 import { defaultCorrector, recommendModel } from '../models/registry.ts';
+import type { ReadingHint } from '../correction/uncertain-reading.ts';
 import { rasterizeAnnotatedPage } from '../overlay/draw-canvas.ts';
+import { layoutHints, markText } from '../overlay/hint-layout.ts';
 import { layoutOverlay } from '../overlay/layout.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createLlmTranscriber } from '../pipeline/llm-transcriber.ts';
@@ -68,6 +71,39 @@ async function rgba(blob: Blob) {
   const context = canvas.getContext('2d');
   context.drawImage(image, 0, 0);
   return context.getImageData(0, 0, image.width, image.height);
+}
+
+async function withHints(
+  png: Blob,
+  page: { width: number },
+  transcript: Transcript,
+  hints: readonly ReadingHint[],
+): Promise<Uint8Array> {
+  const image = await decode(png);
+  const canvas = napi.createCanvas(image.width, image.height);
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0);
+  const scale = image.width / page.width;
+  context.strokeStyle = '#5f6368';
+  context.fillStyle = '#5f6368';
+  context.lineCap = 'round';
+  for (const spot of layoutHints(transcript, hints)) {
+    if (spot.status !== 'open') continue;
+    const width = Math.max(1.5, spot.height * 0.05 * scale);
+    context.lineWidth = width;
+    context.setLineDash([width, width * 2]);
+    context.beginPath();
+    context.moveTo(spot.x * scale, spot.underline * scale);
+    context.lineTo((spot.x + spot.width) * scale, spot.underline * scale);
+    context.stroke();
+    context.font = `${Math.max(9, spot.height * 0.35 * scale)}px sans-serif`;
+    context.fillText(
+      markText(spot.mark).replaceAll(/[„“]/gu, '"').replace('→', '->'),
+      spot.x * scale,
+      (spot.y - spot.height * 0.05) * scale,
+    );
+  }
+  return new Uint8Array(canvas.toBuffer('image/png'));
 }
 
 const sidecar = new NodeSidecar();
@@ -210,7 +246,10 @@ describe.skipIf(!available)('Berichtigen end to end with the real sidecar', () =
           type: 'image/png',
           maxEdge: PREVIEW_EDGE,
         });
-        writeFileSync(join(OUT, `${page.id}.png`), new Uint8Array(await png.arrayBuffer()));
+        writeFileSync(
+          join(OUT, `${page.id}.png`),
+          await withHints(png, page, result.transcript, result.hints),
+        );
         report.push(
           `${page.id}: ${marks} Markierungen, ${result.hints.length} Hinweise unsicher gelesen, ${result.statistics.words} Wörter, ${located}/${result.transcript.lines.length} Zeilen verortet, ${model.items.length} Notizen gezeichnet, ${result.droppedMarks} verworfen`,
         );
