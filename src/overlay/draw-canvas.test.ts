@@ -18,7 +18,7 @@ function recordingContext() {
     translate: (x, y) => calls.push(`translate ${x.toFixed(0)} ${y.toFixed(0)}`),
     rotate: () => calls.push('rotate'),
     stroke: () => calls.push('stroke'),
-    fillText: (text) => calls.push(`text ${text}`),
+    fillText: (text) => calls.push(`text ${text}|${context.textAlign}|${context.font}`),
     strokeStyle: '',
     fillStyle: '',
     lineWidth: 0,
@@ -47,9 +47,9 @@ describe('drawOverlay', () => {
     const strokes = model.items.filter((item) => item.kind === 'stroke').length;
     const texts = model.items.filter((item) => item.kind === 'text');
     expect(calls.filter((call) => call === 'stroke').length).toBe(strokes);
-    expect(calls.filter((call) => call.startsWith('text ')).map((call) => call.slice(5))).toEqual(
-      texts.map((item) => item.text),
-    );
+    expect(
+      calls.filter((call) => call.startsWith('text ')).map((call) => call.slice(5).split('|')[0]),
+    ).toEqual(texts.map((item) => item.text));
     expect(calls.filter((call) => call === 'save').length).toBe(
       calls.filter((c) => c === 'restore').length,
     );
@@ -58,29 +58,35 @@ describe('drawOverlay', () => {
     expect(context.lineCap).toBe('round');
   });
 
-  it('right-aligns codes that are anchored at their end', () => {
+  it('aligns the text by its anchor and sets the handwriting font', () => {
     vi.stubGlobal('Path2D', FakePath2D);
-    const { context } = recordingContext();
+    const { context, calls } = recordingContext();
+    const item = {
+      kind: 'text',
+      role: 'code',
+      text: 'R',
+      x: 100,
+      y: 50,
+      size: 20,
+      rotate: 0,
+      line: 1,
+      mark: null,
+      title: 'R',
+    } as const;
     drawOverlay(context, {
       page: FIXTURE_PAGE,
       skippedLines: [],
       items: [
-        {
-          kind: 'text',
-          role: 'code',
-          text: 'R',
-          x: 100,
-          y: 50,
-          size: 20,
-          rotate: 0,
-          anchor: 'end',
-          line: 1,
-          mark: null,
-          title: 'R',
-        },
+        { ...item, text: 'A', anchor: 'start' },
+        { ...item, text: 'B', anchor: 'middle' },
+        { ...item, text: 'C', anchor: 'end' },
       ],
     });
-    expect(context.font).toContain('20px');
-    expect(context.font).toContain('Caveat');
+    const written = calls.filter((call) => call.startsWith('text '));
+    expect(written).toEqual([
+      'text A|left|500 20px "Caveat"',
+      'text B|center|500 20px "Caveat"',
+      'text C|right|500 20px "Caveat"',
+    ]);
   });
 });

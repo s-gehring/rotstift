@@ -32,11 +32,11 @@ Es gibt keine bundesweit einheitlichen Korrekturzeichen, in der Sekundarstufe I 
 - Zu wenig Platz: Die Schrift der Zeile wird schrittweise kleiner, bis zu 30 % der Zeilenhöhe oder 9 Pixeln.
 - Benachbarte Korrekturen einer Zeile werden von links nach rechts aneinandergeschoben, bei Bedarf nach links ausgewichen. Reicht auch die kleinste Schrift nicht, wandert die längste Korrektur an den Rand und steht dort hinter dem Kürzel („G: meinem“). Auch bei zu knappem Zeilenabstand gehen alle Korrekturen der Zeile an den Rand.
 - Randtext, der nicht in die Spalte passt, wird verkleinert und zuletzt mit „…“ gekürzt.
-- Nichts wird außerhalb der Seite gesetzt.
+- Nichts wird außerhalb der Seite gesetzt: Texte bleiben in der Seite, Striche werden samt Kontrollpunkten auf die Seite begrenzt.
 
 ### Randspalte
 
-Die Spalte beginnt rechts vom Textblock (rechteste Kante aller Zeilen plus ein Abstand) und endet am Seitenrand. Alle Kürzel stehen linksbündig an derselben Stelle in der Höhe der Grundlinie. Bleibt rechts weniger als 4 % der Seitenbreite (mindestens das 1,6-fache der mittleren Zeilenhöhe), gilt die Seite als randlos. Dann stehen die Kürzel rechtsbündig an der rechten Kante des Textblocks im Streifen über der Zeile, und die Korrekturen weichen ihnen aus.
+Die Spalte beginnt rechts vom Textblock (rechteste Kante aller Zeilen plus ein Abstand) und endet am Seitenrand. Alle Kürzel stehen linksbündig an derselben Stelle in der Höhe der Grundlinie. Bleibt rechts weniger als 4 % der Seitenbreite (mindestens das 1,6-fache der mittleren Zeilenhöhe), gilt die Seite als randlos. Dann stehen die Kürzel rechtsbündig an der rechten Kante des Textblocks im Streifen über der Zeile, und die Korrekturen weichen ihnen aus. Die Breite der Kürzel wird dabei nach jeder an den Rand verschobenen Korrektur neu berechnet. Ist der Streifen über der Zeile zu schmal, stehen die Kürzel rechts neben der Zeile in Höhe der Grundlinie, sofern dort Platz ist, sonst verkleinert im Streifen.
 
 ### Wortpositionen
 

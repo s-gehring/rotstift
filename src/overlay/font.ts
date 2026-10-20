@@ -7,5 +7,8 @@ export function overlayFontSpec(size: number): string {
 
 export async function ensureOverlayFont(): Promise<void> {
   if (typeof document === 'undefined') return;
-  await document.fonts.load(overlayFontSpec(32), 'ÄÖÜäöüß');
+  const faces = await document.fonts.load(overlayFontSpec(32), 'ÄÖÜäöüß');
+  if (faces.length === 0) {
+    throw new Error('Die Schrift für die Korrekturen konnte nicht geladen werden.');
+  }
 }

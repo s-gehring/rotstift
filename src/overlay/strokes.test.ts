@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRandom, seedFor } from './random.ts';
-import { caret, hand, ring, smoothPath } from './strokes.ts';
+import { caret, clampPath, hand, ring, smoothPath } from './strokes.ts';
 
 describe('strokes', () => {
   it('draws the same hand-drawn line for the same seed', () => {
@@ -42,5 +42,9 @@ describe('strokes', () => {
         { x: 3, y: 4 },
       ]),
     ).toBe('M1 2L3 4');
+  });
+
+  it('clamps every point, including control points, to the bounds', () => {
+    expect(clampPath('M-5 3C120 -4 8.5 9 300.2 50', 0, 1, 100, 40)).toBe('M0 3C100 1 8.5 9 100 40');
   });
 });

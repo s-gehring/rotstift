@@ -6,7 +6,7 @@ import { proportionalLocator, type TextLocator, type XSpan } from './locator.ts'
 import type { OverlayItem, OverlayModel, PageSize, StrokeItem, TextItem } from './model.ts';
 import { fitRow, sizeLadder } from './pack.ts';
 import { createRandom, seedFor, spread } from './random.ts';
-import { caret, hand, ring } from './strokes.ts';
+import { caret, clampPath, hand, ring } from './strokes.ts';
 
 export interface LayoutOptions {
   readonly page: PageSize;
@@ -53,6 +53,7 @@ const CODE_PREFERRED = 0.7;
 const MIN_FIX_FRACTION = 0.3;
 const MIN_FIX_PIXELS = 9;
 const MIN_CODE_FRACTION = 0.4;
+const MIN_EDGE_CODE_PIXELS = 6;
 
 function hasBox(line: TranscriptLine): line is LocatedLine {
   return line.bbox !== undefined;
@@ -138,20 +139,18 @@ function layoutLine(
   const preferred = Math.min(height * FIX_PREFERRED, bandSize);
   const codeSize = Math.max(Math.min(preferred, height * CODE_PREFERRED), minFix);
   const bandBaseline = bbox.y - height * FIX_LIFT;
-
-  const edgeCodesWidth =
-    frame.column.mode === 'edge'
-      ? estimateTextWidth(entries.map((entry) => entry.code).join(' '), codeSize)
-      : 0;
-  const right =
-    frame.column.mode === 'edge'
-      ? frame.column.right - edgeCodesWidth - codeSize * 1.2
-      : frame.column.left - frame.pad;
+  const bandUsable = preferred >= minFix;
 
   const moved = new Set<number>();
+  const rightLimit = (): number => {
+    if (frame.column.mode === 'margin') return frame.column.left - frame.pad;
+    const codes = fitEdgeCodes(entries, moved, frame, codeSize);
+    return frame.column.right - estimateTextWidth(codes.text, codes.size) - codeSize * 1.2;
+  };
+
   let remaining = fixes;
   let fitted: ReturnType<typeof fitRow> = null;
-  if (preferred >= minFix) {
+  if (bandUsable) {
     const sizes = sizeLadder(preferred, minFix);
     while (remaining.length > 0) {
       const ordered = Array.from(remaining);
@@ -162,7 +161,7 @@ function layoutLine(
           units: textUnits(fix.text) * fix.boost,
         })),
         sizes,
-        () => ({ left: frame.pad, right: Math.min(right, frame.page.width - frame.pad) }),
+        () => ({ left: frame.pad, right: Math.min(rightLimit(), frame.page.width - frame.pad) }),
         FIX_EM_PER_UNIT,
         FIX_GAP_EM,
       );
@@ -203,7 +202,9 @@ function layoutLine(
     });
   }
 
-  items.push(codesItem(line, entries, moved, frame, codeSize, bandBaseline));
+  items.push(
+    codesItem(line, entries, moved, frame, { codeSize, bandBaseline, bandSize, bandUsable }),
+  );
   return items;
 }
 
@@ -245,11 +246,14 @@ function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
     title: entry.title,
   } as const;
 
+  const keep = (d: string) =>
+    clampPath(d, width / 2, width / 2, page.width - width / 2, page.height - width / 2);
+
   if (entry.mark.kind === 'omission') {
     return {
       ...base,
       role: 'caret',
-      d: caret(x0, bbox.y + height * BASELINE, height * 0.17, height * 0.26, random, wobble),
+      d: keep(caret(x0, bbox.y + height * BASELINE, height * 0.17, height * 0.26, random, wobble)),
     };
   }
   if (entry.mark.correction === '') {
@@ -257,7 +261,7 @@ function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
     return {
       ...base,
       role: 'strike',
-      d: hand(x0 - pad, x1 + pad, bbox.y + height * STRIKE, random, wobble),
+      d: keep(hand(x0 - pad, x1 + pad, bbox.y + height * STRIKE, random, wobble)),
     };
   }
   const original = entry.mark.original;
@@ -266,15 +270,43 @@ function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
     return {
       ...base,
       role: 'ring',
-      d: ring((x0 + x1) / 2, bbox.y + height * 0.55, rx, height * 0.56, random, wobble),
+      d: keep(ring((x0 + x1) / 2, bbox.y + height * 0.55, rx, height * 0.56, random, wobble)),
     };
   }
   const pad = height * 0.04;
   return {
     ...base,
     role: 'underline',
-    d: hand(x0 - pad, x1 + pad, bbox.y + height * UNDERLINE, random, wobble),
+    d: keep(hand(x0 - pad, x1 + pad, bbox.y + height * UNDERLINE, random, wobble)),
   };
+}
+
+interface CodeSpace {
+  readonly codeSize: number;
+  readonly bandBaseline: number;
+  readonly bandSize: number;
+  readonly bandUsable: boolean;
+}
+
+function codeTokens(entries: readonly Entry[], moved: ReadonlySet<number>): string[] {
+  return entries.map((entry) =>
+    moved.has(entry.index) ? `${entry.code}: ${entry.mark.correction}` : entry.code,
+  );
+}
+
+function fitEdgeCodes(
+  entries: readonly Entry[],
+  moved: ReadonlySet<number>,
+  frame: Frame,
+  codeSize: number,
+): { text: string; size: number } {
+  const available = frame.column.mode === 'edge' ? frame.column.right - frame.textLeft : 0;
+  return fitTokens(
+    codeTokens(entries, moved),
+    available,
+    codeSize,
+    Math.min(codeSize, MIN_FIX_PIXELS),
+  );
 }
 
 function codesItem(
@@ -282,13 +314,9 @@ function codesItem(
   entries: readonly Entry[],
   moved: ReadonlySet<number>,
   frame: Frame,
-  codeSize: number,
-  bandBaseline: number,
+  space: CodeSpace,
 ): TextItem {
   const { bbox } = line;
-  const tokens = entries.map((entry) =>
-    moved.has(entry.index) ? `${entry.code}: ${entry.mark.correction}` : entry.code,
-  );
   const column = frame.column;
   const random = createRandom(seedFor(line.number, 99, 5));
   const common = {
@@ -299,30 +327,71 @@ function codesItem(
     mark: null,
     title: entries.map((entry) => entry.title).join(', '),
   } as const;
+  const baseline = bbox.y + bbox.height * BASELINE;
 
   if (column.mode === 'margin') {
     const available = column.right - column.left;
     const size = bbox.height * CODE_PREFERRED;
-    const fitted = fitTokens(tokens, available, size, bbox.height * MIN_CODE_FRACTION);
+    const fitted = fitTokens(
+      codeTokens(entries, moved),
+      available,
+      size,
+      bbox.height * MIN_CODE_FRACTION,
+    );
     return {
       ...common,
       text: fitted.text,
       x: column.left,
-      y: bbox.y + bbox.height * BASELINE,
+      y: baseline,
       size: fitted.size,
       anchor: 'start',
     };
   }
-  const available = column.right - frame.textLeft;
-  const fitted = fitTokens(tokens, available, codeSize, Math.min(codeSize, MIN_FIX_PIXELS));
+
+  if (!space.bandUsable) {
+    const beside = besideText(entries, moved, frame, column.right, space.codeSize);
+    if (beside !== null) {
+      return {
+        ...common,
+        text: beside.text,
+        x: frame.page.width - frame.pad,
+        y: baseline,
+        size: beside.size,
+        anchor: 'end',
+      };
+    }
+  }
+  const fitted = fitEdgeCodes(
+    entries,
+    moved,
+    frame,
+    space.bandUsable ? space.codeSize : Math.max(space.bandSize, MIN_EDGE_CODE_PIXELS),
+  );
   return {
     ...common,
     text: fitted.text,
     x: column.right,
-    y: bandBaseline,
+    y: space.bandBaseline,
     size: fitted.size,
     anchor: 'end',
   };
+}
+
+function besideText(
+  entries: readonly Entry[],
+  moved: ReadonlySet<number>,
+  frame: Frame,
+  textRight: number,
+  codeSize: number,
+): { text: string; size: number } | null {
+  const available = frame.page.width - frame.pad - textRight - codeSize * 0.3;
+  const floor = Math.min(codeSize, MIN_FIX_PIXELS);
+  const tokens = codeTokens(entries, moved);
+  const text = tokens.join(' ');
+  for (const size of sizeLadder(codeSize, floor)) {
+    if (estimateTextWidth(text, size) <= available) return { text, size };
+  }
+  return null;
 }
 
 function fitTokens(

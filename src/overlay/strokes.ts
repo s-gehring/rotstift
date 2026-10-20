@@ -100,3 +100,18 @@ export function caret(
   const right = { x: x + half + spread(random, wobble), y: apexY + depth + spread(random, wobble) };
   return `M${format(left)}L${format(apex)}L${format(right)}`;
 }
+
+export function clampPath(
+  d: string,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): string {
+  return d.replace(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g, (_, x: string, y: string) =>
+    format({
+      x: Math.min(Math.max(Number(x), minX), maxX),
+      y: Math.min(Math.max(Number(y), minY), maxY),
+    }),
+  );
+}

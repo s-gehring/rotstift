@@ -29,6 +29,15 @@ function roles(model: OverlayModel, lineNumber: number): StrokeItem['role'][] {
     .map((item) => item.role);
 }
 
+function pathPoints(item: StrokeItem): { x: number; y: number }[] {
+  const numbers = [...item.d.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+  const points: { x: number; y: number }[] = [];
+  for (let index = 0; index + 1 < numbers.length; index += 2) {
+    points.push({ x: numbers[index] ?? 0, y: numbers[index + 1] ?? 0 });
+  }
+  return points;
+}
+
 function pathXs(item: StrokeItem): number[] {
   const numbers = [...item.d.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
   return numbers.filter((_, index) => index % 2 === 0);
@@ -65,6 +74,19 @@ function crowded(): Transcript {
         })),
       },
     ],
+  };
+}
+
+function marginless(): Transcript {
+  return {
+    lines: [0, 1].map((index) => ({
+      number: index + 1,
+      bbox: { x: 40, y: 100 + index * 50, width: 920, height: 50 },
+      text: 'Wlt',
+      marks: [
+        { kind: 'error' as const, type: 'R', original: 'Wlt', correction: 'Welt', offset: 0 },
+      ],
+    })),
   };
 }
 
@@ -135,6 +157,14 @@ describe('layoutOverlay on a page with room', () => {
     }
     for (const item of texts(model, 'code')) {
       expect(box(item).right).toBeLessThanOrEqual(FIXTURE_PAGE.width);
+    }
+    for (const item of strokes(model)) {
+      for (const point of pathPoints(item)) {
+        expect(point.x).toBeGreaterThanOrEqual(0);
+        expect(point.x).toBeLessThanOrEqual(FIXTURE_PAGE.width);
+        expect(point.y).toBeGreaterThanOrEqual(0);
+        expect(point.y).toBeLessThanOrEqual(FIXTURE_PAGE.height);
+      }
     }
   });
 
@@ -310,5 +340,90 @@ describe('layoutOverlay edge cases', () => {
     const model = layoutOverlay(transcript, options);
     expect(texts(model, 'fix')).toEqual([]);
     expect(texts(model, 'code')[0]?.text).toBe('R: Welt');
+  });
+
+  it('keeps strokes inside the page at its bottom and side edges', () => {
+    const page = { width: 600, height: 1754 };
+    const transcript: Transcript = {
+      lines: [
+        {
+          number: 1,
+          bbox: { x: 560, y: 1700, width: 40, height: 80 },
+          text: 'dass',
+          marks: [{ kind: 'error', type: 'R', original: 'dass', correction: 'das', offset: 0 }],
+        },
+        {
+          number: 2,
+          bbox: { x: 0, y: 1600, width: 200, height: 80 },
+          text: 'Wlt ok',
+          marks: [{ kind: 'error', type: 'R', original: 'Wlt', correction: '', offset: 0 }],
+        },
+      ],
+    };
+    const model = layoutOverlay(transcript, { ...options, page });
+    expect(strokes(model).map((item) => item.role)).toEqual(['ring', 'strike']);
+    for (const item of strokes(model)) {
+      for (const point of pathPoints(item)) {
+        expect(point.x).toBeGreaterThanOrEqual(0);
+        expect(point.x).toBeLessThanOrEqual(page.width);
+        expect(point.y).toBeGreaterThanOrEqual(0);
+        expect(point.y).toBeLessThanOrEqual(page.height);
+      }
+    }
+  });
+
+  it('keeps fixes clear of the codes when a fix moves to the edge text of a marginless page', () => {
+    const words = ['aa', 'bb', 'cc', 'dd', 'ee', 'ff', 'gg', 'hh'];
+    const transcript: Transcript = {
+      lines: [
+        {
+          number: 1,
+          bbox: { x: 40, y: 200, width: 590, height: 50 },
+          text: words.join(' '),
+          marks: words.map((word, index) => ({
+            kind: 'error' as const,
+            type: 'R',
+            original: word,
+            correction: `Korrektur${index + 1}abc`,
+            offset: index * 3,
+          })),
+        },
+      ],
+    };
+    const model = layoutOverlay(transcript, { ...options, page: { width: 640, height: 400 } });
+    const code = defined(texts(model, 'code')[0]);
+    expect(code.anchor).toBe('end');
+    expect(code.text).toContain('R: ');
+    const codeBox = box(code);
+    const written = texts(model, 'fix');
+    expect(written.length).toBeLessThan(8);
+    for (const fix of written) {
+      expect(box(fix).right).toBeLessThan(codeBox.left);
+    }
+  });
+
+  it('writes the codes beside the line, not over the previous one, when the strip above is too narrow', () => {
+    const model = layoutOverlay(marginless(), { ...options, page: { width: 1000, height: 400 } });
+    const second = defined(texts(model, 'code').find((item) => item.line === 2));
+    expect(second.anchor).toBe('end');
+    expect(second.x).toBeGreaterThan(960);
+    expect(second.y).toBeGreaterThan(150);
+    expect(box(second).left).toBeGreaterThan(960);
+    expect(box(second).right).toBeLessThanOrEqual(1000);
+  });
+
+  it('limits the codes to the narrow strip when there is no room beside the line', () => {
+    const transcript = marginless();
+    const wide: Transcript = {
+      lines: transcript.lines.map((line) => ({
+        ...line,
+        bbox: { x: 10, y: line.bbox?.y ?? 0, width: 980, height: 50 },
+      })),
+    };
+    const model = layoutOverlay(wide, { ...options, page: { width: 1000, height: 400 } });
+    const second = defined(texts(model, 'code').find((item) => item.line === 2));
+    const roomy = texts(layoutOverlay(roomyPage(), options), 'code')[0]?.size ?? 0;
+    expect(second.y).toBeLessThan(150);
+    expect(second.size).toBeLessThan(roomy);
   });
 });
