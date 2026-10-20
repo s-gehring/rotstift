@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 const PDFJS_DECODERS = ['jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js'];
 const PDFJS_DECODERS_PATH = 'pdfjs-decoders';
@@ -41,6 +42,7 @@ const host = process.env['TAURI_DEV_HOST'];
 export default defineConfig({
   plugins: [react(), pdfjsDecoders()],
   clearScreen: false,
+  test: { exclude: [...configDefaults.exclude, '**/.claude/**'] },
   server: {
     port: 1420,
     strictPort: true,
