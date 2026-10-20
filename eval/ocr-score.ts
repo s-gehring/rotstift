@@ -96,12 +96,16 @@ interface FalseAlarmTotals {
   truth: number;
 }
 
+const skipped = new Set<string>();
+
 function readOcr(file: string): OcrRun {
-  return JSON.parse(readFileSync(file, 'utf8'));
+  const run: OcrRun = JSON.parse(readFileSync(file, 'utf8'));
+  return { ...run, pages: run.pages.filter((page) => !skipped.has(page.name)) };
 }
 
 function readCorrections(file: string): CorrectRun {
-  return JSON.parse(readFileSync(file, 'utf8'));
+  const run: CorrectRun = JSON.parse(readFileSync(file, 'utf8'));
+  return { ...run, docs: run.docs.filter((doc) => !skipped.has(doc.id)) };
 }
 
 function falseAlarms(
@@ -284,6 +288,7 @@ async function main() {
       thresholds: { type: 'string', default: '0.5,0.7,0.8,0.9,0.95' },
       curve: { type: 'string', multiple: true, default: [] },
       examples: { type: 'string' },
+      skip: { type: 'string', default: '' },
       'keep-emphasis': { type: 'boolean', default: false },
       'curve-thresholds': {
         type: 'string',
@@ -293,6 +298,7 @@ async function main() {
   });
   const dataset = values.dataset ?? '';
   scoring.keepEmphasis = values['keep-emphasis'];
+  for (const name of values.skip.split(',').filter(Boolean)) skipped.add(name);
   const recallOcr = values['recall-ocr'] ? readOcr(values['recall-ocr']) : undefined;
   const ocrRuns = [...values.ocr.map((file) => readOcr(file)), ...(recallOcr ? [recallOcr] : [])];
   const ocrFor = (model: string) =>
