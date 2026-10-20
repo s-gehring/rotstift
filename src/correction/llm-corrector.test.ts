@@ -170,6 +170,13 @@ describe('numbered lines', () => {
     expect(read.issues).toEqual(['Zeile 2 fehlt in der Ausgabe.']);
   });
 
+  it('drops emphasis asterisks the model added', () => {
+    expect(
+      readNumberedLines(['von lateinisch scala'], '1: von lateinisch *scala*').correctedText,
+    ).toBe('von lateinisch scala');
+    expect(readNumberedLines(['Fußnote*'], '1: Fußnote*').correctedText).toBe('Fußnote*');
+  });
+
   it('keeps numbers inside the line text', () => {
     expect(readNumberedLines(['Am 12. März'], '1: Am 12. März').correctedText).toBe('Am 12. März');
   });

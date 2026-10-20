@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util';
 import { DEUTSCH } from '../src/annotations/profile.ts';
 import type { Mark, Transcript } from '../src/annotations/transcript.ts';
 import { deriveMarks } from '../src/correction/derive.ts';
+import { withoutAddedEmphasis } from '../src/correction/llm-corrector.ts';
 import { splitTranscript } from '../src/pipeline/transcript-lines.ts';
 import { countWords } from '../src/stats/count-words.ts';
 import { wilson } from './correct-report.ts';
@@ -37,13 +38,24 @@ export function normalizeLine(line: string): string {
   return line.replaceAll(/\s+/gu, ' ').trim();
 }
 
+export const scoring = { keepEmphasis: false };
+
+function correctedOf(doc: CorrectedDoc): string {
+  if (scoring.keepEmphasis) return doc.correctedText;
+  const corrected = doc.correctedText.split('\n');
+  if (corrected.length !== doc.lines.length) return doc.correctedText;
+  return corrected
+    .map((line, index) => withoutAddedEmphasis(normalizeLine(doc.lines[index] ?? ''), line))
+    .join('\n');
+}
+
 export function judgeDoc(
   doc: CorrectedDoc,
   guards: Guards,
   probabilities?: readonly (readonly number[])[],
 ): JudgedMark[] {
   const lines = doc.lines.map(normalizeLine);
-  return deriveMarks(lines, doc.correctedText, { profile: DEUTSCH }).flatMap((line, index) =>
+  return deriveMarks(lines, correctedOf(doc), { profile: DEUTSCH }).flatMap((line, index) =>
     line.marks.map((mark) => ({
       line: index,
       mark,
@@ -240,7 +252,7 @@ async function guardSet(dictionary: Dictionary | undefined, thresholds: readonly
 function correctionWords(runs: readonly CorrectRun[]): string[] {
   return runs.flatMap((run) =>
     run.docs.flatMap((doc) =>
-      deriveMarks(doc.lines.map(normalizeLine), doc.correctedText, { profile: DEUTSCH }).flatMap(
+      deriveMarks(doc.lines.map(normalizeLine), correctedOf(doc), { profile: DEUTSCH }).flatMap(
         (line) => line.marks.flatMap((mark) => wordsOf(mark.correction)),
       ),
     ),
@@ -260,6 +272,7 @@ async function main() {
       thresholds: { type: 'string', default: '0.5,0.7,0.8,0.9,0.95' },
       curve: { type: 'string', multiple: true, default: [] },
       examples: { type: 'string' },
+      'keep-emphasis': { type: 'boolean', default: false },
       'curve-thresholds': {
         type: 'string',
         default: '0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.85,0.9,0.95,0.98',
@@ -267,6 +280,7 @@ async function main() {
     },
   });
   const dataset = values.dataset ?? '';
+  scoring.keepEmphasis = values['keep-emphasis'];
   const recallOcr = values['recall-ocr'] ? readOcr(values['recall-ocr']) : undefined;
   const ocrRuns = [...values.ocr.map((file) => readOcr(file)), ...(recallOcr ? [recallOcr] : [])];
   const ocrFor = (model: string) =>

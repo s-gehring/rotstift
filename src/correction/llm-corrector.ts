@@ -54,6 +54,10 @@ export function numberLines(lines: readonly string[]): string {
   return lines.flatMap((line, index) => (line === '' ? [] : [`${index + 1}: ${line}`])).join('\n');
 }
 
+export function withoutAddedEmphasis(original: string, corrected: string): string {
+  return original.includes('*') ? corrected : corrected.replaceAll('*', '');
+}
+
 export function readNumberedLines(
   lines: readonly string[],
   answer: string,
@@ -63,7 +67,9 @@ export function readNumberedLines(
   for (const row of answer.split('\n')) {
     const match = /^\s*(\d+)\s*[:.)]\s?(.*)$/u.exec(row);
     const number = Number(match?.[1]);
-    if (expected.has(number) && !found.has(number)) found.set(number, (match?.[2] ?? '').trim());
+    if (expected.has(number) && !found.has(number)) {
+      found.set(number, withoutAddedEmphasis(lines[number - 1] ?? '', (match?.[2] ?? '').trim()));
+    }
   }
   const issues = [...expected]
     .filter((number) => !found.has(number))
