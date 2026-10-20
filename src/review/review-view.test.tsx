@@ -426,6 +426,9 @@ describe('ReviewControls', () => {
       ),
     );
     expect(container.textContent).toContain(OCR_NOTICE);
+    expect(OCR_NOTICE).toBe(
+      'Lesefehler der Texterkennung können als Fehler erscheinen. Unsicher gelesene Stellen zeigt Rotstift grau gepunktet zur Prüfung.',
+    );
     act(() => buttonNamed('Erkannte Texte prüfen').click());
     expect(onCheckTexts).toHaveBeenCalledOnce();
 
