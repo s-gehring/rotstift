@@ -1,0 +1,112 @@
+{
+  "models": [
+    {
+      "id": "lightonocr-3-0.8b-q8",
+      "role": "transcriber",
+      "displayName": "LightOnOCR-3 0.8B (Q8_0)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 8,
+      "files": {
+        "model": {
+          "name": "LightOnOCR-3-0.8B.Q8_0.gguf",
+          "url": "https://huggingface.co/mradermacher/LightOnOCR-3-0.8B-GGUF/resolve/d76992384e501892b4e37bd55020d762d30b5b37/LightOnOCR-3-0.8B.Q8_0.gguf",
+          "sha256": "b2955ffcce11b0c1fce6dd38d5303a0f3284161c48ade7f62bda9804ce5ba4f7",
+          "bytes": 811844128
+        },
+        "mmproj": {
+          "name": "LightOnOCR-3-0.8B.mmproj-f16.gguf",
+          "url": "https://huggingface.co/mradermacher/LightOnOCR-3-0.8B-GGUF/resolve/d76992384e501892b4e37bd55020d762d30b5b37/LightOnOCR-3-0.8B.mmproj-f16.gguf",
+          "sha256": "c70a0eeee9bf2c2626510631a4c707321d48a91f577673304dd8771f2664f9d2",
+          "bytes": 204987200
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": null,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": true,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536,
+        "uncertainBelow": null
+      },
+      "prompt": ""
+    },
+    {
+      "id": "lightonocr-3-4b-q4",
+      "role": "transcriber",
+      "displayName": "LightOnOCR-3 4B (Q4_K_M)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 16,
+      "files": {
+        "model": {
+          "name": "LightOnOCR-3-4B.Q4_K_M.gguf",
+          "url": "https://huggingface.co/mradermacher/LightOnOCR-3-4B-GGUF/resolve/d73ad16828c669dce794e96c8368197cd80ef77d/LightOnOCR-3-4B.Q4_K_M.gguf",
+          "sha256": "dfe84dfe42b6b23526ae4d73ee7764709ecb5ef3a876afe404ff3a86552ca89f",
+          "bytes": 2708804992
+        },
+        "mmproj": {
+          "name": "LightOnOCR-3-4B.mmproj-f16.gguf",
+          "url": "https://huggingface.co/mradermacher/LightOnOCR-3-4B-GGUF/resolve/d73ad16828c669dce794e96c8368197cd80ef77d/LightOnOCR-3-4B.mmproj-f16.gguf",
+          "sha256": "63353b5ac6bc43cfb1360687689d9a2e4c0a27972262fa17b3af1a727a1c91bc",
+          "bytes": 672423488
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": null,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": true,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536,
+        "uncertainBelow": null
+      },
+      "prompt": ""
+    },
+    {
+      "id": "qwen3.5-2b-q4",
+      "role": "transcriber",
+      "displayName": "Qwen3.5 2B (Q4_K_M)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 8,
+      "files": {
+        "model": {
+          "name": "Qwen3.5-2B-Q4_K_M.gguf",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_K_M.gguf",
+          "sha256": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+          "bytes": 1280835840
+        },
+        "mmproj": {
+          "name": "mmproj-Qwen3.5-2B-F16.gguf",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/mmproj-F16.gguf",
+          "sha256": "7035e9cb8d7c6a9681d07eef9a364783e86ea4cd73faab2eabb4f43a101830c7",
+          "bytes": 668227264
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": null,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": true,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536,
+        "uncertainBelow": null
+      },
+      "prompt": "Transkribiere den handschriftlichen Text auf dem Bild buchstabengetreu. Korrigiere nichts: Rechtschreibung, Groß- und Kleinschreibung, Grammatik und Zeichensetzung bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar."
+    }
+  ]
+}
