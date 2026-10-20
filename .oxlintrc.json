@@ -8,7 +8,7 @@
   "options": {
     "typeAware": true
   },
-  "ignorePatterns": ["dist/", "coverage/", "src-tauri/"],
+  "ignorePatterns": ["dist/", "coverage/", "src-tauri/", ".claude/"],
   "rules": {
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": "error",
