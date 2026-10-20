@@ -174,19 +174,16 @@ export function runProgress(
     if (review.stopping) return { label: 'Wird abgebrochen …', detail: null, value: null, max: 1 };
     const pageIds = start?.pageIds ?? activePageIds(review);
     const fraction = reviewFraction(review, count, pageIds);
-    const finished = pageIds.filter((id) => {
-      const page = review.pages[id];
-      return page !== undefined && FINISHED.has(page.status);
-    }).length;
+    const percent = Math.round(fraction * 100);
     const loading = engineText(run, engine) !== null;
     return {
-      label: pagesLabel(finished, pageIds.length),
+      label: `${percent}\u00a0%`,
       detail: loading
         ? LOADING_TEXT
         : start === null
           ? null
           : reviewRemaining(fraction, start, now),
-      value: Math.round(fraction * 100),
+      value: percent,
       max: 100,
     };
   }

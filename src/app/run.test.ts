@@ -264,33 +264,17 @@ describe('runProgress', () => {
     for (let index = 1; index < values.length; index += 1) {
       expect(values[index]).toBeGreaterThanOrEqual(values[index - 1] ?? 0);
     }
-    expect(progress.map((step) => step?.label)).toEqual([
-      'Seite 0 von 2',
-      'Seite 0 von 2',
-      'Seite 0 von 2',
-      'Seite 0 von 2',
-      'Seite 0 von 2',
-      'Seite 0 von 2',
-      'Seite 1 von 2',
-      'Seite 2 von 2',
-    ]);
+    expect(progress.map((step) => step?.label)).toEqual(values.map((value) => `${value}\u00a0%`));
     expect(progress.every((step) => step?.max === 100 && step.detail === null)).toBe(true);
   });
 
-  it('counts pages without text as finished and leaves out pages outside the run', () => {
-    const review = reviewState(
-      { a: reviewed('', { status: 'empty' }), b: waiting, c: waiting, old: reviewed('alt') },
-      { run: { phase: 'locating', total: 2, finished: 0 } },
-    );
-    const start = startRun(
-      reviewState(
-        { a: waiting, b: waiting, c: waiting, old: reviewed('alt') },
-        { run: { phase: 'transcribing', total: 3, finished: 0 } },
-      ),
-      runState({}),
-      0,
-    );
-    expect(runProgress(review, runState({}), IDLE_ENGINE, 0, start)?.label).toBe('Seite 1 von 3');
+  it('leaves out pages outside the run', () => {
+    const pages = { a: waiting, b: waiting, old: reviewed('alt') };
+    const begin = reviewState(pages, { run: { phase: 'transcribing', total: 2, finished: 0 } });
+    const start = startRun(begin, runState({}), 0);
+    expect(start.pageIds).toEqual(['a', 'b']);
+    const halfRead = runState({ a: pending('done'), old: pending('done') });
+    expect(runProgress(begin, halfRead, IDLE_ENGINE, 0, start)?.label).toBe('30\u00a0%');
   });
 
   it('estimates the remaining time from the progress made since the start', () => {
