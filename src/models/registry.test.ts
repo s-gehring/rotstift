@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { ZodError } from 'zod';
 import { TRANSCRIBE_PROMPT } from '../../eval/models.ts';
 import {
+  ALL_MODELS,
+  CORRECTORS,
+  DEFAULT_CORRECTOR_ID,
   MODELS,
   DEFAULT_MODEL_ID,
+  defaultCorrector,
+  findCorrector,
+  parseRegistry,
   choiceModels,
   findModel,
   isLowOnMemory,
@@ -20,6 +27,11 @@ const model = recommendModel();
 const list = (ram: number | null, active: ModelInfo) =>
   choiceModels(ram, active).map((entry) => entry.id);
 const ids = (ram: number | null) => offeredModels(ram).map((entry) => entry.id);
+
+const parse =
+  (...models: unknown[]) =>
+  () =>
+    parseRegistry({ models });
 
 function variant(id: string, recommendedRamGb: number): ModelInfo {
   return { ...model, id, recommendedRamGb };
@@ -100,6 +112,62 @@ describe('registry', () => {
     expect(list(8 * GIB, stronger)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
     expect(list(null, model)).toEqual([DEFAULT_MODEL_ID]);
     expect(list(32 * GIB, model)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+  });
+
+  it('lists Gemma 4 E2B as the corrector exactly as the evaluation recommends', () => {
+    expect(CORRECTORS.map((entry) => entry.id)).toEqual([DEFAULT_CORRECTOR_ID]);
+    expect(ALL_MODELS).toHaveLength(MODELS.length + CORRECTORS.length);
+    expect(findModel(DEFAULT_CORRECTOR_ID)).toBeUndefined();
+    expect(findCorrector(DEFAULT_MODEL_ID)).toBeUndefined();
+    const corrector = defaultCorrector();
+    expect(corrector).toMatchObject({
+      displayName: 'Gemma 4 E2B it (Q4_0)',
+      license: 'Apache-2.0',
+      recommendedRamGb: 8,
+      files: {
+        model: {
+          name: 'gemma-4-E2B-it-Q4_0.gguf',
+          sha256: '8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52',
+          bytes: 2_841_481_184,
+        },
+      },
+      server: { contextSize: 4096, threads: null, gpuLayers: null, cpuRepack: false },
+      request: { maxOutputTokens: 2048, temperature: 0 },
+      lineMode: 'numbered',
+      prompt: '{text}',
+    });
+    expect(corrector.files).not.toHaveProperty('mmproj');
+    expect(corrector.system).toMatch(
+      /^Du korrigierst die Fehler in einer Schülerarbeit\. Fach: \{subject\}\.\n/u,
+    );
+    expect(corrector.system).toContain('Gib nur die Zeilen aus, ohne Erklärung.');
+    expect(totalBytes(corrector)).toBe(2_841_481_184);
+    expect(recommendModel(CORRECTORS).id).toBe(DEFAULT_CORRECTOR_ID);
+    expect(offeredModels(8 * GIB, CORRECTORS)).toEqual([corrector]);
+  });
+
+  it('keeps weight repacking for transcribers', () => {
+    expect(MODELS.every((entry) => entry.server.cpuRepack)).toBe(true);
+  });
+
+  it('rejects entries that mix up the two roles', () => {
+    const transcriber = recommendModel();
+    const corrector = defaultCorrector();
+    expect(parse(transcriber, corrector)).not.toThrow();
+    expect(parse({ ...transcriber, role: 'corrector' }, corrector)).toThrow(ZodError);
+    expect(parse({ ...transcriber, role: 'painter' }, corrector)).toThrow(ZodError);
+    const withProjector = { ...corrector.files, mmproj: transcriber.files.mmproj };
+    expect(parse(transcriber, { ...corrector, files: withProjector })).toThrow(ZodError);
+    expect(parse(transcriber, { ...corrector, prompt: 'Korrigiere.' })).toThrow(ZodError);
+    expect(parse(transcriber, { ...corrector, lineMode: 'diff' })).toThrow(ZodError);
+    const { cpuRepack: _dropped, ...server } = corrector.server;
+    expect(parse(transcriber, { ...corrector, server })).toThrow(ZodError);
+    expect(parse(transcriber, { ...corrector, id: 'other-corrector' })).toThrow(
+      'Standardmodell gemma-4-e2b-q4',
+    );
+    expect(parse({ ...corrector, id: DEFAULT_MODEL_ID }, corrector)).toThrow(
+      'Standardmodell glm-ocr-q8',
+    );
   });
 
   it('describes speed and accuracy of the stronger model only', () => {

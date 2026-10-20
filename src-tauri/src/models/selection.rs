@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::download::DownloadError;
 use super::manager;
-use super::registry::{DEFAULT_MODEL_ID, ModelEntry};
+use super::registry::{DEFAULT_MODEL_ID, ModelEntry, Role};
 use crate::llm::runtime::RuntimeStatus;
 
 const SELECTION_FILE: &str = "selection.json";
@@ -26,10 +26,16 @@ pub fn load(path: &Path) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
     let selection: Selection = serde_json::from_str(&text).ok()?;
     let id = selection.model_id?;
-    manager::entry(&id).ok().map(|entry| entry.id.clone())
+    manager::entry(&id)
+        .ok()
+        .filter(|entry| entry.role == Role::Transcriber)
+        .map(|entry| entry.id.clone())
 }
 
 pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
+    if entry.role != Role::Transcriber {
+        return Err(DownloadError::UnknownModel(entry.id.clone()));
+    }
     let text = serde_json::to_string(&Selection {
         model_id: Some(entry.id.clone()),
     })
@@ -136,6 +142,21 @@ mod tests {
         let nothing = selection_path(&dir.join("other").join("models"));
         forget(&nothing, second).unwrap();
         assert_eq!(load(&nothing), None);
+    }
+
+    #[test]
+    fn a_corrector_is_never_the_chosen_transcriber() {
+        let dir = temp_dir("corrector");
+        let path = selection_path(&dir.join("models"));
+        let corrector =
+            crate::models::manager::entry(super::super::registry::DEFAULT_CORRECTOR_ID).unwrap();
+        assert_eq!(
+            save(&path, corrector).unwrap_err(),
+            DownloadError::UnknownModel(corrector.id.clone())
+        );
+        assert_eq!(load(&path), None);
+        std::fs::write(&path, format!(r#"{{"modelId":"{}"}}"#, corrector.id)).unwrap();
+        assert_eq!(load(&path), None);
     }
 
     #[test]

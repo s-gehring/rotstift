@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { formatSize } from './format.ts';
 import { DiagnosticsLog, type DiagnosticsSource } from './DiagnosticsLog.tsx';
 import { ModelChoice } from './ModelChoice.tsx';
-import { totalBytes } from './registry.ts';
+import { totalBytes, type AnyModelInfo } from './registry.ts';
+import { roleText } from './role-text.ts';
 import type { ModelState } from './types.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
 interface Props {
-  readonly setup: ModelSetup;
+  readonly setup: ModelSetup<AnyModelInfo>;
   readonly onSetup: () => void;
   readonly disabled: boolean;
   readonly diagnostics?: DiagnosticsSource;
@@ -40,13 +41,14 @@ export function ModelManagement({ setup, onSetup, disabled, diagnostics }: Props
   }, [confirming]);
 
   if (!setup.available || status === null) return null;
+  const text = roleText(model);
   const hasFiles =
     status.state === 'ready' || status.state === 'corrupt' || status.downloadedBytes > 0;
 
   return (
-    <section className="model-management" aria-label="Texterkennung verwalten">
+    <section className="model-management" aria-label={text.manage}>
       <details>
-        <summary>Texterkennung verwalten</summary>
+        <summary>{text.manage}</summary>
         <ModelChoice setup={setup} disabled={disabled} />
         <p>
           {model.displayName}: {STATE_TEXT[status.state]}
@@ -55,10 +57,7 @@ export function ModelManagement({ setup, onSetup, disabled, diagnostics }: Props
         </p>
         {confirming ? (
           <div className="confirm" role="alertdialog" aria-label="Modell löschen">
-            <p>
-              Das Modell wirklich löschen? Zum Wörterzählen muss es danach erneut heruntergeladen
-              werden.
-            </p>
+            <p>Das Modell wirklich löschen? {text.afterDelete}</p>
             <button
               type="button"
               className="danger"
@@ -88,7 +87,7 @@ export function ModelManagement({ setup, onSetup, disabled, diagnostics }: Props
             )}
             {status.state !== 'ready' && (
               <button type="button" onClick={onSetup}>
-                Texterkennung einrichten
+                {text.title}
               </button>
             )}
             {hasFiles && !BUSY_STATES.has(status.state) && (
@@ -105,7 +104,9 @@ export function ModelManagement({ setup, onSetup, disabled, diagnostics }: Props
             )}
           </div>
         )}
-        <DiagnosticsLog {...(diagnostics && { source: diagnostics })} />
+        {model.role === 'transcriber' && (
+          <DiagnosticsLog {...(diagnostics && { source: diagnostics })} />
+        )}
       </details>
     </section>
   );

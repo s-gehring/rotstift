@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelManagement } from './ModelManagement.tsx';
 import { ModelSetupDialog, progressMilestone } from './ModelSetupDialog.tsx';
-import { recommendModel, type ModelInfo } from './registry.ts';
+import { MODELS, recommendModel, type ModelInfo } from './registry.ts';
 import { INITIAL_SETUP, type SetupState } from './setup-state.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 import type { DownloadError, ModelState } from './types.ts';
@@ -31,6 +31,7 @@ function fakeSetup(
   return {
     available: true,
     state: { ...INITIAL_SETUP, loaded: true, ...extra },
+    models: MODELS,
     model,
     status: { modelId: model.id, state, downloadedBytes: downloaded, totalBytes: total },
     error,

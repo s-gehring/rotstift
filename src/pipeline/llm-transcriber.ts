@@ -1,23 +1,27 @@
-import { LlmCallError, visionMessage, type LlmClient } from '../llm/client.ts';
+import { LlmCallError, visionMessage } from '../llm/client.ts';
+import {
+  createLlmEngine,
+  type EngineClient,
+  type EngineLease,
+  type LlmEngine,
+} from '../llm/engine.ts';
 import { modelImage } from '../llm/image.ts';
 import type { LlmError } from '../llm/types.ts';
 import type { ModelInfo } from '../models/registry.ts';
 import { hasRepetitionLoop, parseTranscript } from './transcript-lines.ts';
 import type {
   EngineMonitor,
-  EnginePhase,
   PageTranscriber,
   TranscribeError,
   TranscribeResult,
 } from './transcriber.ts';
 
-export type EngineClient = Pick<LlmClient, 'status' | 'startModel' | 'complete'> & {
-  readonly stop?: () => unknown;
-};
+export type { EngineClient } from '../llm/engine.ts';
 
 export interface LlmTranscriberDeps {
   readonly client: EngineClient;
   readonly model: ModelInfo;
+  readonly engine?: LlmEngine;
   readonly encode?: (png: Blob, maxEdge: number) => Promise<string>;
   readonly now?: () => number;
   readonly onUnavailable?: () => void;
@@ -97,97 +101,23 @@ function incomplete(message: string): TranscribeResult {
   return { ok: false, error: { kind: 'failed', message } };
 }
 
-function untilAbort<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new LlmCallError({ kind: 'cancelled' }));
-      return;
-    }
-    const onAbort = () => {
-      reject(new LlmCallError({ kind: 'cancelled' }));
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    work.then(resolve, reject).finally(() => {
-      signal.removeEventListener('abort', onAbort);
-    });
-  });
-}
-
 export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
   const { client, model } = deps;
   const encode = deps.encode ?? modelImage;
-  const now = deps.now ?? (() => performance.now());
-  const listeners = new Set<() => void>();
-  let phase: EnginePhase = 'idle';
-  let starting: Promise<void> | null = null;
-  let generation = 0;
-
-  const setPhase = (next: EnginePhase) => {
-    if (phase === next) return;
-    phase = next;
-    for (const listener of listeners) listener();
-  };
-
-  const start = async (own: number) => {
-    setPhase('starting');
-    try {
-      const status = await client.startModel(model.id);
-      if (own !== generation) throw new LlmCallError({ kind: 'cancelled' });
-      if (status.state !== 'ready') {
-        throw new LlmCallError(status.state === 'failed' ? status.error : { kind: 'notReady' });
-      }
-      setPhase('ready');
-    } catch (error) {
-      if (own === generation) setPhase('failed');
-      throw error;
-    }
-  };
-
-  const launch = (): Promise<void> => {
-    const pending: Promise<void> = start(generation).finally(() => {
-      if (starting === pending) starting = null;
-    });
-    return pending;
-  };
-
-  const ensureRunning = async (): Promise<number> => {
-    const began = now();
-    if (starting === null) {
-      const status = await client.status();
-      if (status.state === 'ready' && status.model === model.files.model.name) {
-        setPhase('ready');
-        return 0;
-      }
-      starting ??= launch();
-    }
-    await starting;
-    return now() - began;
-  };
+  const engine = deps.engine ?? createLlmEngine(client, deps.now);
 
   return {
-    engine: {
-      getPhase: () => phase,
-      subscribe: (listener) => {
-        listeners.add(listener);
-        return () => void listeners.delete(listener);
-      },
-    },
+    engine: engine.monitor(model.id),
 
     async recover() {
-      generation += 1;
-      starting = null;
-      setPhase('idle');
-      try {
-        await client.stop?.();
-      } catch {
-        return;
-      }
+      await engine.reset();
     },
 
     async transcribe(png, signal, onPhase): Promise<TranscribeResult> {
+      let lease: EngineLease | null = null;
       try {
         onPhase?.('sidecar_start');
-        const startupMs = await untilAbort(ensureRunning(), signal);
+        lease = await engine.acquire(model, signal);
         onPhase?.('encoding');
         const image = await encode(png, model.request.imageMaxEdge);
         signal.throwIfAborted();
@@ -205,15 +135,17 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
         const { lines, removedThinking } = parseTranscript(answer.text);
         if (removedThinking && lines.length === 0) return incomplete(INCOMPLETE_MESSAGE);
         if (hasRepetitionLoop(lines)) return incomplete(LOOP_MESSAGE);
-        return { ok: true, lines, startupMs };
+        return { ok: true, lines, startupMs: lease.startupMs };
       } catch (error) {
         if (signal.aborted) return { ok: false, error: { kind: 'cancelled' } };
         if (error instanceof LlmCallError && error.error.kind === 'exitedUnexpectedly') {
-          setPhase('failed');
+          engine.markFailed(model.id);
         }
         const result = failure(error);
         if (!result.ok && result.error.kind === 'unavailable') deps.onUnavailable?.();
         return result;
+      } finally {
+        lease?.release();
       }
     },
   };

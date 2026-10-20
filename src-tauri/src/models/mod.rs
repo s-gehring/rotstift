@@ -4,7 +4,7 @@ mod import;
 mod manager;
 pub mod registry;
 mod selection;
-mod system;
+pub(crate) mod system;
 mod verified;
 
 #[cfg(test)]
