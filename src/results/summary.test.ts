@@ -22,7 +22,7 @@ function entry(
   text = '',
   hasTranscript = status === 'done',
 ): PageEntry {
-  return { status, text, hasTranscript, edited: false, rotation: 0, error: null };
+  return { status, text, hasTranscript, edited: false, rotation: 0, error: null, reading: null };
 }
 
 function arbeit(id: string, pages: readonly ImportPage[]): Arbeit {

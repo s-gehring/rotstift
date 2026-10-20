@@ -2,12 +2,19 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Bbox, Transcript } from '../annotations/transcript.ts';
 import { correctPage, type CorrectPageResult } from '../correction/correct-page.ts';
 import { describeCorrectError, type Corrector } from '../correction/corrector.ts';
+import {
+  separateUncertain,
+  withAcceptedHints,
+  type HintStatus,
+  type PageReading,
+  type ReadingHint,
+} from '../correction/uncertain-reading.ts';
 import type { ImportPage, Rotation } from '../import/pages.ts';
 import type { LayoutLocator } from '../layout/layout-client.ts';
 import type { LayoutResult } from '../layout/types.ts';
 import type { PageEntry, Runner } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
-import type { Statistics } from '../stats/statistics.ts';
+import { computeStatistics, type Statistics } from '../stats/statistics.ts';
 
 export interface ReviewImage {
   readonly blob: Blob;
@@ -22,6 +29,8 @@ export type ReviewStatus =
 
 export interface CorrectedPage {
   readonly transcript: Transcript;
+  readonly baseTranscript: Transcript;
+  readonly hints: readonly ReadingHint[];
   readonly statistics: Statistics;
   readonly droppedMarks: number;
   readonly unplacedLines: readonly number[];
@@ -105,6 +114,7 @@ const ACTIVE: ReadonlySet<ReviewStatus> = new Set([
 interface Readable {
   readonly page: ImportPage;
   readonly lines: readonly string[];
+  readonly reading: PageReading | null;
 }
 
 function errorText(error: unknown): string {
@@ -143,6 +153,18 @@ function unplacedLines(transcript: Transcript): number[] {
   return transcript.lines
     .filter((line) => line.bbox === undefined && line.marks.length > 0)
     .map((line) => line.number);
+}
+
+function withHints(
+  result: Omit<CorrectedPage, 'transcript' | 'statistics' | 'unplacedLines'>,
+): CorrectedPage {
+  const transcript = withAcceptedHints(result.baseTranscript, result.hints);
+  return {
+    ...result,
+    transcript,
+    statistics: computeStatistics(transcript),
+    unplacedLines: unplacedLines(transcript),
+  };
 }
 
 function blankPage(rotation: Rotation): ReviewPage {
@@ -300,7 +322,7 @@ export function createReviewFlow(deps: ReviewDeps) {
         patch(page.id, { status: 'empty', message: null, detail: null });
         continue;
       }
-      readable.push({ page, lines });
+      readable.push({ page, lines, reading: entry.reading });
     }
     return readable;
   };
@@ -351,7 +373,7 @@ export function createReviewFlow(deps: ReviewDeps) {
     const current = corrector;
     const isPreview = preview;
     setRun({ phase: 'correcting', total: readable.length, finished });
-    for (const { page, lines } of readable) {
+    for (const { page, lines, reading } of readable) {
       if (signal.aborted) return;
       if (current === null) {
         patch(page.id, { status: 'failed', message: CORRECTOR_MISSING, detail: null });
@@ -367,15 +389,15 @@ export function createReviewFlow(deps: ReviewDeps) {
         }));
         if (result === ABORTED) return;
         if (result.ok) {
+          const separated = separateUncertain(result.transcript, reading);
           patch(page.id, {
             status: 'done',
-            result: {
-              transcript: result.transcript,
-              statistics: result.statistics,
+            result: withHints({
+              baseTranscript: separated.transcript,
+              hints: separated.hints,
               droppedMarks: result.droppedMarks,
-              unplacedLines: unplacedLines(result.transcript),
               preview: isPreview,
-            },
+            }),
           });
         } else if (result.error.kind === 'cancelled') {
           patch(page.id, { status: 'cancelled' });
@@ -471,6 +493,16 @@ export function createReviewFlow(deps: ReviewDeps) {
         const entry = transcription.getState().entries[page.id];
         if (entry === undefined || needsRecognition(entry, page)) transcription.enqueue(page.id);
       });
+    },
+
+    setHint: (id: string, index: number, status: HintStatus) => {
+      const result = state.pages[id]?.result;
+      const hint = result?.hints[index];
+      if (result == null || hint === undefined || hint.status === status) return;
+      const hints = result.hints.map((entry, position) =>
+        position === index ? { ...entry, status } : entry,
+      );
+      patch(id, { result: withHints({ ...result, hints }) });
     },
 
     setCorrector: (next: Corrector | null, isPreview = false) => {

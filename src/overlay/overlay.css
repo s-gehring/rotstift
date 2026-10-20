@@ -33,3 +33,31 @@
   font-weight: 500;
   white-space: pre;
 }
+
+.annotated-page__hints {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.hint-spot {
+  cursor: pointer;
+}
+
+.hint-spot:focus {
+  outline: none;
+}
+
+.hint-spot:focus-visible .hint-spot__area {
+  stroke: currentColor;
+  stroke-width: 2px;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.hint-spot__suggestion {
+  font-family: system-ui, sans-serif;
+  pointer-events: none;
+}

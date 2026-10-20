@@ -364,4 +364,68 @@ describe('describeLlmError', () => {
     expect(await second).toMatchObject({ ok: true });
     expect(instance.engine.getPhase()).toBe('ready');
   });
+
+  describe('reading confidence', () => {
+    const encoder = new TextEncoder();
+    const token = (text: string, probability: number) => ({
+      bytes: Array.from(encoder.encode(text)),
+      logprob: Math.log(probability),
+    });
+    const text = 'Hallo Wält\nZweite';
+    const tokens = [
+      token('Hallo', 1),
+      token(' W', 0.99),
+      token('ä', 0.4),
+      token('lt', 0.98),
+      token('\n', 1),
+      token('Zwei', 0.97),
+      token('te', 1),
+    ];
+
+    it('asks for log probabilities and keeps only the lowest per word', async () => {
+      const engine = client();
+      engine.complete.mockResolvedValue({ ...answer(text), logprobs: tokens });
+      const result = await transcriber(engine).transcribe(png, new AbortController().signal);
+      const [request] = engine.complete.mock.calls[0] ?? [];
+      expect(request?.logprobs).toBe(true);
+      expect(result).toMatchObject({ ok: true, lines: ['Hallo Wält', 'Zweite'] });
+      if (!result.ok) throw new Error('expected a transcript');
+      expect(result.reading?.uncertainBelow).toBe(model.request.uncertainBelow);
+      const words = result.reading?.lines.map((line) =>
+        line.map((word) => [word.text, word.confidence]),
+      );
+      expect(words).toEqual([
+        [
+          ['Hallo', 1],
+          ['Wält', expect.closeTo(0.4, 6)],
+        ],
+        [['Zweite', expect.closeTo(0.97, 6)]],
+      ]);
+    });
+
+    it('treats every word as certain when the server sends no usable probabilities', async () => {
+      const engine = client();
+      engine.complete.mockResolvedValueOnce(answer(text));
+      engine.complete.mockResolvedValueOnce({ ...answer(text), logprobs: tokens.slice(1) });
+      const instance = transcriber(engine);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const result = await instance.transcribe(png, new AbortController().signal);
+        expect(result).toMatchObject({ ok: true, lines: ['Hallo Wält', 'Zweite'] });
+        expect(result.ok && result.reading).toBeUndefined();
+      }
+    });
+
+    it('does not ask for probabilities when the registry sets no threshold', async () => {
+      const engine = client();
+      engine.complete.mockResolvedValue({ ...answer(text), logprobs: tokens });
+      const silent = { ...model, request: { ...model.request, uncertainBelow: null } };
+      const result = await transcriber(engine, { model: silent }).transcribe(
+        png,
+        new AbortController().signal,
+      );
+      const [request] = engine.complete.mock.calls[0] ?? [];
+      expect(request).not.toHaveProperty('logprobs');
+      expect(result.ok && result.reading).toBeUndefined();
+    });
+  });
 });

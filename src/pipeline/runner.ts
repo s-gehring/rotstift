@@ -1,3 +1,4 @@
+import { editReading, type PageReading } from '../correction/uncertain-reading.ts';
 import type { ImportPage, Rotation } from '../import/pages.ts';
 import { browserDiagnostics, createHeartbeat, type PipelineDiagnostics } from './diagnostics.ts';
 import type {
@@ -18,6 +19,7 @@ export interface PageEntry {
   readonly edited: boolean;
   readonly rotation: Rotation;
   readonly error: TranscribeError | null;
+  readonly reading: PageReading | null;
 }
 
 export interface Batch {
@@ -195,6 +197,7 @@ export function createRunner(deps: RunnerDeps) {
         edited: existing?.edited ?? false,
         rotation: existing?.hasTranscript ? existing.rotation : page.rotation,
         error: null,
+        reading: existing?.reading ?? null,
       };
     }
     commit({
@@ -265,6 +268,7 @@ export function createRunner(deps: RunnerDeps) {
         edited: false,
         rotation: run.rotation,
         error: null,
+        reading: result.reading ?? null,
       };
     }
     return entry.hasTranscript
@@ -499,8 +503,10 @@ export function createRunner(deps: RunnerDeps) {
     },
 
     edit: (id: string, text: string) => {
-      if (state.entries[id]?.status !== 'done') return;
-      patchEntry(id, { text, edited: true });
+      const entry = state.entries[id];
+      if (entry?.status !== 'done') return;
+      const reading = editReading(entry.reading, entry.text.split('\n'), text.split('\n'));
+      patchEntry(id, { text, edited: true, reading });
     },
   };
 }

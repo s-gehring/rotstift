@@ -1,4 +1,5 @@
 import type { CorrectResult, Corrector } from '../correction/corrector.ts';
+import type { PageReading } from '../correction/uncertain-reading.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { LayoutResult } from '../layout/types.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
@@ -140,4 +141,17 @@ export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
   });
   flow.setCorrector(corrector);
   return { pages, h, runner, flow, transcriber, corrector };
+}
+
+export function readingOf(
+  lines: readonly string[],
+  uncertain: Readonly<Record<string, number>>,
+  uncertainBelow = 0.95,
+): PageReading {
+  return {
+    lines: lines.map((line) =>
+      Array.from(line.matchAll(/\S+/gu), ([text]) => ({ text, confidence: uncertain[text] ?? 1 })),
+    ),
+    uncertainBelow,
+  };
 }

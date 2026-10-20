@@ -23,7 +23,15 @@ function page(id: string, overrides: Partial<ImportPage> = {}): ImportPage {
 }
 
 function entry(text: string, hasTranscript = true): PageEntry {
-  return { status: 'done', text, hasTranscript, edited: false, rotation: 0, error: null };
+  return {
+    status: 'done',
+    text,
+    hasTranscript,
+    edited: false,
+    rotation: 0,
+    error: null,
+    reading: null,
+  };
 }
 
 const arbeit: Arbeit = {

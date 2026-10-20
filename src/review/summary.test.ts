@@ -26,6 +26,8 @@ function reviewPage(status: ReviewPage['status'], words = 0, byType: Record<stri
       status === 'done'
         ? {
             transcript: { lines: [] },
+            baseTranscript: { lines: [] },
+            hints: [],
             statistics: {
               words,
               errors,
@@ -130,6 +132,7 @@ describe('summarizeArbeit', () => {
         edited: true,
         rotation: 0,
         error: null,
+        reading: null,
       },
     };
     const rotated: Arbeit = {

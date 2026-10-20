@@ -20,7 +20,7 @@ import {
   ReviewHint,
 } from './ReviewControls.tsx';
 import { ReviewView } from './ReviewView.tsx';
-import { deferred, setupReview, tick, waitFor } from './test-support.ts';
+import { deferred, readingOf, setupReview, tick, waitFor } from './test-support.ts';
 
 vi.mock('../export/save-pdf.ts', () => ({
   saveCorrectedPdf: vi.fn<() => void>(),
@@ -114,6 +114,30 @@ async function reviewed(preview = false) {
   return { ...harness, arbeiten };
 }
 
+async function withHint() {
+  const harness = setupReview(['a']);
+  const lines = ['Ich war im Schwimbad.', 'Es war schön.'];
+  harness.h.transcripts.a = {
+    ok: true,
+    lines,
+    reading: readingOf(lines, { 'Schwimbad.': 0.3 }),
+  };
+  await harness.flow.start(harness.pages, DEUTSCH);
+  const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
+  act(() =>
+    root.render(<Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} />),
+  );
+}
+
+const head = () => pageItem(1).querySelector('.review-page-head')?.textContent;
+const spot = () => pageItem(1).querySelector<SVGGElement>('.hint-spot');
+const hintItem = () => pageItem(1).querySelector('.hint-list li')?.textContent;
+const tap = () =>
+  act(() => {
+    spot()?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    spot()?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+
 describe('ReviewView', () => {
   it('lists every mark of a page with line, code and correction', async () => {
     await reviewed();
@@ -142,6 +166,74 @@ describe('ReviewView', () => {
     const total = container.querySelector('.class-overview tfoot tr');
     expect(total?.textContent).toContain('Klasse gesamt');
     expect(total?.textContent).toContain('2 Arbeiten, davon 1 unvollständig');
+  });
+
+  it('shows uncertainly read places as hints and lets the list accept, discard and restore them', async () => {
+    await withHint();
+    expect(head()).toContain('0 Fehler');
+    expect(head()).toContain('1 Stelle unsicher gelesen');
+    expect(pageItem(1).querySelectorAll('.mark-list li')).toHaveLength(0);
+    expect(pageItem(1).querySelector('.hint-list summary')?.textContent).toBe(
+      '1 Stelle unsicher gelesen',
+    );
+    expect(hintItem()).toContain('„Schwimbad“ → „Schwimmbad“ (unsicher gelesen)');
+
+    act(() => buttonNamed('Als Fehler übernehmen').click());
+    expect(head()).toContain('1 Fehler');
+    expect(head()).not.toContain('unsicher gelesen');
+    expect(pageItem(1).querySelectorAll('.mark-list li')).toHaveLength(1);
+    expect(hintItem()).toContain('(als Fehler übernommen)');
+    expect(container.querySelector('.class-overview tbody tr')?.textContent).toContain('R (1)');
+
+    act(() => buttonNamed('Verwerfen').click());
+    expect(head()).toContain('0 Fehler');
+    expect(spot()).toBeNull();
+    expect(hintItem()).toContain('(verworfen)');
+
+    act(() => buttonNamed('Wiederherstellen').click());
+    expect(head()).toContain('1 Stelle unsicher gelesen');
+    expect(spot()).not.toBeNull();
+  });
+
+  it('shows the suggestion on the first tap and switches only between hint and mark on the page', async () => {
+    await withHint();
+    expect(spot()?.getAttribute('role')).toBe('button');
+    expect(spot()?.getAttribute('tabindex')).toBe('0');
+    expect(spot()?.getAttribute('aria-label')).toBe(
+      'Unsicher gelesen: „Schwimbad“ → „Schwimmbad“. Als Fehler übernehmen',
+    );
+    expect(spot()?.querySelector('line')?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(spot()?.querySelector('text')).toBeNull();
+
+    tap();
+    expect(spot()?.querySelector('text')?.textContent).toBe('„Schwimbad“ → „Schwimmbad“');
+    expect(head()).toContain('0 Fehler');
+
+    tap();
+    expect(head()).toContain('1 Fehler');
+    expect(spot()?.querySelector('line')).toBeNull();
+    expect(spot()?.getAttribute('aria-label')).toContain('Wieder als Hinweis zeigen');
+
+    tap();
+    expect(head()).toContain('0 Fehler');
+    expect(head()).toContain('1 Stelle unsicher gelesen');
+    expect(hintItem()).toContain('(unsicher gelesen)');
+  });
+
+  it('shows the suggestion on keyboard focus and accepts with Enter', async () => {
+    await withHint();
+    act(() => {
+      spot()?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    });
+    expect(spot()?.querySelector('text')?.textContent).toBe('„Schwimbad“ → „Schwimmbad“');
+    act(() => {
+      spot()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(head()).toContain('1 Fehler');
+    act(() => {
+      spot()?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    });
+    expect(head()).toContain('1 Stelle unsicher gelesen');
   });
 
   it('switches between the page with notes and the original', async () => {
@@ -334,6 +426,9 @@ describe('ReviewControls', () => {
       ),
     );
     expect(container.textContent).toContain(OCR_NOTICE);
+    expect(OCR_NOTICE).toBe(
+      'Lesefehler der Texterkennung können als Fehler erscheinen. Unsicher gelesene Stellen zeigt Rotstift grau gepunktet zur Prüfung.',
+    );
     act(() => buttonNamed('Erkannte Texte prüfen').click());
     expect(onCheckTexts).toHaveBeenCalledOnce();
 

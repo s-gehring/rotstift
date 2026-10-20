@@ -221,3 +221,43 @@ button.link[aria-pressed='true'] {
   font-weight: 600;
   vertical-align: middle;
 }
+
+.hint-count {
+  border-bottom: 2px dotted currentColor;
+}
+
+.hint-list {
+  margin-top: 1rem;
+}
+
+.hint-list summary {
+  cursor: pointer;
+}
+
+.hint-list ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.75rem;
+}
+
+.hint-list li {
+  margin-bottom: 0.4rem;
+}
+
+.hint-list .hint-text {
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+
+.hint-list li[data-status='accepted'] .hint-text {
+  color: var(--accent);
+  text-decoration: underline solid;
+}
+
+.hint-list li[data-status='dismissed'] .hint-text {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.hint-list .hint-state {
+  font-size: 0.85rem;
+}

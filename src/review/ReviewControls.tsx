@@ -10,7 +10,7 @@ export const PREVIEW_NOTICE =
 export const PREVIEW_TAG = 'Vorschau';
 
 export const OCR_NOTICE =
-  'Lesefehler der Texterkennung werden als Fehler markiert. Prüfe die erkannten Texte vor dem Berichtigen.';
+  'Lesefehler der Texterkennung können als Fehler erscheinen. Unsicher gelesene Stellen zeigt Rotstift grau gepunktet zur Prüfung.';
 
 export const PDF_FOOTER = 'Vorschau: automatisch erstellte Korrektur, bitte prüfen';
 

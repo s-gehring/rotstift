@@ -67,6 +67,7 @@ pub struct RequestParams {
     pub max_output_tokens: u32,
     pub temperature: f32,
     pub image_max_edge: Option<u32>,
+    pub uncertain_below: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -180,6 +181,7 @@ const TRANSCRIBER_SHAPE: Shape = Shape {
         "server.threads",
         "server.gpuLayers",
         "server.imageMaxTokens",
+        "request.uncertainBelow",
     ],
     optional: &[],
     forbidden: &["lineMode", "system"],
@@ -193,6 +195,7 @@ const CORRECTOR_SHAPE: Shape = Shape {
         "files.mmproj",
         "server.imageMaxTokens",
         "request.imageMaxEdge",
+        "request.uncertainBelow",
     ],
 };
 
@@ -331,6 +334,9 @@ impl Registry {
             }
             if request.image_max_edge.is_some_and(|edge| edge < 64)
                 || !(0.0..=2.0).contains(&request.temperature)
+                || request
+                    .uncertain_below
+                    .is_some_and(|threshold| !(threshold > 0.0 && threshold < 1.0))
             {
                 return Err(format!("model {id}: invalid request parameters"));
             }
@@ -405,6 +411,9 @@ mod tests {
         assert_eq!(stronger.server.context_size, 4096);
         assert_eq!(stronger.server.image_max_tokens, Some(1024));
         assert_eq!(stronger.request.image_max_edge, Some(1536));
+        assert_eq!(stronger.request.uncertain_below, Some(0.9));
+        let default = registry.find(DEFAULT_MODEL_ID).unwrap();
+        assert_eq!(default.request.uncertain_below, Some(0.95));
         assert_eq!(stronger.files.model.bytes, 2_497_281_664);
         assert_eq!(stronger.files.mmproj.as_ref().unwrap().bytes, 453_974_304);
     }
@@ -488,6 +497,13 @@ mod tests {
             m["server"].as_object_mut().unwrap().remove("threads");
         });
         assert!(error.contains("needs server.threads"), "{error}");
+        let error = rejection(|m| {
+            m["request"]
+                .as_object_mut()
+                .unwrap()
+                .remove("uncertainBelow");
+        });
+        assert!(error.contains("needs request.uncertainBelow"), "{error}");
         let error = rejection(|m| m["files"]["mmproj"] = Value::Null);
         assert!(error.contains("files.mmproj must not be null"), "{error}");
         let error = rejection(|m| m["lineMode"] = json!("numbered"));
@@ -507,6 +523,8 @@ mod tests {
         assert!(error.contains("takes no server.imageMaxTokens"), "{error}");
         let error = corrector_rejection(|m| m["request"]["imageMaxEdge"] = json!(1024));
         assert!(error.contains("takes no request.imageMaxEdge"), "{error}");
+        let error = corrector_rejection(|m| m["request"]["uncertainBelow"] = json!(0.95));
+        assert!(error.contains("takes no request.uncertainBelow"), "{error}");
         let error = corrector_rejection(|m| m["system"] = Value::Null);
         assert!(error.contains("system must not be null"), "{error}");
         let error = corrector_rejection(|m| {
@@ -601,7 +619,21 @@ mod tests {
                 .contains("maxOutputTokens")
         );
         assert!(rejection(|m| m["prompt"] = json!("  ")).contains("prompt"));
+        for threshold in [json!(0.0), json!(1.0), json!(1.5), json!(-0.1)] {
+            assert!(
+                rejection(|m| m["request"]["uncertainBelow"] = threshold.clone())
+                    .contains("request"),
+                "{threshold}"
+            );
+        }
         assert!(Registry::parse("{\"models\": []}").is_err());
+    }
+
+    #[test]
+    fn a_transcriber_may_switch_the_reading_threshold_off() {
+        let json = json_with(0, |m| m["request"]["uncertainBelow"] = Value::Null);
+        let registry = Registry::parse(&json).unwrap();
+        assert_eq!(registry.models[0].request.uncertain_below, None);
     }
 
     #[test]

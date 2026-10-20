@@ -7,7 +7,7 @@ import process from 'node:process';
 import { ALL_MODELS, type AnyModelInfo } from '../models/registry.ts';
 import { LlmCallError, type Completion } from './client.ts';
 import type { EngineClient } from './engine.ts';
-import type { ChatRequest, RuntimeStatus } from './types.ts';
+import type { ChatRequest, ChatResponse, RuntimeStatus } from './types.ts';
 
 export const CACHE = join(homedir(), '.cache', 'rotstift');
 export const MODELS_DIR = process.env['ROTSTIFT_MODELS_DIR'] ?? join(CACHE, 'models');
@@ -149,12 +149,13 @@ export class NodeSidecar implements EngineClient {
       signal: options.signal ?? null,
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-    const body: {
-      choices: { finish_reason: string | null; message: { content: string } }[];
-    } = await response.json();
+    const body: ChatResponse = await response.json();
+    const choice = body.choices[0];
+    const logprobs = choice?.logprobs?.content;
     return {
-      text: body.choices[0]?.message.content ?? '',
-      finishReason: body.choices[0]?.finish_reason ?? null,
+      text: choice?.message.content ?? '',
+      finishReason: choice?.finish_reason ?? null,
+      ...(Array.isArray(logprobs) && { logprobs }),
     };
   };
 

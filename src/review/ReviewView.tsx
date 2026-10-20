@@ -1,11 +1,13 @@
 import { useId, useMemo, useState } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
-import { listErrors, type AnnotatedError } from '../annotations/transcript.ts';
+import { listErrors } from '../annotations/transcript.ts';
+import { nextHintStatus, openHints, type HintStatus } from '../correction/uncertain-reading.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { saveClassPdf, saveCorrectedPdf } from '../export/save-pdf.ts';
 import { AnnotatedPage } from '../overlay/AnnotatedPage.tsx';
+import { markText } from '../overlay/hint-layout.ts';
 import { formatCount, pagesText, wordsText } from '../results/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
 import { engineText, IDLE_ENGINE, type ReviewEngine } from './engine-phase.ts';
@@ -16,12 +18,19 @@ import {
   type ReviewExport,
 } from './export-input.ts';
 import { useObjectUrl } from './page-image.ts';
-import type { ReviewFlow, ReviewPage, ReviewState, ReviewStatus } from './review-flow.ts';
+import type {
+  CorrectedPage,
+  ReviewFlow,
+  ReviewPage,
+  ReviewState,
+  ReviewStatus,
+} from './review-flow.ts';
 import { PDF_FOOTER, PREVIEW_NOTICE, PreviewTag } from './ReviewControls.tsx';
 import { PdfControls, usePdfSave, type PdfSave } from './ReviewPdf.tsx';
 import {
   errorsText,
   formatRate,
+  hintsText,
   incompleteText,
   pageCondition,
   sortedTypes,
@@ -257,10 +266,55 @@ function pagesCell(arbeit: ArbeitReview): string {
   return parts.join(', ');
 }
 
-function markText(error: AnnotatedError): string {
-  if (error.kind === 'omission') return `fehlt: „${error.correction}“`;
-  if (error.correction === '') return `„${error.original}“ streichen`;
-  return `„${error.original}“ → „${error.correction}“`;
+const HINT_STATE: Readonly<Record<HintStatus, string>> = {
+  open: 'unsicher gelesen',
+  accepted: 'als Fehler übernommen',
+  dismissed: 'verworfen',
+};
+
+const HINT_ACTION: Readonly<Record<HintStatus, string>> = {
+  open: 'Als Fehler übernehmen',
+  accepted: 'Verwerfen',
+  dismissed: 'Wiederherstellen',
+};
+
+function HintList({
+  result,
+  onHint,
+}: {
+  readonly result: CorrectedPage;
+  readonly onHint: (index: number, status: HintStatus) => void;
+}) {
+  if (result.hints.length === 0) return null;
+  const open = openHints(result.hints);
+  return (
+    <details className="hint-list">
+      <summary>
+        {hintsText(result.hints.length)}
+        {open < result.hints.length && `, ${formatCount(open)} offen`}
+      </summary>
+      <p className="hint">
+        Hier war sich die Texterkennung unsicher, die Änderung beruht vielleicht nur auf einem
+        Lesefehler. Diese Stellen zählen nicht als Fehler, bis Sie sie übernehmen.
+      </p>
+      <ol aria-label="Unsicher gelesene Stellen">
+        {result.hints.map((hint, index) => (
+          <li key={`${hint.line}-${hint.mark.offset}-${index}`} data-status={hint.status}>
+            <span className="mark-line">Zeile {hint.line}</span>{' '}
+            <span className="hint-text">{markText(hint.mark)}</span>{' '}
+            <span className="hint-state">({HINT_STATE[hint.status]})</span>{' '}
+            <button
+              type="button"
+              aria-label={`${HINT_ACTION[hint.status]}: Zeile ${hint.line}, ${markText(hint.mark)}`}
+              onClick={() => onHint(index, nextHintStatus(hint.status))}
+            >
+              {HINT_ACTION[hint.status]}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
 }
 
 function MarkList({
@@ -300,6 +354,7 @@ function PageReview({
   arbeitName,
   canRetry,
   onRetry,
+  onHint,
 }: {
   readonly page: ImportPage;
   readonly position: number;
@@ -310,6 +365,7 @@ function PageReview({
   readonly arbeitName: string;
   readonly canRetry: boolean;
   readonly onRetry: () => void;
+  readonly onHint: (index: number, status: HintStatus) => void;
 }) {
   const stale = pageCondition(page, review, entries) === 'stale';
   const status = review?.status ?? 'waiting';
@@ -319,6 +375,7 @@ function PageReview({
   const headingId = useId();
   const alt = `Seite ${position} von ${arbeitName}`;
   let statusText = STATUS_TEXT[status];
+  const open = result === null ? 0 : openHints(result.hints);
   if (stale) statusText = STALE_TEXT;
   else if (status === 'done' && result) statusText = errorsText(result.statistics.errors);
   return (
@@ -329,6 +386,7 @@ function PageReview({
           <span className="status" data-status={stale ? 'stale' : status}>
             {statusText}
           </span>
+          {open > 0 && <span className="status hint-count">{hintsText(open)}</span>}
           {canRetry && (stale || RETRYABLE.has(status)) && (
             <button type="button" onClick={onRetry}>
               Seite {position} erneut berichtigen
@@ -346,6 +404,11 @@ function PageReview({
                 transcript={result.transcript}
                 profile={profile}
                 alt={`${alt}, mit Korrekturen`}
+                hints={result.hints}
+                onToggleHint={(index) => {
+                  const current = result.hints[index]?.status;
+                  onHint(index, current === 'open' ? 'accepted' : 'open');
+                }}
               />
             ) : (
               <img src={imageUrl ?? page.thumbnailUrl} alt={alt} />
@@ -366,6 +429,7 @@ function PageReview({
               </p>
             )}
             {review !== undefined && !stale && <MarkList page={review} profile={profile} />}
+            {result !== null && <HintList result={result} onHint={onHint} />}
           </div>
         </div>
       </section>
@@ -468,6 +532,7 @@ function ArbeitDetail({
             arbeitName={arbeit.name}
             canRetry={canRetry && !running}
             onRetry={() => void flow.retry(page)}
+            onHint={(hint, status) => flow.setHint(page.id, hint, status)}
           />
         ))}
       </ol>
