@@ -58,6 +58,8 @@ export interface CorrectorSummary {
   wrongType: number;
   falseAlarmsClean: number;
   falseAlarmsScads: number;
+  rewordingClean: number;
+  rewordingScads: number;
   preserved: number;
   residual: number;
   failure: string | undefined;
@@ -65,6 +67,11 @@ export interface CorrectorSummary {
 
 function inGroup(run: CorrectorRun, ...groups: Group[]): DocResult[] {
   return run.docs.filter((doc) => groups.includes(doc.group));
+}
+
+function rewordings(docs: readonly DocResult[]): number {
+  const marks = sum(docs.map((doc) => doc.marks.filter((mark) => mark.type === 'A').length));
+  return (marks / Math.max(sum(docs.map((doc) => doc.words)), 1)) * 100;
 }
 
 function alarms(docs: readonly DocResult[]): number {
@@ -95,6 +102,8 @@ export function summarizeCorrector(run: CorrectorRun): CorrectorSummary {
     wrongType: ratio(total.wrongType, total.gold),
     falseAlarmsClean: clean.length === 0 ? Number.NaN : alarms(clean),
     falseAlarmsScads: scads.length === 0 ? Number.NaN : alarms(scads),
+    rewordingClean: clean.length === 0 ? Number.NaN : rewordings(clean),
+    rewordingScads: scads.length === 0 ? Number.NaN : rewordings(scads),
     preserved: ratio(
       sum(scored.map((doc) => doc.preservedLines)),
       sum(scored.map((doc) => doc.lines)),
@@ -117,6 +126,7 @@ export function correctorOverviewTable(summaries: readonly CorrectorSummary[]): 
       'Precision',
       'Korrektur richtig',
       'Fehlalarme / 100 Wörter',
+      'davon Umformulierung (A)',
       'Text erhalten',
       'Lizenz',
     ],
@@ -131,6 +141,7 @@ export function correctorOverviewTable(summaries: readonly CorrectorSummary[]): 
       percent(summary.precision),
       percent(summary.fixRate),
       `${fixed(summary.falseAlarmsClean)} / ${fixed(summary.falseAlarmsScads)}`,
+      `${fixed(summary.rewordingClean)} / ${fixed(summary.rewordingScads)}`,
       percent(summary.preserved),
       summary.license,
     ]),
