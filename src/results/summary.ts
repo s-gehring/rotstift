@@ -1,4 +1,4 @@
-import type { ImportPage } from '../import/pages.ts';
+import type { Arbeit } from '../import/arbeiten.ts';
 import type { PageEntry, PageStatus } from '../pipeline/runner.ts';
 import { continuesHyphenation, computeStatistics } from '../stats/statistics.ts';
 
@@ -6,13 +6,31 @@ export interface ResultRow {
   readonly id: string;
   readonly position: number;
   readonly label: string;
-  readonly fileKey: string;
   readonly status: PageStatus;
   readonly words: number | null;
 }
 
+export interface ArbeitResult {
+  readonly id: string;
+  readonly name: string;
+  readonly pageCount: number;
+  readonly rows: readonly ResultRow[];
+  readonly words: number;
+  readonly countedPages: number;
+}
+
+export interface ClassTotals {
+  readonly arbeiten: number;
+  readonly pages: number;
+  readonly countedPages: number;
+  readonly words: number;
+  readonly completeArbeiten: number;
+  readonly average: number | null;
+}
+
 interface Candidate {
-  readonly page: ImportPage;
+  readonly id: string;
+  readonly label: string;
   readonly position: number;
   readonly entry: PageEntry;
   readonly lines: readonly string[];
@@ -29,7 +47,7 @@ function splitsWordWith(previous: Candidate | undefined, next: Candidate): boole
   const last = previous.lines.at(-1);
   const first = next.lines[0];
   return (
-    previous.page.fileKey === next.page.fileKey &&
+    previous.entry.hasTranscript &&
     previous.position + 1 === next.position &&
     last !== undefined &&
     first !== undefined &&
@@ -37,32 +55,48 @@ function splitsWordWith(previous: Candidate | undefined, next: Candidate): boole
   );
 }
 
-export function buildRows(
-  pages: readonly ImportPage[],
-  entries: Readonly<Record<string, PageEntry>>,
-): ResultRow[] {
-  const candidates = pages.flatMap((page, index): Candidate[] => {
+function buildArbeitResult(arbeit: Arbeit, entries: Readonly<Record<string, PageEntry>>) {
+  const candidates = arbeit.pages.flatMap((page, index): Candidate[] => {
     const entry = entries[page.id];
     if (entry === undefined) return [];
-    return [{ page, position: index + 1, entry, lines: entry.text.split('\n') }];
+    return [
+      { id: page.id, label: page.label, position: index + 1, entry, lines: entry.text.split('\n') },
+    ];
   });
-  return candidates.map((candidate, index) => {
-    const { page, entry } = candidate;
+  const rows = candidates.map((candidate, index): ResultRow => {
+    const { entry } = candidate;
     let words: number | null = null;
     if (entry.hasTranscript) {
-      const previous = candidates[index - 1];
-      const carried = previous?.entry.hasTranscript && splitsWordWith(previous, candidate);
+      const carried = splitsWordWith(candidates[index - 1], candidate);
       words = countPageWords(entry.text) - (carried ? 1 : 0);
     }
     return {
-      id: page.id,
+      id: candidate.id,
       position: candidate.position,
-      label: page.label,
-      fileKey: page.fileKey,
+      label: candidate.label,
       status: entry.status,
       words,
     };
   });
+  return {
+    id: arbeit.id,
+    name: arbeit.name,
+    pageCount: arbeit.pages.length,
+    rows,
+    words: totalWords(rows),
+    countedPages: countedPages(rows),
+  };
+}
+
+export function buildResults(
+  arbeiten: readonly Arbeit[],
+  entries: Readonly<Record<string, PageEntry>>,
+): ArbeitResult[] {
+  return arbeiten.map((arbeit) => buildArbeitResult(arbeit, entries));
+}
+
+export function isComplete(result: ArbeitResult): boolean {
+  return result.countedPages === result.pageCount;
 }
 
 export function totalWords(rows: readonly ResultRow[]): number {
@@ -73,8 +107,25 @@ export function countedPages(rows: readonly ResultRow[]): number {
   return rows.filter((row) => row.words !== null).length;
 }
 
+export function classTotals(results: readonly ArbeitResult[]): ClassTotals {
+  const complete = results.filter(isComplete);
+  const completeWords = complete.reduce((sum, result) => sum + result.words, 0);
+  return {
+    arbeiten: results.length,
+    pages: results.reduce((sum, result) => sum + result.pageCount, 0),
+    countedPages: results.reduce((sum, result) => sum + result.countedPages, 0),
+    words: results.reduce((sum, result) => sum + result.words, 0),
+    completeArbeiten: complete.length,
+    average: complete.length === 0 ? null : completeWords / complete.length,
+  };
+}
+
 export function formatCount(count: number): string {
   return count.toLocaleString('de-DE');
+}
+
+export function formatAverage(average: number): string {
+  return average.toLocaleString('de-DE', { maximumFractionDigits: 1 });
 }
 
 export function wordsText(count: number): string {
@@ -85,12 +136,6 @@ export function pagesText(count: number): string {
   return `${formatCount(count)} ${count === 1 ? 'Seite' : 'Seiten'}`;
 }
 
-export function formatSummary(rows: readonly ResultRow[], pageCount: number): string {
-  const lines = rows.map(
-    (row) =>
-      `Seite ${row.position} (${row.label}): ${row.words === null ? 'Nicht erkannt' : wordsText(row.words)}`,
-  );
-  const counted = countedPages(rows);
-  const scope = counted < pageCount ? ` (${counted} von ${pageCount} Seiten)` : '';
-  return ['Wortzählung', ...lines, `Gesamt${scope}: ${wordsText(totalWords(rows))}`].join('\n');
+export function arbeitenText(count: number): string {
+  return `${formatCount(count)} ${count === 1 ? 'Arbeit' : 'Arbeiten'}`;
 }

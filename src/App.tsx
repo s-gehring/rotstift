@@ -45,7 +45,7 @@ export function App() {
           <CountControls
             count={count}
             status={transcriber}
-            pages={importState.pages}
+            arbeiten={importState.arbeiten}
             onSetup={openSetup}
           />
         }
@@ -53,13 +53,13 @@ export function App() {
           <CountHint
             count={count}
             status={transcriber}
-            pages={importState.pages}
+            arbeiten={importState.arbeiten}
             download={setup.status}
           />
         }
       />
       <ResultsView
-        pages={importState.pages}
+        arbeiten={importState.arbeiten}
         count={count}
         canRetry={transcriber?.state === 'ready'}
       />

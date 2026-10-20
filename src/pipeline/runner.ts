@@ -1,10 +1,13 @@
 import type { ImportPage, Rotation } from '../import/pages.ts';
+import { browserDiagnostics, createHeartbeat, type PipelineDiagnostics } from './diagnostics.ts';
 import type {
   EnginePhase,
+  PagePhase,
   PageTranscriber,
   TranscribeError,
   TranscribeResult,
 } from './transcriber.ts';
+import { createPhaseWatch, phaseLimitMs, type PhaseTimings, type Stall } from './watchdog.ts';
 
 export type PageStatus = 'waiting' | 'running' | 'done' | 'error';
 
@@ -32,12 +35,13 @@ export interface RunState {
 export interface RunnerDeps {
   readonly render: (page: ImportPage) => Promise<Blob>;
   readonly now?: () => number;
+  readonly diagnostics?: PipelineDiagnostics;
 }
 
 interface Current {
   readonly id: string;
   readonly rotation: Rotation;
-  readonly abort: AbortController;
+  abort: AbortController;
   reason: 'cancel' | 'removed' | 'rotated' | undefined;
 }
 
@@ -51,6 +55,60 @@ const EMPTY: RunState = { entries: {}, batch: null, durationsMs: [], runningSinc
 const CANCELLED: TranscribeResult = { ok: false, error: { kind: 'cancelled' } };
 
 const MAX_CRASHES_PER_BATCH = 2;
+
+const MAX_ATTEMPTS = 2;
+
+const STALL_ERROR: TranscribeError = {
+  kind: 'failed',
+  stalled: true,
+  message:
+    'Die Erkennung dieser Seite ist zweimal hängen geblieben und wurde abgebrochen. Die übrigen Seiten werden weiter bearbeitet. Einzelheiten stehen im Diagnoseprotokoll unter „Texterkennung verwalten“.',
+};
+
+const LOST_ERROR: TranscribeError = {
+  kind: 'failed',
+  message:
+    'Die Erkennung dieser Seite wurde zweimal unerwartet abgebrochen. Die übrigen Seiten werden weiter bearbeitet. Bitte die Seite später erneut erkennen lassen.',
+};
+
+const STALL_LIMIT_ERROR: TranscribeError = {
+  kind: 'failed',
+  message:
+    'Die Texterkennung ist in diesem Durchgang mehrfach hängen geblieben oder abgestürzt. Bitte andere Programme schließen und die übrigen Seiten erneut erkennen lassen. Einzelheiten stehen im Diagnoseprotokoll unter „Texterkennung verwalten“.',
+};
+
+const PHASE_ORDER: readonly PagePhase[] = [
+  'rendering',
+  'sidecar_start',
+  'encoding',
+  'request',
+  'parsing',
+];
+
+const PHASE_FIELDS: Readonly<Record<PagePhase, string>> = {
+  rendering: 'renderMs',
+  sidecar_start: 'sidecarMs',
+  encoding: 'encodeMs',
+  request: 'requestMs',
+  parsing: 'parseMs',
+};
+
+interface Attempt {
+  readonly result: TranscribeResult;
+  readonly stall: Stall | undefined;
+  readonly timings: PhaseTimings;
+}
+
+function rounded(timings: PhaseTimings): Record<string, number> {
+  const fields: Record<string, number> = {};
+  for (const phase of PHASE_ORDER) {
+    const ms = timings[phase];
+    if (ms !== undefined) fields[PHASE_FIELDS[phase]] = Math.round(ms);
+  }
+  return fields;
+}
+
+const wasInterrupted = (run: Current) => run.reason !== undefined;
 
 const CRASH_LIMIT_ERROR: TranscribeError = {
   kind: 'failed',
@@ -99,6 +157,9 @@ function abortedResult(signal: AbortSignal): Promise<TranscribeResult> {
 
 export function createRunner(deps: RunnerDeps) {
   const now = deps.now ?? (() => performance.now());
+  const diagnostics = deps.diagnostics ?? browserDiagnostics();
+  const heartbeat = createHeartbeat(diagnostics);
+  let limitSamples: number[] = [];
   const listeners = new Set<() => void>();
   let state: RunState = EMPTY;
   let pages: readonly ImportPage[] = [];
@@ -145,19 +206,50 @@ export function createRunner(deps: RunnerDeps) {
   const attempt = async (
     active: PageTranscriber,
     page: ImportPage,
-    signal: AbortSignal,
-  ): Promise<TranscribeResult> => {
+    run: Current,
+    attemptNo: number,
+  ): Promise<Attempt> => {
+    const { signal } = run.abort;
+    let stall: Stall | undefined;
+    const watch = createPhaseWatch({
+      now,
+      limitFor: (phase) => phaseLimitMs(phase, limitSamples, attemptNo),
+      onPhase: (phase, previous, previousMs) => {
+        diagnostics.log('page_phase', {
+          pageId: page.id,
+          attempt: attemptNo,
+          phase,
+          ...(previous !== null && { previousMs: Math.round(previousMs) }),
+        });
+      },
+      onStall: (found) => {
+        stall = found;
+        limitSamples.push(found.elapsedMs);
+        diagnostics.log('page_stalled', {
+          pageId: page.id,
+          attempt: attemptNo,
+          phase: found.phase,
+          limitMs: Math.round(found.limitMs),
+          elapsedMs: Math.round(found.elapsedMs),
+        });
+        run.abort.abort();
+      },
+    });
     const work = async (): Promise<TranscribeResult> => {
       try {
+        watch.enter('rendering');
         const png = await deps.render(page);
         signal.throwIfAborted();
-        return await active.transcribe(png, signal);
+        return await active.transcribe(png, signal, (phase) => {
+          watch.enter(phase);
+        });
       } catch (error) {
         if (signal.aborted) return CANCELLED;
         return { ok: false, error: { kind: 'failed', message: errorMessage(error) } };
       }
     };
-    return Promise.race([work(), abortedResult(signal)]);
+    const result = await Promise.race([work(), abortedResult(signal)]);
+    return { result, stall, timings: watch.stop() };
   };
 
   const settle = (entry: PageEntry, run: Current, result: TranscribeResult): PageEntry => {
@@ -176,6 +268,50 @@ export function createRunner(deps: RunnerDeps) {
       : { ...entry, status: 'error', rotation: run.rotation, error: result.error };
   };
 
+  const runAttempts = async (
+    active: PageTranscriber,
+    page: ImportPage,
+    run: Current,
+  ): Promise<{ result: TranscribeResult | undefined; attemptStart: number }> => {
+    let stalledBefore = false;
+    for (let attemptNo = 1; ; attemptNo += 1) {
+      const attemptStart = now();
+      diagnostics.log('page_start', { pageId: page.id, attempt: attemptNo });
+      const outcome = await attempt(active, page, run, attemptNo);
+      if (wasInterrupted(run)) return { result: undefined, attemptStart };
+      const lostRequest =
+        !outcome.result.ok && outcome.result.error.kind === 'cancelled' && !outcome.stall;
+      if (lostRequest) {
+        diagnostics.log('unexpected_cancel', { pageId: page.id, attempt: attemptNo });
+      }
+      if (outcome.stall === undefined && !lostRequest) {
+        diagnostics.log('page_done', {
+          pageId: page.id,
+          attempt: attemptNo,
+          ok: outcome.result.ok,
+          totalMs: Math.round(now() - attemptStart),
+          ...rounded(outcome.timings),
+        });
+        return { result: outcome.result, attemptStart };
+      }
+      stalledBefore ||= outcome.stall !== undefined;
+      const reason = stalledBefore ? 'stalled' : 'unexpected_cancel';
+      const restart = outcome.stall?.phase === 'sidecar_start' || attemptNo >= MAX_ATTEMPTS;
+      if (restart) {
+        diagnostics.log('sidecar_recover', { pageId: page.id, reason });
+        await active.recover?.().catch(() => undefined);
+      }
+      if (attemptNo >= MAX_ATTEMPTS) {
+        diagnostics.log('page_failed', { pageId: page.id, reason });
+        const error = stalledBefore ? STALL_ERROR : LOST_ERROR;
+        return { result: { ok: false, error }, attemptStart };
+      }
+      diagnostics.log('page_retry', { pageId: page.id, attempt: attemptNo + 1, reason });
+      if (wasInterrupted(run)) return { result: undefined, attemptStart };
+      run.abort = new AbortController();
+    }
+  };
+
   const runPage = async (
     active: PageTranscriber,
     page: ImportPage,
@@ -187,21 +323,22 @@ export function createRunner(deps: RunnerDeps) {
       reason: undefined,
     };
     current = run;
-    const started = now();
-    patchEntry(page.id, { status: 'running', error: null }, { runningSince: started });
-    const result = await attempt(active, page, run.abort.signal);
+    patchEntry(page.id, { status: 'running', error: null }, { runningSince: now() });
+    const { result, attemptStart } = await runAttempts(active, page, run);
     if (current === run) current = null;
-    if (run.reason !== undefined) return undefined;
+    if (result === undefined || run.reason !== undefined) return undefined;
     const entry = state.entries[page.id];
     if (entry === undefined) return undefined;
     const batch = state.batch;
+    const duration = result.ok
+      ? Math.max(0, now() - attemptStart - (result.startupMs ?? 0))
+      : undefined;
+    if (duration !== undefined) limitSamples.push(duration);
     commit({
       ...state,
       entries: { ...state.entries, [page.id]: settle(entry, run, result) },
       batch: batch && { ...batch, finished: batch.finished + 1 },
-      durationsMs: result.ok
-        ? [...state.durationsMs, Math.max(0, now() - started - (result.startupMs ?? 0))]
-        : state.durationsMs,
+      durationsMs: duration === undefined ? state.durationsMs : [...state.durationsMs, duration],
       runningSince: null,
     });
     return result;
@@ -230,21 +367,30 @@ export function createRunner(deps: RunnerDeps) {
     if (looping || active === null) return;
     looping = true;
     let crashes = 0;
+    let lastIncident: 'crash' | 'stall' = 'crash';
+    heartbeat.start();
+    diagnostics.log('batch_start', { pages: state.batch?.total ?? 0 });
     try {
       for (;;) {
         const next = pages.find((page) => state.entries[page.id]?.status === 'waiting');
         if (next === undefined) break;
         const result = await runPage(active, next);
-        if (result && !result.ok && result.error.kind === 'failed' && result.error.crashed) {
-          crashes += 1;
-          if (crashes >= MAX_CRASHES_PER_BATCH) {
-            failWaiting(CRASH_LIMIT_ERROR);
-            break;
+        if (result && !result.ok && result.error.kind === 'failed') {
+          const { crashed, stalled } = result.error;
+          if (crashed || stalled) {
+            crashes += 1;
+            lastIncident = crashed ? 'crash' : 'stall';
+            if (crashes >= MAX_CRASHES_PER_BATCH) {
+              failWaiting(lastIncident === 'crash' ? CRASH_LIMIT_ERROR : STALL_LIMIT_ERROR);
+              break;
+            }
           }
         }
       }
     } finally {
       looping = false;
+      diagnostics.log('batch_end', { pages: state.batch?.finished ?? 0 });
+      heartbeat.stop();
       commit({ ...state, batch: null, runningSince: null });
     }
   };
@@ -274,6 +420,10 @@ export function createRunner(deps: RunnerDeps) {
     getState: () => state,
 
     setTranscriber: (next: PageTranscriber | null) => {
+      if (next !== transcriber) {
+        limitSamples = [];
+        if (state.durationsMs.length > 0) commit({ ...state, durationsMs: [] });
+      }
       transcriber = next;
     },
 

@@ -2,13 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { rotatedSize, type ImportPage } from '../import/pages.ts';
 import { isOutdated, type PageEntry } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
+import type { Arbeit } from '../import/arbeiten.ts';
+import { CSV_FILE_NAME, formatClipboardTable, formatCsv, incompleteNote } from './export-table.ts';
+import { saveCsv } from './save-csv.ts';
 import {
-  buildRows,
-  countedPages,
+  arbeitenText,
+  buildResults,
+  classTotals,
+  formatAverage,
   formatCount,
-  formatSummary,
-  totalWords,
+  pagesText,
   wordsText,
+  type ArbeitResult,
   type ResultRow,
 } from './summary.ts';
 import type { WordCount } from './use-word-count.ts';
@@ -23,7 +28,7 @@ const STATUS_TEXT = {
 } as const;
 
 interface ResultsViewProps {
-  readonly pages: readonly ImportPage[];
+  readonly arbeiten: readonly Arbeit[];
   readonly count: WordCount;
   readonly canRetry: boolean;
 }
@@ -52,11 +57,12 @@ interface ResultCardProps {
   readonly row: ResultRow;
   readonly entry: PageEntry;
   readonly canRetry: boolean;
+  readonly arbeitName: string;
   readonly onEdit: (text: string) => void;
   readonly onRetry: () => void;
 }
 
-function ResultCard({ page, row, entry, canRetry, onEdit, onRetry }: ResultCardProps) {
+function ResultCard({ page, row, entry, canRetry, arbeitName, onEdit, onRetry }: ResultCardProps) {
   const [confirming, setConfirming] = useState(false);
   const keepButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -79,9 +85,9 @@ function ResultCard({ page, row, entry, canRetry, onEdit, onRetry }: ResultCardP
       <Thumbnail page={page} />
       <div className="result-body">
         <div className="result-head">
-          <h3>
+          <h4>
             Seite {row.position} <span className="page-label">{row.label}</span>
-          </h3>
+          </h4>
           <span className="status" data-status={row.status}>
             {STATUS_TEXT[row.status]}
           </span>
@@ -93,7 +99,7 @@ function ResultCard({ page, row, entry, canRetry, onEdit, onRetry }: ResultCardP
         </div>
         {entry.hasTranscript && (
           <textarea
-            aria-label={`Transkript von Seite ${row.position}`}
+            aria-label={`Transkript von Seite ${row.position} (${arbeitName})`}
             value={entry.text}
             readOnly={entry.status !== 'done'}
             rows={Math.min(Math.max(entry.text.split('\n').length + 1, 4), 16)}
@@ -149,25 +155,90 @@ function ResultCard({ page, row, entry, canRetry, onEdit, onRetry }: ResultCardP
   );
 }
 
-export function ResultsView({ pages, count, canRetry }: ResultsViewProps) {
+function ArbeitSection({
+  arbeit,
+  result,
+  count,
+  canRetry,
+}: {
+  readonly arbeit: Arbeit;
+  readonly result: ArbeitResult;
+  readonly count: WordCount;
+  readonly canRetry: boolean;
+}) {
   const { runner, state } = count;
-  const [copyMessage, setCopyMessage] = useState('');
-  const copyTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+  const headingId = `arbeit-${arbeit.id}`;
+  return (
+    <li className="arbeit-result">
+      <section aria-labelledby={headingId}>
+        <div className="arbeit-result-head">
+          <h3 id={headingId}>{result.name}</h3>
+          <span className="hint">{pagesText(result.pageCount)}</span>
+          <span className="words" data-testid="arbeit-words">
+            {result.countedPages === 0 ? 'Nicht gezählt' : wordsText(result.words)}
+          </span>
+          {result.countedPages > 0 && result.countedPages < result.pageCount && (
+            <span className="hint">
+              (aus {result.countedPages} von {result.pageCount} Seiten)
+            </span>
+          )}
+        </div>
+        <ol className="result-list">
+          {result.rows.map((row) => {
+            const page = arbeit.pages[row.position - 1];
+            const entry = state.entries[row.id];
+            if (page === undefined || entry === undefined) return null;
+            return (
+              <ResultCard
+                key={row.id}
+                page={page}
+                row={row}
+                entry={entry}
+                canRetry={canRetry}
+                arbeitName={result.name}
+                onEdit={(text) => runner.edit(row.id, text)}
+                onRetry={() => runner.retry(row.id)}
+              />
+            );
+          })}
+        </ol>
+      </section>
+    </li>
+  );
+}
 
-  const rows = buildRows(pages, state.entries);
-  if (rows.length === 0) return null;
+export function ResultsView({ arbeiten, count, canRetry }: ResultsViewProps) {
+  const { state } = count;
+  const [exportMessage, setExportMessage] = useState('');
+  const messageTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(messageTimer.current), []);
+  const results = buildResults(arbeiten, state.entries);
+  if (results.every((result) => result.rows.length === 0)) return null;
+  const totals = classTotals(results);
+  const note = incompleteNote(results);
 
-  const counted = countedPages(rows);
-  const total = totalWords(rows);
+  const announce = (text: string) => {
+    setExportMessage(text);
+    window.clearTimeout(messageTimer.current);
+    messageTimer.current = window.setTimeout(() => setExportMessage(''), 6000);
+  };
 
   const copy = () => {
-    navigator.clipboard.writeText(formatSummary(rows, pages.length)).then(
-      () => setCopyMessage('Ergebnis kopiert.'),
-      () => setCopyMessage('Kopieren war nicht möglich.'),
+    navigator.clipboard.writeText(formatClipboardTable(results)).then(
+      () => announce('In die Zwischenablage kopiert.'),
+      () => announce('Kopieren war nicht möglich.'),
     );
-    window.clearTimeout(copyTimer.current);
-    copyTimer.current = window.setTimeout(() => setCopyMessage(''), 4000);
+  };
+
+  const save = () => {
+    void saveCsv(formatCsv(results), CSV_FILE_NAME).then((outcome) => {
+      if (outcome.state === 'saved') announce(`Gespeichert als „${outcome.fileName}“.`);
+      else if (outcome.state === 'exists') {
+        announce(
+          `Die Datei „${outcome.fileName}“ gibt es bereits und wurde nicht überschrieben. Bitte den Dateinamen mit „.csv“ eingeben oder einen anderen Namen wählen.`,
+        );
+      } else if (outcome.state === 'failed') announce('Speichern war nicht möglich.');
+    });
   };
 
   return (
@@ -175,38 +246,55 @@ export function ResultsView({ pages, count, canRetry }: ResultsViewProps) {
       <div className="results-header">
         <h2 id="results-title">Wortzahl</h2>
         <p className="total" data-testid="total-words">
-          <strong>{formatCount(total)}</strong> {total === 1 ? 'Wort' : 'Wörter'} gesamt
-          {counted < pages.length && (
+          <strong>{formatCount(totals.words)}</strong> {totals.words === 1 ? 'Wort' : 'Wörter'}{' '}
+          gesamt
+          {totals.countedPages < totals.pages && (
             <span className="hint">
               {' '}
-              (aus {counted} von {pages.length} Seiten)
+              (aus {totals.countedPages} von {totals.pages} Seiten)
             </span>
           )}
         </p>
-        <button type="button" disabled={counted === 0} onClick={copy}>
-          Ergebnis kopieren
-        </button>
-        <span role="status">{copyMessage}</span>
+        <p className="average" data-testid="average-words">
+          {arbeitenText(totals.arbeiten)}
+          {totals.average !== null && (
+            <>
+              {' · '}Durchschnitt <strong>{formatAverage(totals.average)}</strong> Wörter pro Arbeit
+              {totals.completeArbeiten < totals.arbeiten && (
+                <span className="hint">
+                  {' '}
+                  (aus {totals.completeArbeiten} von {totals.arbeiten} Arbeiten)
+                </span>
+              )}
+            </>
+          )}
+        </p>
+        <div className="export-actions">
+          <button type="button" disabled={totals.countedPages === 0} onClick={save}>
+            Als CSV speichern
+          </button>
+          <button type="button" disabled={totals.countedPages === 0} onClick={copy}>
+            In die Zwischenablage kopieren
+          </button>
+          <span role="status">{exportMessage}</span>
+        </div>
+        {note !== null && <p className="hint">{note}</p>}
       </div>
-
-      <ol className="result-list">
-        {rows.map((row) => {
-          const page = pages[row.position - 1];
-          const entry = state.entries[row.id];
-          if (page === undefined || entry === undefined) return null;
+      <ul className="arbeit-results">
+        {arbeiten.map((arbeit) => {
+          const result = results.find((candidate) => candidate.id === arbeit.id);
+          if (result === undefined || result.rows.length === 0) return null;
           return (
-            <ResultCard
-              key={row.id}
-              page={page}
-              row={row}
-              entry={entry}
+            <ArbeitSection
+              key={arbeit.id}
+              arbeit={arbeit}
+              result={result}
+              count={count}
               canRetry={canRetry}
-              onEdit={(text) => runner.edit(row.id, text)}
-              onRetry={() => runner.retry(row.id)}
             />
           );
         })}
-      </ol>
+      </ul>
     </section>
   );
 }

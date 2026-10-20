@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ImportPage } from '../import/pages.ts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { findPage, flattenPages, type Arbeit } from '../import/arbeiten.ts';
 import { formatMegabytes } from '../models/format.ts';
 import type { ModelStatus } from '../models/types.ts';
 import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages } from '../pipeline/runner.ts';
 import type { ModelProblem, TranscriberStatus } from '../pipeline/transcriber.ts';
 import { useEnginePhase } from '../pipeline/use-engine-phase.ts';
-import { buildRows, countedPages, pagesText, totalWords, wordsText } from './summary.ts';
+import { buildResults, classTotals, pagesText, wordsText } from './summary.ts';
 import type { WordCount } from './use-word-count.ts';
 
 interface CountProps {
   readonly count: WordCount;
   readonly status: TranscriberStatus | null;
-  readonly pages: readonly ImportPage[];
+  readonly arbeiten: readonly Arbeit[];
 }
 
 interface ControlProps extends CountProps {
@@ -33,17 +33,21 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function finishedText(pages: readonly ImportPage[], count: WordCount): string {
-  const rows = buildRows(pages, count.state.entries);
-  const failed = rows.filter((row) => row.status === 'error').length;
+function finishedText(arbeiten: readonly Arbeit[], count: WordCount): string {
+  const results = buildResults(arbeiten, count.state.entries);
+  const totals = classTotals(results);
+  const failed = results
+    .flatMap((result) => result.rows)
+    .filter((row) => row.status === 'error').length;
   const parts = [
-    `Fertig: ${wordsText(totalWords(rows))} auf ${pagesText(countedPages(rows))}.`,
+    `Fertig: ${wordsText(totals.words)} auf ${pagesText(totals.countedPages)}.`,
     failed > 0 ? `${pagesText(failed)} nicht erkannt.` : '',
   ];
   return parts.filter(Boolean).join(' ');
 }
 
-export function CountControls({ count, status, pages, onSetup }: ControlProps) {
+export function CountControls({ count, status, arbeiten, onSetup }: ControlProps) {
+  const pages = useMemo(() => flattenPages(arbeiten), [arbeiten]);
   const { runner, state } = count;
   const running = state.batch !== null;
   const now = useNow(running);
@@ -55,11 +59,11 @@ export function CountControls({ count, status, pages, onSetup }: ControlProps) {
 
   useEffect(() => {
     if (wasRunning.current && !running) {
-      setAnnouncement(cancelled.current ? 'Abgebrochen.' : finishedText(pages, count));
+      setAnnouncement(cancelled.current ? 'Abgebrochen.' : finishedText(arbeiten, count));
       cancelled.current = false;
     }
     wasRunning.current = running;
-  }, [running, pages, count]);
+  }, [running, arbeiten, count]);
 
   const nothingToDo =
     pages.length > 0 &&
@@ -138,7 +142,8 @@ function modelProblemText(problem: ModelProblem, download: ModelStatus | null): 
   }
 }
 
-export function CountHint({ count, status, pages, download }: HintProps) {
+export function CountHint({ count, status, arbeiten, download }: HintProps) {
+  const pages = useMemo(() => flattenPages(arbeiten), [arbeiten]);
   const messages: { text: string; demo?: boolean }[] = [];
   if (status === null) {
     messages.push({ text: 'Texterkennung wird geprüft …' });
@@ -155,7 +160,10 @@ export function CountHint({ count, status, pages, download }: HintProps) {
     }
     const { queue, skippedEdited } = startablePages(pages, count.state);
     if (queue.length === 0 && Object.keys(count.state.entries).length > 0 && pages.length > 0) {
-      const skipped = skippedEdited.map((page) => `Seite ${pages.indexOf(page) + 1}`);
+      const skipped = skippedEdited.flatMap((page) => {
+        const found = findPage(arbeiten, page.id);
+        return found === undefined ? [] : [`Seite ${found.index + 1} von ${found.arbeit.name}`];
+      });
       messages.push({
         text:
           skipped.length === 0

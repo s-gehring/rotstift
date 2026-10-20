@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest';
+import { classifyWordChange } from './classify.ts';
+
+describe('classifyWordChange', () => {
+  it.each([
+    ['dank', 'Dank', 'de', 'spelling'],
+    ['Schockolade', 'Schokolade', 'de', 'spelling'],
+    ['das', 'dass', 'de', 'spelling'],
+    ['geregent', 'geregnet', 'de', 'spelling'],
+    ['dem', 'des', 'de', 'grammar'],
+    ['möchte', 'möchten', 'de', 'grammar'],
+    ['ist', 'sei', 'de', 'grammar'],
+    ['voll', 'sehr', 'de', 'wording'],
+    ['like', 'likes', 'en', 'grammar'],
+    ['recieved', 'received', 'en', 'spelling'],
+    ['big', 'huge', 'en', 'wording'],
+  ] as const)('%s to %s (%s) is %s', (original, correction, language, role) => {
+    expect(classifyWordChange(original, correction, language)).toBe(role);
+  });
+});

@@ -1,5 +1,7 @@
+mod diagnostics;
 mod llm;
 mod models;
+mod save;
 
 use std::sync::Arc;
 
@@ -12,6 +14,7 @@ pub fn run() {
         .manage(llm::LlmRuntime::new())
         .manage(Arc::new(models::ModelManager::new()))
         .setup(|app| {
+            diagnostics::init(app.handle());
             llm::commands::stop_orphaned_sidecars(app.handle());
             Ok(())
         })
@@ -21,6 +24,10 @@ pub fn run() {
             llm::commands::llm_status,
             llm::commands::llm_chat,
             llm::commands::llm_cancel,
+            diagnostics::commands::diag_log,
+            diagnostics::commands::diag_heartbeat,
+            diagnostics::commands::diag_read,
+            diagnostics::commands::diag_clear,
             models::commands::model_status,
             models::commands::model_selection,
             models::commands::model_select,
@@ -30,6 +37,7 @@ pub fn run() {
             models::commands::model_delete,
             models::commands::model_import,
             models::commands::model_verify,
+            save::save_csv,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
