@@ -94,7 +94,7 @@ async function main() {
     .toSorted();
 
   const server = await launchServer({
-    model: localFile(model.files.model.url),
+    model: localFile(model.files.model),
     contextSize: model.server.contextSize,
     threads,
     extraArgs: [...(model.server.cpuRepack ? [] : ['--no-repack']), '--reasoning', 'off'],
