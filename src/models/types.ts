@@ -31,6 +31,7 @@ export type DownloadError =
 
 export type DownloadEvent = { modelId: string } & (
   | { state: 'progress'; downloadedBytes: number; totalBytes: number }
+  | { state: 'verifying'; downloadedBytes: number; totalBytes: number }
   | { state: 'done' }
   | { state: 'cancelled' }
   | { state: 'failed'; error: DownloadError }

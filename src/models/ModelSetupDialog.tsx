@@ -6,6 +6,7 @@ import {
   formatSize,
   remainingText,
 } from './format.ts';
+import { CheckProgress, checkText } from './ModelCheck.tsx';
 import { ModelChoice } from './ModelChoice.tsx';
 import {
   isLowOnMemory,
@@ -201,9 +202,10 @@ export function ModelSetupDialog({ setup, open, onClose, switchDisabled }: Props
           )}
           {downloading && <Progress setup={setup} />}
           {verifying && (
-            <p role="status">
-              Die vorhandenen Modelldateien werden geprüft. Das dauert einen Moment.
-            </p>
+            <div className="download-progress">
+              <CheckProgress status={status} label="Prüfung der Modelldateien" />
+              <p role="status">{checkText('die vorhandenen Modelldateien', status)}</p>
+            </div>
           )}
           {busyElsewhere && (
             <p role="status">

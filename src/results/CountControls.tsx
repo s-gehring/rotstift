@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { findPage, flattenPages, type Arbeit } from '../import/arbeiten.ts';
-import { formatMegabytes } from '../models/format.ts';
-import type { ModelStatus } from '../models/types.ts';
+import { describeDownloadError, formatMegabytes } from '../models/format.ts';
+import { CheckProgress, checkText } from '../models/ModelCheck.tsx';
+import type { DownloadError, ModelStatus } from '../models/types.ts';
 import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages } from '../pipeline/runner.ts';
 import type { ModelProblem, TranscriberStatus } from '../pipeline/transcriber.ts';
@@ -23,6 +24,8 @@ interface ControlProps extends CountProps {
 
 interface HintProps extends CountProps {
   readonly download?: ModelStatus | null;
+  readonly loadError?: DownloadError | null;
+  readonly onRetry?: () => void;
 }
 
 function useNow(active: boolean): number {
@@ -142,7 +145,7 @@ function modelProblemText(problem: ModelProblem, download: ModelStatus | null): 
     case 'deleting':
       return 'Die Texterkennung wird gerade gelöscht.';
     case 'verifying':
-      return 'Die Texterkennung wird geprüft. Das dauert einen Moment.';
+      return checkText('die Dateien der Texterkennung', download);
     case 'corrupt':
       return 'Die Texterkennung ist beschädigt und muss neu eingerichtet werden.';
     default: {
@@ -152,13 +155,21 @@ function modelProblemText(problem: ModelProblem, download: ModelStatus | null): 
   }
 }
 
-export function CountHint({ count, status, arbeiten, download }: HintProps) {
+export function CountHint({ count, status, arbeiten, download, loadError, onRetry }: HintProps) {
   const pages = useMemo(() => flattenPages(arbeiten), [arbeiten]);
-  const messages: { text: string; demo?: boolean }[] = [];
-  if (status === null) {
-    messages.push({ text: 'Texterkennung wird geprüft …' });
+  const messages: { text: string; demo?: boolean; retry?: boolean; check?: boolean }[] = [];
+  if (status === null && loadError != null) {
+    messages.push({
+      text: `Rotstift konnte die Texterkennung nicht laden. ${describeDownloadError(loadError)}`,
+      retry: true,
+    });
+  } else if (status === null) {
+    messages.push({ text: 'Texterkennung wird geladen …' });
   } else if (status.state === 'needs-model') {
-    messages.push({ text: modelProblemText(status.problem, download ?? null) });
+    messages.push({
+      text: modelProblemText(status.problem, download ?? null),
+      check: status.problem === 'verifying',
+    });
   } else if (status.state === 'unavailable') {
     messages.push({ text: `Wörter zählen ist gerade nicht möglich. ${status.message}` });
   } else {
@@ -188,6 +199,17 @@ export function CountHint({ count, status, arbeiten, download }: HintProps) {
       {messages.map((message) => (
         <p key={message.text} className={message.demo ? 'notice demo' : 'notice'}>
           {message.text}
+          {message.retry && onRetry !== undefined && (
+            <>
+              {' '}
+              <button type="button" onClick={onRetry}>
+                Erneut versuchen
+              </button>
+            </>
+          )}
+          {message.check && (
+            <CheckProgress status={download ?? null} label="Prüfung der Texterkennung" />
+          )}
         </p>
       ))}
     </div>

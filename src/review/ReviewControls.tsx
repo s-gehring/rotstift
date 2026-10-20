@@ -1,6 +1,9 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import { ProfilePicker } from '../correction/ProfilePicker.tsx';
 import type { CorrectorStatus } from '../correction/provider.ts';
+import { describeDownloadError } from '../models/format.ts';
+import { CheckProgress, checkText } from '../models/ModelCheck.tsx';
+import type { DownloadError, ModelStatus } from '../models/types.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { ReviewState } from './review-flow.ts';
 
@@ -87,19 +90,43 @@ interface HintProps {
   readonly corrector: CorrectorStatus | null;
   readonly onSetup?: () => void;
   readonly onCheckTexts?: () => void;
+  readonly check?: ModelStatus | null;
+  readonly loadError?: DownloadError | null;
+  readonly onRetry?: () => void;
 }
 
-export function ReviewHint({ corrector, onSetup, onCheckTexts }: HintProps) {
+export function ReviewHint({
+  corrector,
+  onSetup,
+  onCheckTexts,
+  check = null,
+  loadError,
+  onRetry,
+}: HintProps) {
+  const checking = corrector?.state === 'needs-model' && check?.state === 'verifying';
+  const failed = corrector === null && loadError != null;
   let text: string;
-  if (corrector === null) text = 'Korrekturmodell wird geprüft …';
+  if (failed)
+    text = `Rotstift konnte das Korrekturmodell nicht laden. ${describeDownloadError(loadError)}`;
+  else if (corrector === null) text = 'Korrekturmodell wird geladen …';
   else if (corrector.state === 'ready') text = corrector.preview ? PREVIEW_NOTICE : '';
+  else if (checking) text = checkText('die Dateien des Korrekturmodells', check);
   else text = corrector.message;
   return (
     <div id="review-hint">
       {text !== '' && (
         <p className={corrector?.state === 'ready' ? 'notice demo' : 'notice'}>
           {text}
-          {corrector?.state === 'needs-model' && onSetup !== undefined && (
+          {failed && onRetry !== undefined && (
+            <>
+              {' '}
+              <button type="button" onClick={onRetry}>
+                Erneut versuchen
+              </button>
+            </>
+          )}
+          {checking && <CheckProgress status={check} label="Prüfung des Korrekturmodells" />}
+          {corrector?.state === 'needs-model' && !checking && onSetup !== undefined && (
             <>
               {' '}
               <button type="button" onClick={onSetup}>

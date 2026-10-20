@@ -35,6 +35,7 @@ function fakeSetup(
     model,
     status: { modelId: model.id, state, downloadedBytes: downloaded, totalBytes: total },
     error,
+    loadError: null,
     samples: [],
     select: vi.fn<(modelId: string) => Promise<void>>(() => Promise.resolve()),
     download: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -179,7 +180,7 @@ describe('ModelSetupDialog', () => {
 
   it('shows a check in progress instead of the download buttons', () => {
     renderDialog(fakeSetup('verifying', 1_552_000_000));
-    expect(container.textContent).toContain('werden geprüft');
+    expect(container.textContent).toContain('vollständig und unbeschädigt');
     expect(button('Herunterladen')).toBeUndefined();
     expect(button('Download fortsetzen')).toBeUndefined();
     expect(button('Modell aus Datei importieren')).toBeUndefined();

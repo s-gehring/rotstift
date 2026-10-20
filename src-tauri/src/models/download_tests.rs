@@ -179,6 +179,10 @@ fn plenty() -> FreeSpace {
     Arc::new(|_| None)
 }
 
+fn silent() -> super::manager::Emitter {
+    Arc::new(|_| {})
+}
+
 fn downloader() -> Downloader {
     Downloader::with_policy(local_only, plenty()).unwrap()
 }
@@ -765,7 +769,7 @@ async fn installed_files_without_a_marker_are_unverified_until_they_are_hashed()
     let manager = Arc::new(ModelManager::with_downloader(downloader()));
     assert_eq!(manager.status(&dir, entry).await.state, State::Unverified);
 
-    let status = manager.verify(&dir, entry).await.unwrap();
+    let status = manager.verify(&dir, entry, silent()).await.unwrap();
     assert_eq!(status.state, State::Ready);
     assert!(has_valid_marker(&dir, &entry.files.model));
 
@@ -773,6 +777,41 @@ async fn installed_files_without_a_marker_are_unverified_until_they_are_hashed()
     std::fs::remove_file(marker_path(&dir, entry.files.mmproj.as_ref().unwrap())).unwrap();
     assert!(is_ready(&dir, entry).await);
     assert_eq!(manager.status(&dir, entry).await.state, State::Ready);
+}
+
+#[tokio::test]
+async fn verification_reports_the_checked_bytes_up_to_the_total() {
+    let (model, projector) = (content(46, 5000), content(47, 3000));
+    let server = TestServer::start(&[], Behavior::default()).await;
+    let entry = leaked_entry(
+        file(&server, "m.gguf", &model),
+        file(&server, "p.gguf", &projector),
+    );
+    let dir = temp_dir("verify-progress");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("m.gguf"), &model).unwrap();
+    std::fs::write(dir.join("p.gguf"), &projector).unwrap();
+    write_marker(&dir, entry.files.mmproj.as_ref().unwrap()).unwrap();
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let emit: super::manager::Emitter = Arc::new(move |event: DownloadEvent| {
+        let _ = sender.send(event);
+    });
+
+    let status = manager.verify(&dir, entry, emit).await.unwrap();
+    assert_eq!(status.state, State::Ready);
+    let mut checked = Vec::new();
+    while let Ok(event) = events.try_recv() {
+        match event.update {
+            Update::Verifying(progress) => {
+                assert_eq!(progress.total_bytes, 8000);
+                checked.push(progress.downloaded_bytes);
+            }
+            other => panic!("unexpected update {other:?}"),
+        }
+    }
+    assert!(checked.windows(2).all(|pair| pair[0] < pair[1]));
+    assert_eq!(checked.last(), Some(&8000));
 }
 
 #[tokio::test]
@@ -790,7 +829,7 @@ async fn verification_removes_files_whose_content_does_not_match() {
     assert!(!is_ready(&dir, entry).await);
 
     let manager = Arc::new(ModelManager::with_downloader(downloader()));
-    let status = manager.verify(&dir, entry).await.unwrap();
+    let status = manager.verify(&dir, entry, silent()).await.unwrap();
     assert_eq!(status.state, State::Missing);
     assert!(dir.join("m.gguf").exists());
     assert!(!dir.join("p.gguf").exists());
@@ -833,7 +872,10 @@ async fn import_and_verification_are_jobs_that_block_download_and_delete() {
     );
     assert_eq!(stops.load(Ordering::Relaxed), 0);
     assert!(!manager.startable(&dir, entry).await);
-    assert_eq!(manager.verify(&dir, entry).await, Err(DownloadError::Busy));
+    assert_eq!(
+        manager.verify(&dir, entry, silent()).await,
+        Err(DownloadError::Busy)
+    );
     assert!(manager.cancel("test-model"));
     assert_eq!(next_final(&mut events).await, Update::Cancelled);
 
@@ -870,6 +912,17 @@ fn events_and_errors_serialize_in_the_shape_the_frontend_reads() {
     assert_eq!(
         serde_json::to_value(progress).unwrap(),
         serde_json::json!({ "modelId": "m", "state": "progress", "downloadedBytes": 5, "totalBytes": 10 })
+    );
+    let checking = DownloadEvent {
+        model_id: "m".into(),
+        update: Update::Verifying(Progress {
+            downloaded_bytes: 3,
+            total_bytes: 10,
+        }),
+    };
+    assert_eq!(
+        serde_json::to_value(checking).unwrap(),
+        serde_json::json!({ "modelId": "m", "state": "verifying", "downloadedBytes": 3, "totalBytes": 10 })
     );
     let failed = DownloadEvent {
         model_id: "m".into(),

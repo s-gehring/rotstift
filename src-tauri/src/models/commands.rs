@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
 use super::download::DownloadError;
@@ -11,7 +11,6 @@ use super::manager::{self, DownloadEvent, ModelManager, ModelStatus};
 use super::selection;
 use super::system;
 use crate::llm::LlmRuntime;
-use crate::llm::commands::runtime_paths;
 
 pub const DOWNLOAD_EVENT: &str = "model-download";
 
@@ -23,9 +22,17 @@ pub struct HardwareInfo {
 }
 
 fn models_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, DownloadError> {
-    runtime_paths(app)
-        .map(|paths| paths.models_dir)
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("models"))
         .map_err(|error| DownloadError::Io(format!("{error:?}")))
+}
+
+fn download_emitter<R: Runtime>(app: &AppHandle<R>) -> manager::Emitter {
+    let emitter = app.clone();
+    Arc::new(move |event: DownloadEvent| {
+        let _ = emitter.emit(DOWNLOAD_EVENT, event);
+    })
 }
 
 #[tauri::command]
@@ -56,11 +63,7 @@ pub async fn model_download_start<R: Runtime>(
 ) -> Result<(), DownloadError> {
     let entry = manager::entry(&model_id)?;
     let dir = models_dir(&app)?;
-    let emitter = app.clone();
-    let emit: manager::Emitter = Arc::new(move |event: DownloadEvent| {
-        let _ = emitter.emit(DOWNLOAD_EVENT, event);
-    });
-    models.start(&dir, entry, emit).await
+    models.start(&dir, entry, download_emitter(&app)).await
 }
 
 #[tauri::command]
@@ -138,7 +141,9 @@ pub async fn model_verify<R: Runtime>(
     model_id: String,
 ) -> Result<ModelStatus, DownloadError> {
     let entry = manager::entry(&model_id)?;
-    models.verify(&models_dir(&app)?, entry).await
+    models
+        .verify(&models_dir(&app)?, entry, download_emitter(&app))
+        .await
 }
 
 #[tauri::command]

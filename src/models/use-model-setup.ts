@@ -65,7 +65,9 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
       dispatch({
         type: 'loaded',
         statuses: statuses.map((status) =>
-          status.state === 'unverified' ? { ...status, state: 'verifying' } : status,
+          status.state === 'unverified'
+            ? { ...status, state: 'verifying', downloadedBytes: 0 }
+            : status,
         ),
         hardware,
         selectedId,
@@ -85,7 +87,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     client
       .onDownload((event) => {
         dispatch({ type: 'event', event, at: performance.now() });
-        if (event.state !== 'progress') void refresh();
+        if (event.state !== 'progress' && event.state !== 'verifying') void refresh();
       })
       .then(
         (stop) => {
@@ -183,6 +185,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     model,
     status,
     error: errorOf(state, model.id),
+    loadError: state.loaded ? null : (state.errors[ANY_MODEL] ?? null),
     samples: samplesOf(state, model.id),
     select,
     download,

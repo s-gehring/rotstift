@@ -415,6 +415,42 @@ describe('ReviewControls', () => {
     expect(container.querySelector('#review-hint')?.textContent).toBe('Korrekturmodell fehlt.');
   });
 
+  it('explains the check of the correction model instead of offering the setup', () => {
+    act(() =>
+      root.render(
+        <ReviewHint
+          corrector={{ state: 'needs-model', message: 'Korrekturmodell fehlt.' }}
+          check={{
+            modelId: 'gemma-4-e2b-q4',
+            state: 'verifying',
+            downloadedBytes: 700_000_000,
+            totalBytes: 2_800_000_000,
+          }}
+          onSetup={() => undefined}
+        />,
+      ),
+    );
+    const hint = container.querySelector('#review-hint');
+    expect(hint?.textContent).toBe(
+      'Rotstift prüft einmalig, ob die Dateien des Korrekturmodells vollständig und unbeschädigt sind. 700 MB von 2.800 MB geprüft.',
+    );
+    expect(hint?.querySelector('progress')?.getAttribute('value')).toBe('700000000');
+  });
+
+  it('says when the correction model could not be looked up and retries on request', () => {
+    const onRetry = vi.fn<() => void>();
+    act(() =>
+      root.render(
+        <ReviewHint corrector={null} loadError={{ kind: 'io', detail: 'x' }} onRetry={onRetry} />,
+      ),
+    );
+    expect(container.querySelector('#review-hint')?.textContent).toContain(
+      'Rotstift konnte das Korrekturmodell nicht laden.',
+    );
+    act(() => buttonNamed('Erneut versuchen').click());
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
   it('marks Berichtigen as a preview and warns about reading errors before the start', () => {
     const onCheckTexts = vi.fn<() => void>();
     act(() =>

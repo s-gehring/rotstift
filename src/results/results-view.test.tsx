@@ -143,10 +143,59 @@ describe('without a transcriber', () => {
     expect(container.querySelector('.results')).toBeNull();
   });
 
-  it('shows a hint while the availability is being checked', () => {
+  it('shows a hint while the availability is being loaded', () => {
     mount(null);
     expect(button('Wörter zählen')?.disabled).toBe(true);
-    expect(container.querySelector('#count-hint')?.textContent).toContain('wird geprüft');
+    expect(container.querySelector('#count-hint')?.textContent).toBe(
+      'Texterkennung wird geladen …',
+    );
+  });
+
+  it('explains the check of the model files and shows how far it got', () => {
+    const runner = createRunner({ render: () => Promise.resolve(new Blob()) });
+    act(() =>
+      root.render(
+        <CountHint
+          count={{ runner, state: runner.getState() }}
+          status={{ state: 'needs-model', problem: 'verifying' }}
+          arbeiten={initialArbeiten}
+          download={{
+            modelId: 'glm-ocr-q8',
+            state: 'verifying',
+            downloadedBytes: 400_000_000,
+            totalBytes: 1_400_000_000,
+          }}
+        />,
+      ),
+    );
+    const hint = container.querySelector('#count-hint');
+    expect(hint?.textContent).toBe(
+      'Rotstift prüft einmalig, ob die Dateien der Texterkennung vollständig und unbeschädigt sind. 400 MB von 1.400 MB geprüft.',
+    );
+    const bar = hint?.querySelector('progress');
+    expect(bar?.getAttribute('value')).toBe('400000000');
+    expect(bar?.getAttribute('max')).toBe('1400000000');
+  });
+
+  it('says when the model could not be looked up and retries on request', () => {
+    const runner = createRunner({ render: () => Promise.resolve(new Blob()) });
+    const onRetry = vi.fn<() => void>();
+    act(() =>
+      root.render(
+        <CountHint
+          count={{ runner, state: runner.getState() }}
+          status={null}
+          arbeiten={initialArbeiten}
+          loadError={{ kind: 'io', detail: 'unknown path' }}
+          onRetry={onRetry}
+        />,
+      ),
+    );
+    expect(container.querySelector('#count-hint')?.textContent).toContain(
+      'Rotstift konnte die Texterkennung nicht laden.',
+    );
+    act(() => button('Erneut versuchen')?.click());
+    expect(onRetry).toHaveBeenCalledOnce();
   });
 });
 

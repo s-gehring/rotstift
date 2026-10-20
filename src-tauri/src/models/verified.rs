@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 
-use super::download::{DownloadError, hex_digest, seed_hasher};
+use super::download::{DownloadError, hash_file, hex_digest};
 use super::registry::ModelFile;
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +65,15 @@ pub async fn verify_installed(
     file: &ModelFile,
     cancel: &mut watch::Receiver<bool>,
 ) -> Result<bool, DownloadError> {
+    verify_with_progress(dir, file, cancel, &mut |_| {}).await
+}
+
+pub async fn verify_with_progress(
+    dir: &Path,
+    file: &ModelFile,
+    cancel: &mut watch::Receiver<bool>,
+    on_read: &mut (dyn FnMut(u64) + Send),
+) -> Result<bool, DownloadError> {
     let target = dir.join(&file.name);
     if tokio::fs::metadata(&target)
         .await
@@ -75,7 +84,7 @@ pub async fn verify_installed(
         return Ok(false);
     }
     let mut hasher = Sha256::new();
-    seed_hasher(&target, &mut hasher, cancel).await?;
+    hash_file(&target, &mut hasher, cancel, on_read).await?;
     if hex_digest(hasher) != file.sha256 {
         return Ok(false);
     }
