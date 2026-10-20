@@ -110,7 +110,11 @@ impl Liveness {
                 visible: self.visible,
             });
         }
-        if gap >= self.thresholds.cancel_gap && !self.cancelled && !self.in_flight.is_empty() {
+        if gap >= self.thresholds.cancel_gap
+            && !self.cancelled
+            && self.visible
+            && !self.in_flight.is_empty()
+        {
             self.cancelled = true;
             verdicts.push(Verdict::CancelInFlight {
                 gap,
@@ -214,6 +218,21 @@ mod tests {
             }]
         );
         assert!(live.check(at(base, 400)).is_empty());
+    }
+
+    #[test]
+    fn never_cancels_while_the_window_is_hidden() {
+        let base = Instant::now();
+        let mut live = Liveness::new(Thresholds::default());
+        live.heartbeat(base, true, false);
+        live.chat_began(at(base, 2), "req-1");
+        let verdicts = live.check(at(base, 2000));
+        assert!(matches!(
+            verdicts.as_slice(),
+            [Verdict::GapDetected { visible: false, .. }]
+        ));
+        live.heartbeat(at(base, 2001), true, true);
+        assert!(live.check(at(base, 2002)).is_empty());
     }
 
     #[test]

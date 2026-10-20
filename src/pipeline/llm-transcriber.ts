@@ -120,6 +120,7 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
   const listeners = new Set<() => void>();
   let phase: EnginePhase = 'idle';
   let starting: Promise<void> | null = null;
+  let generation = 0;
 
   const setPhase = (next: EnginePhase) => {
     if (phase === next) return;
@@ -127,18 +128,26 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
     for (const listener of listeners) listener();
   };
 
-  const start = async () => {
+  const start = async (own: number) => {
     setPhase('starting');
     try {
       const status = await client.startModel(model.id);
+      if (own !== generation) throw new LlmCallError({ kind: 'cancelled' });
       if (status.state !== 'ready') {
         throw new LlmCallError(status.state === 'failed' ? status.error : { kind: 'notReady' });
       }
       setPhase('ready');
     } catch (error) {
-      setPhase('failed');
+      if (own === generation) setPhase('failed');
       throw error;
     }
+  };
+
+  const launch = (): Promise<void> => {
+    const pending: Promise<void> = start(generation).finally(() => {
+      if (starting === pending) starting = null;
+    });
+    return pending;
   };
 
   const ensureRunning = async (): Promise<number> => {
@@ -149,9 +158,7 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
         setPhase('ready');
         return 0;
       }
-      starting ??= start().finally(() => {
-        starting = null;
-      });
+      starting ??= launch();
     }
     await starting;
     return now() - began;
@@ -167,6 +174,7 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
     },
 
     async recover() {
+      generation += 1;
       starting = null;
       setPhase('idle');
       try {

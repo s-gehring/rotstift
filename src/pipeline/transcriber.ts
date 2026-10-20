@@ -1,7 +1,12 @@
 export type TranscribeError =
   | { readonly kind: 'unavailable'; readonly message: string }
   | { readonly kind: 'cancelled' }
-  | { readonly kind: 'failed'; readonly message: string; readonly crashed?: boolean };
+  | {
+      readonly kind: 'failed';
+      readonly message: string;
+      readonly crashed?: boolean;
+      readonly stalled?: boolean;
+    };
 
 export type TranscribeResult =
   | { readonly ok: true; readonly lines: readonly string[]; readonly startupMs?: number }

@@ -20,7 +20,7 @@ function page(id: string): ImportPage {
   };
 }
 
-type Behavior = 'ok' | 'hang' | 'hang-at-start' | 'lost' | { readonly duration: number };
+type Behavior = 'ok' | 'hang' | 'hang-at-start' | 'lost' | 'crash' | { readonly duration: number };
 
 function setup(script: Behavior[]) {
   const calls: string[] = [];
@@ -42,6 +42,12 @@ function setup(script: Behavior[]) {
       phase('encoding');
       phase('request');
       if (behavior === 'hang') return new Promise<TranscribeResult>(() => undefined);
+      if (behavior === 'crash') {
+        return Promise.resolve<TranscribeResult>({
+          ok: false,
+          error: { kind: 'failed', message: 'x', crashed: true },
+        });
+      }
       if (behavior === 'lost') {
         return Promise.resolve<TranscribeResult>({ ok: false, error: { kind: 'cancelled' } });
       }
@@ -91,7 +97,7 @@ describe('runner watchdog', () => {
     const t = setup(['hang', 'ok']);
     t.runner.setPages([page('a')]);
     t.runner.start();
-    await vi.advanceTimersByTimeAsync(WATCHDOG.initialLimitMs - 1);
+    await vi.advanceTimersByTimeAsync(WATCHDOG.ceilingMs - 1);
     expect(status(t.runner, 'a')?.status).toBe('running');
     expect(t.calls).toEqual(['hang']);
 
@@ -113,7 +119,7 @@ describe('runner watchdog', () => {
     const t = setup(['hang', 'hang', 'ok']);
     t.runner.setPages([page('a'), page('b')]);
     t.runner.start();
-    await vi.advanceTimersByTimeAsync(WATCHDOG.initialLimitMs * 2 + 10);
+    await vi.advanceTimersByTimeAsync(WATCHDOG.ceilingMs * 2 + 10);
 
     const failed = status(t.runner, 'a');
     expect(failed?.status).toBe('error');
@@ -137,34 +143,106 @@ describe('runner watchdog', () => {
 
   it('derives the limit from the median of finished pages', async () => {
     const t = setup([
-      { duration: 60_000 },
-      { duration: 60_000 },
-      { duration: 60_000 },
+      { duration: 100_000 },
+      { duration: 100_000 },
+      { duration: 100_000 },
       'hang',
       'ok',
     ]);
     t.runner.setPages([page('a'), page('b'), page('c'), page('d')]);
     t.runner.start();
-    await vi.advanceTimersByTimeAsync(180_000 + 10);
+    await vi.advanceTimersByTimeAsync(300_000 + 10);
     expect(t.calls).toHaveLength(4);
     expect(t.runner.getState().durationsMs).toHaveLength(3);
 
-    await vi.advanceTimersByTimeAsync(240_000 - 100);
+    await vi.advanceTimersByTimeAsync(400_000 - 100);
     expect(t.calls).toHaveLength(4);
     await vi.advanceTimersByTimeAsync(200);
     expect(t.calls).toHaveLength(5);
     expect(status(t.runner, 'd')?.status).toBe('done');
   });
 
+  it('never goes below the floor for quick pages', async () => {
+    const t = setup([{ duration: 5000 }, { duration: 5000 }, { duration: 5000 }, 'hang', 'ok']);
+    t.runner.setPages([page('a'), page('b'), page('c'), page('d')]);
+    t.runner.start();
+    await vi.advanceTimersByTimeAsync(15_000 + WATCHDOG.floorMs - 100);
+    expect(t.calls).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(t.calls).toHaveLength(5);
+  });
+
+  it('does not abort a healthy slow page and raises the limit afterwards', async () => {
+    const slow: Behavior = { duration: 350_000 };
+    const t = setup([slow, slow, slow, { duration: 500_000 }]);
+    t.runner.setPages([page('a'), page('b'), page('c'), page('d')]);
+    t.runner.start();
+    await vi.advanceTimersByTimeAsync(3 * 350_000 + 10);
+    expect(t.calls).toEqual(['timed', 'timed', 'timed', 'timed']);
+    expect(t.events.map((entry) => entry.event)).not.toContain('page_stalled');
+
+    await vi.advanceTimersByTimeAsync(500_000);
+    expect(status(t.runner, 'd')?.status).toBe('done');
+    expect(t.events.map((entry) => entry.event)).not.toContain('page_stalled');
+  });
+
+  it('gives the second attempt the ceiling even when the first stalled early', async () => {
+    const t = setup([
+      { duration: 100_000 },
+      { duration: 100_000 },
+      { duration: 100_000 },
+      'hang',
+      { duration: 590_000 },
+    ]);
+    t.runner.setPages([page('a'), page('b'), page('c'), page('d')]);
+    t.runner.start();
+    await vi.advanceTimersByTimeAsync(300_000 + 400_000 + 590_000 + 100);
+    expect(status(t.runner, 'd')).toMatchObject({ status: 'done' });
+    expect(t.events.filter((entry) => entry.event === 'page_stalled')).toHaveLength(1);
+  });
+
+  it('forgets observed durations when the transcriber is swapped', async () => {
+    const t = setup([{ duration: 1000 }, { duration: 1000 }, { duration: 1000 }]);
+    t.runner.setPages([page('a'), page('b'), page('c')]);
+    t.runner.start();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(t.runner.getState().durationsMs).toHaveLength(3);
+    t.runner.setTranscriber({ transcribe: () => new Promise<TranscribeResult>(() => undefined) });
+    expect(t.runner.getState().durationsMs).toEqual([]);
+  });
+
   it('gives the sidecar startup its own, longer limit', async () => {
     const t = setup(['hang-at-start', 'ok']);
     t.runner.setPages([page('a')]);
     t.runner.start();
-    await vi.advanceTimersByTimeAsync(WATCHDOG.initialLimitMs + 10);
+    await vi.advanceTimersByTimeAsync(WATCHDOG.startupLimitMs - 10);
     expect(t.calls).toEqual(['hang-at-start']);
-    await vi.advanceTimersByTimeAsync(WATCHDOG.startupLimitMs - WATCHDOG.initialLimitMs);
+    await vi.advanceTimersByTimeAsync(20);
     expect(t.calls).toEqual(['hang-at-start', 'ok']);
     expect(t.recovered()).toBe(1);
+  });
+
+  it('names two outside cancellations differently from a hang', async () => {
+    const t = setup(['lost', 'lost']);
+    t.runner.setPages([page('a')]);
+    t.runner.start();
+    await vi.advanceTimersByTimeAsync(10);
+    const message = JSON.stringify(status(t.runner, 'a')?.error);
+    expect(message).toContain('unerwartet abgebrochen');
+    expect(message).not.toContain('hängen geblieben');
+  });
+
+  it('counts hangs and crashes together against the batch limit', async () => {
+    const t = setup(['crash', 'hang', 'hang', 'ok']);
+    t.runner.setPages([page('a'), page('b'), page('c')]);
+    t.runner.start();
+    await vi.advanceTimersByTimeAsync(WATCHDOG.ceilingMs * 2 + 10);
+    expect(status(t.runner, 'a')?.error).toMatchObject({ crashed: true });
+    expect(status(t.runner, 'b')?.error).toMatchObject({ stalled: true });
+    expect(status(t.runner, 'c')?.status).toBe('error');
+    expect(JSON.stringify(status(t.runner, 'c')?.error)).toContain('mehrfach hängen geblieben');
+    expect(t.calls).toHaveLength(3);
+    expect(t.runner.getState().batch).toBeNull();
   });
 
   it('does not retry when the user cancels', async () => {
@@ -176,6 +254,7 @@ describe('runner watchdog', () => {
     await vi.advanceTimersByTimeAsync(WATCHDOG.ceilingMs * 2);
     expect(t.calls).toEqual(['hang']);
     expect(t.events.map((entry) => entry.event)).not.toContain('page_stalled');
+    expect(t.heartbeats.at(-1)).toBe(false);
   });
 
   it('sends heartbeats while a batch runs and one final one after it', async () => {
@@ -191,7 +270,7 @@ describe('runner watchdog', () => {
     const t = setup(['hang', { duration: 3000 }]);
     t.runner.setPages([page('a')]);
     t.runner.start();
-    await vi.advanceTimersByTimeAsync(WATCHDOG.initialLimitMs + 5000);
+    await vi.advanceTimersByTimeAsync(WATCHDOG.ceilingMs + 5000);
     expect(status(t.runner, 'a')?.status).toBe('done');
     const done = t.events.find((entry) => entry.event === 'page_done');
     expect(done?.fields).toMatchObject({ pageId: 'a', attempt: 2, ok: true });

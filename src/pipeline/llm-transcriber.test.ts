@@ -300,4 +300,36 @@ describe('describeLlmError', () => {
     }
     expect(describeLlmError({ kind: 'cancelled' })).toEqual({ kind: 'cancelled' });
   });
+
+  it('starts cleanly after a hung start was recovered and ignores the late answer of the old one', async () => {
+    const stale = deferred<RuntimeStatus>();
+    const fresh = deferred<RuntimeStatus>();
+    const engine = client();
+    engine.startModel.mockImplementationOnce(() => stale.promise);
+    engine.startModel.mockImplementationOnce(() => fresh.promise);
+    const stop = vi.fn<() => Promise<void>>(() => Promise.resolve());
+    const instance = transcriber({ ...engine, stop });
+
+    const hung = new AbortController();
+    const first = instance.transcribe(png, hung.signal);
+    await vi.waitFor(() => expect(engine.startModel).toHaveBeenCalledTimes(1));
+    hung.abort();
+    await first;
+    await instance.recover?.();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(instance.engine.getPhase()).toBe('idle');
+
+    const second = instance.transcribe(png, new AbortController().signal);
+    await vi.waitFor(() => expect(engine.startModel).toHaveBeenCalledTimes(2));
+    expect(instance.engine.getPhase()).toBe('starting');
+
+    stale.resolve({ state: 'failed', error: { kind: 'startupTimeout' } });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(instance.engine.getPhase()).toBe('starting');
+
+    fresh.resolve(ready);
+    expect(await second).toMatchObject({ ok: true });
+    expect(instance.engine.getPhase()).toBe('ready');
+  });
 });

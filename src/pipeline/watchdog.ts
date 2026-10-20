@@ -1,8 +1,7 @@
 import type { PagePhase } from './transcriber.ts';
 
 export const WATCHDOG = {
-  initialLimitMs: 300_000,
-  floorMs: 120_000,
+  floorMs: 300_000,
   ceilingMs: 600_000,
   startupLimitMs: 330_000,
   factor: 4,
@@ -23,13 +22,18 @@ export function median(values: readonly number[]): number {
 }
 
 export function pageLimitMs(durationsMs: readonly number[]): number {
-  if (durationsMs.length < WATCHDOG.minSamples) return WATCHDOG.initialLimitMs;
+  if (durationsMs.length < WATCHDOG.minSamples) return WATCHDOG.ceilingMs;
   const scaled = median(durationsMs) * WATCHDOG.factor;
   return Math.min(WATCHDOG.ceilingMs, Math.max(WATCHDOG.floorMs, scaled));
 }
 
-export function phaseLimitMs(phase: PagePhase, durationsMs: readonly number[]): number {
-  return phase === 'sidecar_start' ? WATCHDOG.startupLimitMs : pageLimitMs(durationsMs);
+export function phaseLimitMs(
+  phase: PagePhase,
+  durationsMs: readonly number[],
+  attemptNo = 1,
+): number {
+  if (phase === 'sidecar_start') return WATCHDOG.startupLimitMs;
+  return attemptNo > 1 ? WATCHDOG.ceilingMs : pageLimitMs(durationsMs);
 }
 
 export type PhaseTimings = Partial<Record<PagePhase, number>>;

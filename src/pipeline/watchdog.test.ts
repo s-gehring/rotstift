@@ -10,19 +10,19 @@ describe('median', () => {
 });
 
 describe('pageLimitMs', () => {
-  it('uses the initial limit until enough pages were observed', () => {
-    expect(pageLimitMs([])).toBe(WATCHDOG.initialLimitMs);
-    expect(pageLimitMs([10_000, 12_000])).toBe(WATCHDOG.initialLimitMs);
+  it('starts at the ceiling until enough pages were observed', () => {
+    expect(pageLimitMs([])).toBe(WATCHDOG.ceilingMs);
+    expect(pageLimitMs([10_000, 12_000])).toBe(WATCHDOG.ceilingMs);
   });
 
   it('is the median times the factor, never below the floor', () => {
     expect(pageLimitMs([5_000, 6_000, 7_000])).toBe(WATCHDOG.floorMs);
-    expect(pageLimitMs([50_000, 60_000, 70_000])).toBe(240_000);
+    expect(pageLimitMs([100_000, 110_000, 120_000])).toBe(440_000);
   });
 
   it('is capped by the ceiling and ignores outliers', () => {
     expect(pageLimitMs([200_000, 210_000, 220_000])).toBe(WATCHDOG.ceilingMs);
-    expect(pageLimitMs([40_000, 42_000, 44_000, 400_000, 1_000])).toBe(168_000);
+    expect(pageLimitMs([80_000, 82_000, 84_000, 900_000, 1_000])).toBe(328_000);
   });
 
   it('stays below the 900 s timeout of the Rust side', () => {
@@ -35,5 +35,10 @@ describe('phaseLimitMs', () => {
     const fast = [5_000, 5_000, 5_000];
     expect(phaseLimitMs('sidecar_start', fast)).toBe(WATCHDOG.startupLimitMs);
     expect(phaseLimitMs('request', fast)).toBe(WATCHDOG.floorMs);
+  });
+
+  it('always allows the ceiling on a second attempt', () => {
+    expect(phaseLimitMs('request', [5_000, 5_000, 5_000], 2)).toBe(WATCHDOG.ceilingMs);
+    expect(phaseLimitMs('sidecar_start', [], 2)).toBe(WATCHDOG.startupLimitMs);
   });
 });

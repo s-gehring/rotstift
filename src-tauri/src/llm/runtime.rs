@@ -119,6 +119,7 @@ struct Exit {
     code: Option<i32>,
     log: SharedLog,
     during_startup: bool,
+    api_key: String,
 }
 
 impl Exit {
@@ -164,6 +165,7 @@ fn take_exited(state: &mut State) -> Option<Exit> {
         code,
         log: Arc::clone(&server.log),
         during_startup,
+        api_key: server.api_key.clone(),
     };
     drop(server);
     let provisional = ExitReport {
@@ -265,7 +267,7 @@ impl LlmRuntime {
             json!({
                 "code": report.code,
                 "duringStartup": exit.during_startup,
-                "stderrTail": diagnostics::stderr_tail(&report.log, &home_dirs()),
+                "stderrTail": diagnostics::stderr_tail(&report.log, &redactions(&exit.api_key)),
             }),
         );
         let error = exit.error(report);
@@ -608,10 +610,11 @@ fn error_kind(error: &LlmError) -> &'static str {
     }
 }
 
-fn home_dirs() -> Vec<String> {
+fn redactions(api_key: &str) -> Vec<String> {
     ["HOME", "USERPROFILE"]
         .into_iter()
         .filter_map(|name| std::env::var(name).ok())
+        .chain([api_key.to_owned()])
         .collect()
 }
 

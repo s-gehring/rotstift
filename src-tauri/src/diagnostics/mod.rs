@@ -16,6 +16,14 @@ use store::{MAX_FILE_BYTES, Store};
 const MONITOR_INTERVAL: Duration = Duration::from_secs(5);
 const STDERR_LINES: usize = 15;
 const STDERR_LINE_CHARS: usize = 240;
+const REQUEST_CONTENT_MARKERS: &[&str] = &[
+    "prompt",
+    "content",
+    "messages",
+    "image_url",
+    "base64",
+    "\"text\"",
+];
 
 pub struct Diagnostics {
     store: Store,
@@ -123,6 +131,13 @@ pub fn stderr_tail(log: &str, redact: &[String]) -> Vec<String> {
     lines[lines.len().saturating_sub(STDERR_LINES)..]
         .iter()
         .map(|line| {
+            let lowered = line.to_lowercase();
+            if REQUEST_CONTENT_MARKERS
+                .iter()
+                .any(|marker| lowered.contains(marker))
+            {
+                return "<line withheld: may contain request content>".to_owned();
+            }
             let mut line = (*line).to_owned();
             for secret in redact.iter().filter(|secret| !secret.is_empty()) {
                 line = line.replace(secret.as_str(), "<path>");
@@ -294,6 +309,26 @@ mod tests {
         }
         assert!(log.contains("3f2b8c1e-9a4d-4c7e-8b1a-0d2e5f6a7b8c"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stderr_tail_withholds_request_content_and_the_api_key() {
+        let log = [
+            "srv  log_server_r: request: POST /v1/chat/completions 127.0.0.1 200",
+            "slot update_slots: prompt = Gestern ging ich mit meinem Hund spazieren",
+            "error: invalid json {\"messages\":[{\"role\":\"user\"}]}",
+            "auth failed for key sk-secret-1234 from client",
+            "llama_model_load: failed to load model",
+        ]
+        .join("\n");
+        let tail = stderr_tail(&log, &["sk-secret-1234".to_owned()]);
+        let joined = tail.join("\n");
+        for forbidden in ["Hund", "Gestern", "messages", "sk-secret-1234"] {
+            assert!(!joined.contains(forbidden), "leaked {forbidden}: {joined}");
+        }
+        assert!(joined.contains("POST /v1/chat/completions"));
+        assert!(joined.contains("failed to load model"));
+        assert_eq!(tail.len(), 5);
     }
 
     #[test]

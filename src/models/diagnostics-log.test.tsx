@@ -23,10 +23,12 @@ afterEach(() => {
 function source(lines: string[]): DiagnosticsSource & {
   read: ReturnType<typeof vi.fn<DiagnosticsSource['read']>>;
   copy: ReturnType<typeof vi.fn<DiagnosticsSource['copy']>>;
+  clear: ReturnType<typeof vi.fn<DiagnosticsSource['clear']>>;
 } {
   return {
     read: vi.fn<DiagnosticsSource['read']>(() => Promise.resolve(lines)),
     copy: vi.fn<DiagnosticsSource['copy']>(() => Promise.resolve()),
+    clear: vi.fn<DiagnosticsSource['clear']>(() => Promise.resolve()),
   };
 }
 
@@ -95,5 +97,37 @@ describe('DiagnosticsLog', () => {
       await Promise.resolve();
     });
     expect(container.textContent).toContain('Kopieren war nicht möglich');
+  });
+
+  it('deletes the log only after a confirmation', async () => {
+    const fake = source(['{"event":"x"}']);
+    act(() => root.render(<DiagnosticsLog source={fake} />));
+    await openLog();
+
+    await act(async () => {
+      button('Protokoll löschen')?.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('wirklich löschen');
+    expect(fake.clear).not.toHaveBeenCalled();
+
+    await act(async () => {
+      button('Behalten')?.click();
+      await Promise.resolve();
+    });
+    expect(fake.clear).not.toHaveBeenCalled();
+
+    await act(async () => {
+      button('Protokoll löschen')?.click();
+      await Promise.resolve();
+    });
+    fake.read.mockResolvedValueOnce([]);
+    await act(async () => {
+      button('Endgültig löschen')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fake.clear).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain('Noch keine Einträge');
   });
 });

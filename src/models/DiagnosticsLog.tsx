@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { readDiagnostics } from '../pipeline/diagnostics.ts';
+import { clearDiagnostics, readDiagnostics } from '../pipeline/diagnostics.ts';
 
 export interface DiagnosticsSource {
   readonly read: () => Promise<readonly string[]>;
   readonly copy: (text: string) => Promise<void>;
+  readonly clear: () => Promise<void>;
 }
 
 const browserSource: DiagnosticsSource = {
   read: () => readDiagnostics(),
   copy: (text) => navigator.clipboard.writeText(text),
+  clear: () => clearDiagnostics(),
 };
 
 type CopyState = 'idle' | 'copied' | 'failed';
@@ -22,6 +24,7 @@ export function DiagnosticsLog({
   const [lines, setLines] = useState<readonly string[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [copy, setCopy] = useState<CopyState>('idle');
+  const [confirming, setConfirming] = useState(false);
 
   const load = () => {
     setFailed(false);
@@ -38,6 +41,7 @@ export function DiagnosticsLog({
       onToggle={(event) => {
         const opened = event.currentTarget.open;
         setOpen(opened);
+        setConfirming(false);
         if (opened) load();
       }}
     >
@@ -76,7 +80,42 @@ export function DiagnosticsLog({
             <button type="button" onClick={load}>
               Aktualisieren
             </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={lines === null || lines.length === 0}
+              onClick={() => {
+                setConfirming(true);
+              }}
+            >
+              Protokoll löschen
+            </button>
           </div>
+          {confirming && (
+            <div className="confirm" role="alertdialog" aria-label="Protokoll löschen">
+              <p>Das Diagnoseprotokoll wirklich löschen? Das lässt sich nicht rückgängig machen.</p>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  setConfirming(false);
+                  source.clear().then(load, () => {
+                    setFailed(true);
+                  });
+                }}
+              >
+                Endgültig löschen
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirming(false);
+                }}
+              >
+                Behalten
+              </button>
+            </div>
+          )}
           <p role="status">
             {copy === 'copied' && 'Das Protokoll liegt in der Zwischenablage.'}
             {copy === 'failed' &&

@@ -40,8 +40,12 @@ impl Store {
         }
         line.push('\n');
         let size = fs::metadata(&self.current).map_or(0, |meta| meta.len());
-        if size > 0 && size + line.len() as u64 > self.max_bytes {
-            let _ = fs::rename(&self.current, &self.previous);
+        if size > 0
+            && size + line.len() as u64 > self.max_bytes
+            && fs::rename(&self.current, &self.previous).is_err()
+            && fs::write(&self.current, b"").is_err()
+        {
+            return;
         }
         if let Ok(mut file) = OpenOptions::new()
             .create(true)
@@ -102,6 +106,25 @@ mod tests {
             })
             .collect();
         assert!(numbers.windows(2).all(|pair| pair[1] == pair[0] + 1));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stays_bounded_when_the_rotation_rename_fails() {
+        let dir = temp_dir("blocked");
+        let store = Store::new(&dir, 200);
+        fs::create_dir_all(dir.join("diagnostics.1.jsonl").join("occupied")).unwrap();
+        for index in 0..60 {
+            store.append(&format!("{{\"n\":{index},\"pad\":\"xxxxxxxxxx\"}}"));
+        }
+        let current = fs::metadata(dir.join("diagnostics.jsonl")).unwrap().len();
+        assert!(current <= 200);
+        assert!(
+            store
+                .tail(1000)
+                .iter()
+                .any(|line| line.contains("\"n\":59"))
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
