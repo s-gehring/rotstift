@@ -66,3 +66,20 @@ node --experimental-transform-types eval/correct.ts --models gemma-4-e2b-text --
   - Fehlalarme je 100 Wörter: Marken auf fehlerfreiem Text (korrigierte Schülertexte / Seiten aus dem Datensatz).
   - Text erhalten: Zeilen, deren Text außerhalb der Marken unverändert ist (nur `tags`, bei den anderen Formaten ist der Text per Konstruktion erhalten).
   - Wortfehler vorher und nachher: Wortabstand zum korrigierten Text, vor und nach Anwenden der Modell-Marken.
+
+## Lesefehler der Texterkennung
+
+Misst, wie viele Markierungen auf fehlerfreier Handschrift durch Lesefehler der Texterkennung entstehen und welche Gegenmittel sie senken. Der Bericht steht in [docs/evaluations/2026-10-lesefehler.md](../docs/evaluations/2026-10-lesefehler.md).
+
+```bash
+python3 -I eval/resize-pages.py <Datensatz>/images <Ordner-1152> --max-edge 1152
+node --experimental-transform-types eval/ocr-run.ts --model glm-ocr-q8 --images <Ordner-1152> --pages 000,001 --out <Ergebnisse>/ocr-glm.json
+node --experimental-transform-types eval/ocr-correct.ts --prompt app --no-thinking --ocr <Ergebnisse>/ocr-glm.json --out <Ergebnisse>/scads-glm-app.json
+node --experimental-transform-types eval/ocr-score.ts --dataset <Datensatz> --ocr <Ergebnisse>/ocr-glm.json --scads <Ergebnisse>/scads-glm-app.json --dictionary <Ergebnisse>/dictionary.json --hunspell <Pfad ohne Endung zu de_DE.aff/.dic>
+```
+
+- `resize-pages.py` verkleinert die Seiten wie `modelImage` in der App (längste Kante `imageMaxEdge` aus `src-tauri/models.json`, JPEG-Qualität 90).
+- `ocr-run.ts` startet das Erkennungsmodell mit den Einstellungen aus `src-tauri/models.json`, schickt die Seite wie `visionMessage` und fordert zusätzlich `logprobs` an. Gespeichert werden Text, Zeit und je Token Bytes und Log-Wahrscheinlichkeit. Für andere Bildgrößen die Seiten mit `resize-pages.py` (bei Bedarf `--upscale`) vorbereiten und `--max-edge <Kante>` angeben, damit die Größe im Ergebnis steht.
+- `ocr-correct.ts` korrigiert mit `correctPage` und `createLlmCorrector` aus `src/correction` (Prompt aus der Registry, Reparaturrunde wie in der App). Quellen: `--ocr` (Transkripte aus `ocr-run.ts`), `--truth <Datensatz> --pages …` (Ground Truth), `--texts fehler,fehlerfrei` (Schülertexte, mit `--noise-from <ocr.json> --dataset <Datensatz> --seeds 1,2,3` zusätzlich mit Lesefehlern in der gemessenen Verteilung). `--prompt` ist `app`, `ocr` (Hinweis auf die Texterkennung) oder `strict` (zusätzlich nur eindeutige Fehler), `--no-thinking` schickt `chat_template_kwargs: {enable_thinking: false}`.
+- `ocr-score.ts` leitet die Markierungen mit `deriveMarks` ab und bewertet sie: Fehlalarme je 100 Wörter auf den Datensatzseiten, getrennt nach Lesefolgefehler (das markierte Wort wurde falsch gelesen) und Korrektor (richtig gelesen und trotzdem markiert), Recall auf den Schülertexten. Gegenmittel sind Nachfilter: `Lesesicherheit < s` macht aus Markierungen auf Wörtern, deren unsicherstes Zeichen eine Token-Wahrscheinlichkeit unter `s` hat, einen Hinweis „unsicher gelesen“; `Wörterbuch` verwirft Markierungen, deren Korrektur ein Wort enthält, das hunspell nicht kennt (Cache in `--dictionary`). `--curve <scads.json>,<gerendert.json>` gibt die Schwellenkurve aus, `--examples <lauf.json>` listet alle Markierungen eines Laufs.
+- `ocr-word-measures.ts --ocr <ocr-glm.json> --dataset <Datensatz> --rendered <ocr-glm-rendered.json>` vergleicht Maße der Lesesicherheit je Wort (Minimum, Produkt, Mittel je Token und je Zeichen, längenkorrigiert) und die Trennung nach Wortlänge.
