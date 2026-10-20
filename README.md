@@ -16,7 +16,7 @@ Version 0.1 zählt die Wörter handschriftlicher Texte, komplett offline:
 
 Genauigkeit: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag die Wortzahl im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Durchgestrichenes behandelt Rotstift noch nicht gesondert.
 
-Geschwindigkeit: Nur auf der CPU eines schnellen Rechners (Apple M4 Pro, 4 Threads) rund 12 Sekunden pro Seite, auf einfachen Laptops entsprechend länger. Mit der Grafikeinheit von Apple Silicon 2 bis 4 Sekunden.
+Geschwindigkeit: Nur auf der CPU rund 12 Sekunden pro Seite auf einem Apple M4 Pro (4 Threads), unter Linux auf einem Ryzen 7 5700X 27 Sekunden mit 4 und 44 Sekunden mit 2 Threads, auf einfachen Laptops entsprechend länger ([Messung](docs/evaluations/2026-10-linux-simon-pc.md)). Mit der Grafikeinheit von Apple Silicon 2 bis 4 Sekunden.
 
 Geplant:
 
