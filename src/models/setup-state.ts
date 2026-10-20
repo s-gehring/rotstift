@@ -4,6 +4,7 @@ import {
   MODELS,
   offeredModels,
   recommendModel,
+  type AnyModelInfo,
   type ModelInfo,
 } from './registry.ts';
 import type {
@@ -196,7 +197,12 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
   }
 }
 
-export function activeModel(state: SetupState, models: readonly ModelInfo[] = MODELS): ModelInfo {
+export function activeModel(state: SetupState): ModelInfo;
+export function activeModel<T extends AnyModelInfo>(state: SetupState, models: readonly T[]): T;
+export function activeModel(
+  state: SetupState,
+  models: readonly AnyModelInfo[] = MODELS,
+): AnyModelInfo {
   const ram = state.hardware?.totalRamBytes ?? null;
   const chosen = models.find((model) => model.id === state.selectedId);
   const allowed =

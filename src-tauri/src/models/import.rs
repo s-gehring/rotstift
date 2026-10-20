@@ -114,7 +114,7 @@ pub fn import_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::registry::{ModelFiles, RequestParams, ServerParams};
+    use crate::models::registry::{ModelFiles, RequestParams, Role, ServerParams};
     use crate::models::verified::has_valid_marker;
 
     fn sha(bytes: &[u8]) -> String {
@@ -135,24 +135,28 @@ mod tests {
     fn entry() -> ModelEntry {
         ModelEntry {
             id: "t".into(),
+            role: Role::Transcriber,
             display_name: "T".into(),
             license: "MIT".into(),
             recommended_ram_gb: 8,
             files: ModelFiles {
                 model: file("model.gguf", b"model bytes"),
-                mmproj: file("mmproj.gguf", b"projector"),
+                mmproj: Some(file("mmproj.gguf", b"projector")),
             },
             server: ServerParams {
                 context_size: 4096,
                 image_max_tokens: None,
                 threads: None,
                 gpu_layers: None,
+                cpu_repack: true,
             },
             request: RequestParams {
                 max_output_tokens: 1024,
                 temperature: 0.0,
-                image_max_edge: 1024,
+                image_max_edge: Some(1024),
             },
+            line_mode: None,
+            system: None,
             prompt: "p".into(),
         }
     }
@@ -189,7 +193,10 @@ mod tests {
         );
         assert!(!import_path(&target, &entry().files.model).exists());
         assert!(has_valid_marker(&target, &entry().files.model));
-        assert!(has_valid_marker(&target, &entry().files.mmproj));
+        assert!(has_valid_marker(
+            &target,
+            entry().files.mmproj.as_ref().unwrap()
+        ));
     }
 
     #[test]

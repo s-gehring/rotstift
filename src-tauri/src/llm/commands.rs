@@ -7,7 +7,9 @@ use super::process;
 use super::runtime::{
     LlmError, LlmRuntime, RuntimePaths, RuntimeStatus, StartOptions, installed_layout,
 };
-use crate::models::{self, ModelManager, registry::ModelEntry};
+use crate::models::{self, ModelManager, registry::ModelEntry, system};
+
+const REPACK_MIN_RAM_BYTES: u64 = 12 * 1024 * 1024 * 1024;
 
 fn environment_error(error: impl ToString) -> LlmError {
     LlmError::Environment(error.to_string())
@@ -36,14 +38,15 @@ pub fn stop_orphaned_sidecars<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-pub fn start_options(entry: &ModelEntry) -> StartOptions {
+pub fn start_options(entry: &ModelEntry, total_ram_bytes: u64) -> StartOptions {
     StartOptions {
         model: entry.files.model.name.clone(),
-        mmproj: Some(entry.files.mmproj.name.clone()),
+        mmproj: entry.files.mmproj.as_ref().map(|file| file.name.clone()),
         context_size: Some(entry.server.context_size),
         threads: entry.server.threads,
         gpu_layers: entry.server.gpu_layers,
         image_max_tokens: entry.server.image_max_tokens,
+        no_repack: !entry.server.cpu_repack && total_ram_bytes < REPACK_MIN_RAM_BYTES,
     }
 }
 
@@ -59,7 +62,8 @@ pub async fn llm_start_model<R: Runtime>(
     if !models.startable(&paths.models_dir, entry).await {
         return Err(LlmError::ModelNotFound(entry.files.model.name.clone()));
     }
-    runtime.start(&paths, start_options(entry)).await
+    let options = start_options(entry, system::total_memory());
+    runtime.start(&paths, options).await
 }
 
 #[tauri::command]
@@ -84,4 +88,34 @@ pub async fn llm_chat(
 #[tauri::command]
 pub fn llm_cancel(runtime: State<'_, LlmRuntime>, request_id: String) -> bool {
     runtime.cancel(&request_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::registry::{DEFAULT_CORRECTOR_ID, DEFAULT_MODEL_ID, registry};
+
+    const GIB: u64 = 1024 * 1024 * 1024;
+
+    #[test]
+    fn the_corrector_starts_without_projector_and_skips_repacking_on_small_machines() {
+        let corrector = registry().unwrap().find(DEFAULT_CORRECTOR_ID).unwrap();
+        let small = start_options(corrector, 8 * GIB);
+        assert_eq!(small.model, corrector.files.model.name);
+        assert_eq!(small.mmproj, None);
+        assert_eq!(small.image_max_tokens, None);
+        assert!(small.no_repack);
+        assert!(!start_options(corrector, 16 * GIB).no_repack);
+    }
+
+    #[test]
+    fn the_transcriber_keeps_its_projector_and_always_repacks() {
+        let transcriber = registry().unwrap().find(DEFAULT_MODEL_ID).unwrap();
+        let options = start_options(transcriber, 8 * GIB);
+        assert_eq!(
+            options.mmproj.as_deref(),
+            Some(transcriber.files.mmproj.as_ref().unwrap().name.as_str())
+        );
+        assert!(!options.no_repack);
+    }
 }

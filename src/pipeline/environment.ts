@@ -1,4 +1,5 @@
 import { createLlmClient } from '../llm/client.ts';
+import { sharedEngine } from '../llm/engine.ts';
 import { createModelClient, type ModelClient } from '../models/client.ts';
 import type { ModelInfo } from '../models/registry.ts';
 import { createLlmTranscriber } from './llm-transcriber.ts';
@@ -29,6 +30,7 @@ export function browserEnvironment(): TranscriberEnvironment {
     createModelTranscriber: (model: ModelInfo, onUnavailable?: () => void) =>
       createLlmTranscriber({
         client: createLlmClient(),
+        engine: sharedEngine(),
         model,
         ...(onUnavailable && { onUnavailable }),
       }),

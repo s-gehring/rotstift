@@ -36,6 +36,8 @@ pub struct StartOptions {
     pub threads: Option<u32>,
     pub gpu_layers: Option<u32>,
     pub image_max_tokens: Option<u32>,
+    #[serde(default)]
+    pub no_repack: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -361,6 +363,7 @@ impl LlmRuntime {
                 "contextSize": options.context_size,
                 "threads": options.threads,
                 "imageMaxTokens": options.image_max_tokens,
+                "noRepack": options.no_repack,
             }),
         );
         let log = read_log(child.stderr.take());
@@ -694,6 +697,9 @@ fn server_args(model: &Path, mmproj: Option<&Path>, options: &StartOptions) -> V
     if let Some(tokens) = options.image_max_tokens {
         args.extend(["--image-max-tokens".into(), tokens.to_string().into()]);
     }
+    if options.no_repack {
+        args.push("--no-repack".into());
+    }
     args
 }
 
@@ -755,6 +761,7 @@ mod tests {
             threads: None,
             gpu_layers: None,
             image_max_tokens: None,
+            no_repack: false,
         }
     }
 
@@ -819,6 +826,16 @@ mod tests {
         assert!(args.windows(2).any(|pair| pair == ["--n-predict", "4096"]));
         assert!(!args.iter().any(|arg| arg.contains("api-key")));
         assert!(args.contains(&"--offline".into()));
+        assert!(!args.contains(&"--no-repack".into()));
+        assert!(!args.contains(&"--mmproj".into()));
+    }
+
+    #[test]
+    fn skips_weight_repacking_when_asked() {
+        let mut options = options("m.gguf");
+        options.no_repack = true;
+        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
+        assert!(args.contains(&"--no-repack".into()));
     }
 
     #[test]
@@ -1274,7 +1291,7 @@ mod tests {
         };
         let runtime = LlmRuntime::new();
         for entry in &registry.models {
-            let options = crate::llm::commands::start_options(entry);
+            let options = crate::llm::commands::start_options(entry, 8 * 1024 * 1024 * 1024);
             let status = runtime.start(&paths, options).await.unwrap();
             assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
             runtime.stop();

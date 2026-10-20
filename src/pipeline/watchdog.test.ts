@@ -34,6 +34,8 @@ describe('phaseLimitMs', () => {
   it('judges the sidecar startup separately from page work', () => {
     const fast = [5_000, 5_000, 5_000];
     expect(phaseLimitMs('sidecar_start', fast)).toBe(WATCHDOG.startupLimitMs);
+    expect(phaseLimitMs('queued', fast, 2)).toBe(WATCHDOG.queueLimitMs);
+    expect(WATCHDOG.queueLimitMs).toBeGreaterThan(WATCHDOG.ceilingMs);
     expect(phaseLimitMs('request', fast)).toBe(WATCHDOG.floorMs);
   });
 

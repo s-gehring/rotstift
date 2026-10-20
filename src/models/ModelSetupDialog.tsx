@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   describeDownloadError,
   formatMegabytes,
@@ -7,11 +7,18 @@ import {
   remainingText,
 } from './format.ts';
 import { ModelChoice } from './ModelChoice.tsx';
-import { isLowOnMemory, modelSource, totalBytes, type ModelInfo } from './registry.ts';
+import {
+  isLowOnMemory,
+  modelFiles,
+  modelSource,
+  totalBytes,
+  type AnyModelInfo,
+} from './registry.ts';
+import { roleText } from './role-text.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
 interface Props {
-  readonly setup: ModelSetup;
+  readonly setup: ModelSetup<AnyModelInfo>;
   readonly open: boolean;
   readonly onClose: () => void;
   readonly switchDisabled: boolean;
@@ -41,7 +48,7 @@ export function progressMilestone(downloaded: number, total: number): number {
   return Math.floor(percent / MILESTONE_PERCENT) * MILESTONE_PERCENT;
 }
 
-function Progress({ setup }: { readonly setup: ModelSetup }) {
+function Progress({ setup }: { readonly setup: ModelSetup<AnyModelInfo> }) {
   const { status } = setup;
   if (status === null) return null;
   const remaining = remainingText(setup.samples, status.downloadedBytes, status.totalBytes);
@@ -67,7 +74,9 @@ function Progress({ setup }: { readonly setup: ModelSetup }) {
   );
 }
 
-function OfflineSetup({ model }: { readonly model: ModelInfo }) {
+function OfflineSetup({ model }: { readonly model: AnyModelInfo }) {
+  const files = modelFiles(model);
+  const single = files.length === 1;
   const [copied, setCopied] = useState<string | null>(null);
   const copy = (name: string, url: string) => {
     navigator.clipboard.writeText(url).then(
@@ -83,12 +92,12 @@ function OfflineSetup({ model }: { readonly model: ModelInfo }) {
     <details className="offline-setup">
       <summary>Ohne Internet einrichten</summary>
       <p>
-        Auf einem Rechner mit Internet beide Dateien herunterladen und zum Beispiel per USB-Stick
-        hierher bringen. Danach „Modell aus Datei importieren …“ wählen und beide Dateien auswählen.
-        Rotstift prüft sie gegen die erwartete Prüfsumme.
+        {single
+          ? 'Auf einem Rechner mit Internet die Datei herunterladen und zum Beispiel per USB-Stick hierher bringen. Danach „Modell aus Datei importieren …“ wählen und die Datei auswählen. Rotstift prüft sie gegen die erwartete Prüfsumme.'
+          : 'Auf einem Rechner mit Internet beide Dateien herunterladen und zum Beispiel per USB-Stick hierher bringen. Danach „Modell aus Datei importieren …“ wählen und beide Dateien auswählen. Rotstift prüft sie gegen die erwartete Prüfsumme.'}
       </p>
       <ul>
-        {[model.files.model, model.files.mmproj].map((file) => (
+        {files.map((file) => (
           <li key={file.name}>
             <strong>{file.name}</strong> ({formatSize(file.bytes)})
             <code className="download-url">{file.url}</code>
@@ -110,7 +119,9 @@ function OfflineSetup({ model }: { readonly model: ModelInfo }) {
 
 export function ModelSetupDialog({ setup, open, onClose, switchDisabled }: Props) {
   const ref = useModalDialog(open);
+  const titleId = useId();
   const { model, status, state } = setup;
+  const text = roleText(model);
   const source = modelSource(model);
   const size = totalBytes(model);
   const ram = state.hardware?.totalRamBytes ?? null;
@@ -137,24 +148,19 @@ export function ModelSetupDialog({ setup, open, onClose, switchDisabled }: Props
     <dialog
       ref={ref}
       className="model-dialog"
-      aria-labelledby="model-dialog-title"
+      aria-labelledby={titleId}
       onClose={onClose}
       onCancel={onClose}
     >
-      <h2 id="model-dialog-title">Texterkennung einrichten</h2>
+      <h2 id={titleId}>{text.title}</h2>
 
       <ModelChoice setup={setup} disabled={switchDisabled} />
 
       {ready ? (
-        <p role="status">
-          Die Texterkennung ist eingerichtet. Wörter zählen funktioniert jetzt ohne Internet.
-        </p>
+        <p role="status">{text.ready}</p>
       ) : (
         <>
-          <p>
-            Rotstift liest die Handschrift mit einem KI-Modell, das auf diesem Rechner läuft. Dieses
-            Modell muss einmal heruntergeladen werden.
-          </p>
+          <p>{text.intro}</p>
           <dl className="model-facts">
             <dt>Modell</dt>
             <dd>{model.displayName}</dd>
@@ -172,8 +178,7 @@ export function ModelSetupDialog({ setup, open, onClose, switchDisabled }: Props
           {lowMemoryBytes !== null && (
             <p className="notice warn" role="alert">
               Dieser Rechner hat nur {formatMemory(lowMemoryBytes)} Arbeitsspeicher. Empfohlen sind
-              mindestens {model.recommendedRamGb} GB. Die Texterkennung kann sehr langsam sein oder
-              abbrechen. Bitte andere Programme schließen.
+              mindestens {model.recommendedRamGb} GB. {text.slow} Bitte andere Programme schließen.
             </p>
           )}
           {lowDiskBytes !== null && (

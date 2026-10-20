@@ -88,12 +88,44 @@ describe('createLlmTranscriber', () => {
     expect(engine.startModel).toHaveBeenCalledOnce();
   });
 
-  it('starts only once for concurrent calls', async () => {
+  it('starts only once for concurrent calls and sends their requests one after the other', async () => {
+    const engine = client();
+    engine.status.mockImplementation(() =>
+      Promise.resolve(engine.startModel.mock.calls.length > 0 ? ready : { state: 'stopped' }),
+    );
+    const answers: ReturnType<typeof deferred<Completion>>[] = [];
+    engine.complete.mockImplementation(() => {
+      const pending = deferred<Completion>();
+      answers.push(pending);
+      return pending.promise;
+    });
+    const instance = transcriber(engine);
+    const phases: string[] = [];
+    const signal = new AbortController().signal;
+    const both = Promise.all([
+      instance.transcribe(png, signal),
+      instance.transcribe(png, signal, (phase) => phases.push(phase)),
+    ]);
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    expect(phases).toEqual(['queued']);
+    answers[0]?.resolve(answer('Eins'));
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]?.resolve(answer('Zwei'));
+    expect(await both).toMatchObject([{ lines: ['Eins'] }, { lines: ['Zwei'] }]);
+    expect(engine.startModel).toHaveBeenCalledOnce();
+    expect(phases).toEqual(['queued', 'encoding', 'request', 'parsing']);
+  });
+
+  it('reports the start phase only when the model is actually started', async () => {
     const engine = client();
     const instance = transcriber(engine);
-    const signal = new AbortController().signal;
-    await Promise.all([instance.transcribe(png, signal), instance.transcribe(png, signal)]);
-    expect(engine.startModel).toHaveBeenCalledOnce();
+    const phases: string[] = [];
+    await instance.transcribe(png, new AbortController().signal, (phase) => phases.push(phase));
+    expect(phases).toEqual(['sidecar_start', 'encoding', 'request', 'parsing']);
+    engine.status.mockResolvedValue(ready);
+    phases.length = 0;
+    await instance.transcribe(png, new AbortController().signal, (phase) => phases.push(phase));
+    expect(phases).toEqual(['encoding', 'request', 'parsing']);
   });
 
   it('turns a sidecar crash into an understandable error and restarts on the next attempt', async () => {

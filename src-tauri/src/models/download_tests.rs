@@ -13,7 +13,7 @@ use tokio::sync::watch;
 use super::download::{DownloadError, Downloader, FreeSpace, Progress, hex_digest, part_path};
 use super::manager::{DownloadEvent, ModelManager, State, Update, is_ready};
 use super::registry::{
-    ModelEntry, ModelFile, ModelFiles, RequestParams, ServerParams, url_allowed,
+    ModelEntry, ModelFile, ModelFiles, RequestParams, Role, ServerParams, url_allowed,
 };
 use super::verified::{has_valid_marker, marker_path, write_marker};
 
@@ -617,21 +617,28 @@ fn leaked_entry(model: ModelFile, mmproj: ModelFile) -> &'static ModelEntry {
 fn leaked_entry_with_id(id: &str, model: ModelFile, mmproj: ModelFile) -> &'static ModelEntry {
     Box::leak(Box::new(ModelEntry {
         id: id.into(),
+        role: Role::Transcriber,
         display_name: "Test".into(),
         license: "MIT".into(),
         recommended_ram_gb: 8,
-        files: ModelFiles { model, mmproj },
+        files: ModelFiles {
+            model,
+            mmproj: Some(mmproj),
+        },
         server: ServerParams {
             context_size: 4096,
             image_max_tokens: None,
             threads: None,
             gpu_layers: None,
+            cpu_repack: true,
         },
         request: RequestParams {
             max_output_tokens: 512,
             temperature: 0.0,
-            image_max_edge: 512,
+            image_max_edge: Some(512),
         },
+        line_mode: None,
+        system: None,
         prompt: "p".into(),
     }))
 }
@@ -761,7 +768,7 @@ async fn installed_files_without_a_marker_are_unverified_until_they_are_hashed()
     assert!(has_valid_marker(&dir, &entry.files.model));
 
     std::fs::remove_file(marker_path(&dir, &entry.files.model)).unwrap();
-    std::fs::remove_file(marker_path(&dir, &entry.files.mmproj)).unwrap();
+    std::fs::remove_file(marker_path(&dir, entry.files.mmproj.as_ref().unwrap())).unwrap();
     assert!(is_ready(&dir, entry).await);
     assert_eq!(manager.status(&dir, entry).await.state, State::Ready);
 }
@@ -893,7 +900,7 @@ fn events_and_errors_serialize_in_the_shape_the_frontend_reads() {
 #[ignore = "downloads the projector file (about 445 MB) from Hugging Face"]
 async fn downloads_and_resumes_from_hugging_face() {
     let registry = super::registry::registry().unwrap();
-    let file = &registry.models[0].files.mmproj;
+    let file = registry.models[0].files.mmproj.as_ref().unwrap();
     let dir = temp_dir("real");
     let downloader = Downloader::new().unwrap();
 
