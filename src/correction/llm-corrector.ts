@@ -3,6 +3,7 @@ import { LlmCallError } from '../llm/client.ts';
 import type { LlmClient } from '../llm/client.ts';
 import type { ChatMessage, LlmError } from '../llm/types.ts';
 import type { CorrectError, CorrectResult, Corrector } from './corrector.ts';
+import { editDistance } from './edit-distance.ts';
 
 export type LineMode = 'plain' | 'numbered';
 
@@ -76,6 +77,36 @@ export function readNumberedLines(
     .map((number) => `Zeile ${number} fehlt in der Ausgabe.`);
   const correctedText = lines.map((line, index) => found.get(index + 1) ?? line).join('\n');
   return { correctedText, issues };
+}
+
+const MAX_LOOSE_CHARS = 4000;
+const MAX_LOOSE_CHANGE = 0.25;
+const MAX_LOOSE_EDGE_CHANGE = 2;
+
+function joinedText(rows: readonly string[]): string {
+  return rows.join(' ').replaceAll(/\s+/gu, ' ').trim();
+}
+
+function edgeWord(text: string, last: boolean): string {
+  const words = text.split(' ');
+  return (last ? words.at(-1) : words[0]) ?? '';
+}
+
+export function readLooseLines(lines: readonly string[], answer: string): string | null {
+  const original = joinedText(lines.filter((line) => line !== ''));
+  const rows = answer
+    .split('\n')
+    .map((row) => withoutAddedEmphasis(original, row.replace(/^\s*\d+\s*[:.)]\s?/u, '').trim()))
+    .filter((row) => row !== '');
+  const corrected = joinedText(rows);
+  if (original === '' || corrected === '') return null;
+  if (Math.max(original.length, corrected.length) > MAX_LOOSE_CHARS) return null;
+  for (const last of [false, true]) {
+    const distance = editDistance(edgeWord(original, last), edgeWord(corrected, last));
+    if (distance > MAX_LOOSE_EDGE_CHANGE) return null;
+  }
+  if (editDistance(original, corrected) / original.length > MAX_LOOSE_CHANGE) return null;
+  return rows.join('\n');
 }
 
 export function repairMessages(
@@ -182,8 +213,12 @@ export function createLlmCorrector(deps: LlmCorrectorDeps): Corrector {
         const second = await ask(repairMessages(messages, first, firstRead.issues));
         if (second === null) return failure(INCOMPLETE_MESSAGE);
         const secondRead = readNumberedLines(lines, second);
-        if (secondRead.issues.length > 0) return failure(MISSING_LINES_MESSAGE);
-        return { ok: true, correctedText: secondRead.correctedText };
+        if (secondRead.issues.length === 0) {
+          return { ok: true, correctedText: secondRead.correctedText };
+        }
+        const loose = readLooseLines(lines, second);
+        if (loose === null) return failure(MISSING_LINES_MESSAGE);
+        return { ok: true, correctedText: loose };
       } catch (error) {
         if (signal.aborted) return { ok: false, error: { kind: 'cancelled' } };
         if (error instanceof LlmCallError)
