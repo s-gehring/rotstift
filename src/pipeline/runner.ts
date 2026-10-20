@@ -166,9 +166,11 @@ export function createRunner(deps: RunnerDeps) {
   let transcriber: PageTranscriber | null = null;
   let current: Current | null = null;
   let looping = false;
+  let disposed = false;
+  const isDisposed = () => disposed;
 
   const commit = (next: RunState) => {
-    if (next === state) return;
+    if (disposed || next === state) return;
     state = next;
     for (const listener of listeners) listener();
   };
@@ -364,7 +366,7 @@ export function createRunner(deps: RunnerDeps) {
 
   const pump = async () => {
     const active = transcriber;
-    if (looping || active === null) return;
+    if (disposed || looping || active === null) return;
     looping = true;
     let crashes = 0;
     let lastIncident: 'crash' | 'stall' = 'crash';
@@ -373,7 +375,7 @@ export function createRunner(deps: RunnerDeps) {
     try {
       for (;;) {
         const next = pages.find((page) => state.entries[page.id]?.status === 'waiting');
-        if (next === undefined) break;
+        if (isDisposed() || next === undefined) break;
         const result = await runPage(active, next);
         if (result && !result.ok && result.error.kind === 'failed') {
           const { crashed, stalled } = result.error;
@@ -473,6 +475,17 @@ export function createRunner(deps: RunnerDeps) {
         else if (entry.hasTranscript) entries[id] = { ...entry, status: 'done' };
       }
       commit({ ...state, entries, batch: null, runningSince: null });
+    },
+
+    dispose: () => {
+      if (disposed) return;
+      if (current !== null && current.reason === undefined) {
+        current.reason = 'cancel';
+        current.abort.abort();
+      }
+      disposed = true;
+      heartbeat.stop();
+      listeners.clear();
     },
 
     edit: (id: string, text: string) => {
