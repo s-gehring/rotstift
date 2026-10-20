@@ -13,13 +13,7 @@ import { countWords } from '../src/stats/count-words.ts';
 import { installDom } from './dom.ts';
 import { CORRECTORS } from './correct-models.ts';
 import type { Corrector } from './correct-models.ts';
-import {
-  diffMessages,
-  diffRepairMessages,
-  diffTranscript,
-  droppedBlocks,
-  readCorrectedLines,
-} from './correct-diff.ts';
+import { diffAnswer, diffMessages, diffRepairMessages } from './correct-diff.ts';
 import { listMessages, listRepairMessages, listSchema, listToTranscript } from './correct-list.ts';
 import { PROMPT_VARIANTS, buildMessages, repairMessages } from './correct-prompts.ts';
 import type { ChatMessage, PromptVariant } from './correct-prompts.ts';
@@ -169,8 +163,8 @@ function judge(doc: Doc, answer: string, options: Options): Judgement {
       : { transcript: undefined, issues: parsed.issues, items: undefined };
   }
   if (options.format === 'diff') {
-    const { corrected, issues } = readCorrectedLines(doc.input, answer);
-    const parsed = parseTranscript(serializeTranscript(diffTranscript(doc.input, corrected)), {
+    const { transcript, issues } = diffAnswer(doc.input, answer);
+    const parsed = parseTranscript(serializeTranscript(transcript), {
       profile: DEUTSCH,
       source: doc.input,
     });
@@ -244,17 +238,13 @@ function assess(doc: Doc, answer: string, judgement: Judgement, options: Options
     ),
     score: scorePage(doc.input, doc.gold, judgement.transcript),
     ...(options.format === 'list' ? { unlocated: judgement.issues.length } : {}),
-    ...(options.format === 'diff' ? { dropped: dropped(doc, answer) } : {}),
+    ...(options.format === 'diff' ? { collapsed: collapsed(doc, answer) } : {}),
     ...(doc.recoverable === undefined ? {} : { recoverable: doc.recoverable, total: doc.total }),
   };
 }
 
-function dropped(doc: Doc, answer: string): number {
-  const { corrected } = readCorrectedLines(doc.input, answer);
-  return doc.input.lines.reduce(
-    (count, line) => count + droppedBlocks(line.text, corrected.get(line.number) ?? line.text),
-    0,
-  );
+function collapsed(doc: Doc, answer: string): number {
+  return diffAnswer(doc.input, answer).collapsed;
 }
 
 async function rescore(

@@ -21,7 +21,7 @@ export interface DocResult {
   score: PageScore;
   marks: (Mark & { line: number })[];
   unlocated?: number;
-  dropped?: number;
+  collapsed?: number;
   recoverable?: number;
   total?: number;
 }
@@ -236,13 +236,13 @@ export function intervalTable(runs: readonly CorrectorRun[]): string {
   );
 }
 
-export function droppedTable(runs: readonly CorrectorRun[]): string {
+export function collapsedTable(runs: readonly CorrectorRun[]): string {
   return table(
-    ['Modell', 'Verworfene Blöcke', 'je 100 Wörter'],
+    ['Modell', 'Zusammengefasste Umformulierungen', 'je 100 Wörter'],
     runs.map((run) => {
       const docs = inGroup(run, 'fehler', 'fehlerfrei', 'scads', 'ocr');
-      if (docs.every((doc) => doc.dropped === undefined)) return [run.label, 'n. v.', 'n. v.'];
-      const count = sum(docs.map((doc) => doc.dropped ?? 0));
+      if (docs.every((doc) => doc.collapsed === undefined)) return [run.label, 'n. v.', 'n. v.'];
+      const count = sum(docs.map((doc) => doc.collapsed ?? 0));
       return [
         run.label,
         String(count),
@@ -297,9 +297,9 @@ export function correctorReport(runs: readonly CorrectorRun[], heading: string):
     '',
     intervalTable(runs),
     '',
-    'Verworfene Blöcke (mehr als 3 Wörter auf einer Seite des Vergleichs):',
+    'Zusammengefasste Umformulierungen (mehr als 3 geänderte Wörter in Folge, als eine A-Marke):',
     '',
-    droppedTable(runs),
+    collapsedTable(runs),
     '',
     'Wortfehler gegenüber dem korrigierten Text:',
     '',

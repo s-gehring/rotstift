@@ -3,12 +3,10 @@ import { formatIssues } from '../src/annotations/parse.ts';
 import type { ParseIssue } from '../src/annotations/parse.ts';
 import type { CorrectionProfile } from '../src/annotations/profile.ts';
 import { serializeTranscript } from '../src/annotations/serialize.ts';
+import type { ChatMessage } from '../src/llm/types.ts';
 import type { Mark, Transcript, TranscriptLine } from '../src/annotations/transcript.ts';
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+export type { ChatMessage } from '../src/llm/types.ts';
 
 export const PROMPT_VARIANTS = ['spec', 'extended'] as const;
 export type PromptVariant = (typeof PROMPT_VARIANTS)[number];

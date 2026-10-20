@@ -1,5 +1,5 @@
 import type { Mark, Transcript, TranscriptLine } from '../src/annotations/transcript.ts';
-import { parseSample } from './sample.ts';
+import { parseGold } from '../src/correction/gold.ts';
 
 const TOKEN = /(?:\{[^{}]*\}|[^\s{])+/g;
 
@@ -11,7 +11,7 @@ export function wrapMarkup(markup: string, width: number): string[] {
     let current = '';
     let length = 0;
     for (const token of paragraph.match(TOKEN) ?? []) {
-      const size = parseSample(token).written.length;
+      const size = parseGold(token).written.length;
       if (current !== '' && length + 1 + size > width) {
         lines.push(current);
         current = '';
@@ -36,10 +36,10 @@ export function goldFromMarkup(markup: string, width = DEFAULT_LINE_CHARS): Gold
   const goldLines: TranscriptLine[] = [];
   const corrected: string[] = [];
   wrapMarkup(markup, width).forEach((lineMarkup, index) => {
-    const sample = parseSample(lineMarkup);
+    const sample = parseGold(lineMarkup);
     const marks: Mark[] = sample.errors.map((error) => ({
       kind: error.written === '' ? 'omission' : 'error',
-      type: error.kind,
+      type: error.type,
       original: error.written,
       correction: error.correct,
       offset: error.start,
