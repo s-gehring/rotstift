@@ -1,0 +1,1286 @@
+{
+  "brief--grundschrift": [
+    {
+      "text": "Hamburg, den 12. März 2026",
+      "bbox": [166, 126, 583, 54]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Liebe Oma, lieber Opa,",
+      "bbox": [159, 250, 440, 60]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "vielen dank für das tolle Paket zu meinem",
+      "bbox": [161, 376, 803, 56]
+    },
+    {
+      "text": "Geburtstag! Über das Buch habe ich mich sehr",
+      "bbox": [165, 441, 890, 61]
+    },
+    {
+      "text": "gefreud. Ich habe schon fast die hälfte gelesen,",
+      "bbox": [163, 506, 902, 64]
+    },
+    {
+      "text": "weil es so spannend ist. Die Schockolade ist leider",
+      "bbox": [159, 568, 941, 61]
+    },
+    {
+      "text": "schon alle, die hat mein Bruder gefunden.",
+      "bbox": [152, 632, 794, 63]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "In der Schule läuft es gut. In Mathe haben wir",
+      "bbox": [164, 761, 883, 67]
+    },
+    {
+      "text": "gerade Brüche das finde ich ziemlich schwirig.",
+      "bbox": [147, 832, 862, 64]
+    },
+    {
+      "text": "Dafür habe ich in Deutsch eine Zwei geschrieben.",
+      "bbox": [160, 891, 942, 62]
+    },
+    {
+      "text": "Nächste Woche fahren wir mit der Klasse ins",
+      "bbox": [164, 955, 864, 55]
+    },
+    {
+      "text": "Schullandheim. Ich hoffe das ich mit meiner",
+      "bbox": [159, 1016, 860, 62]
+    },
+    {
+      "text": "besten Freundin in ein Zimmer komme.",
+      "bbox": [159, 1085, 761, 43]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Wann besucht ihr uns wider? Mama sagt, in den",
+      "bbox": [154, 1209, 930, 55]
+    },
+    {
+      "text": "Osterferien hättet ihr vieleicht Zeit. Dann können",
+      "bbox": [159, 1280, 926, 53]
+    },
+    {
+      "text": "wir zusammen Kuchen backen.",
+      "bbox": [147, 1342, 574, 40]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Viele liebe Grüße",
+      "bbox": [145, 1464, 322, 56]
+    },
+    {
+      "text": "eure Lena",
+      "bbox": [151, 1536, 178, 37]
+    }
+  ],
+  "brief--schulausgangsschrift": [
+    {
+      "text": "Hamburg, den 12. März 2026",
+      "bbox": [150, 124, 603, 58]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Liebe Oma, lieber Opa,",
+      "bbox": [146, 260, 455, 52]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "vielen dank für das tolle Paket zu meinem",
+      "bbox": [147, 388, 835, 54]
+    },
+    {
+      "text": "Geburtstag! Über das Buch habe ich mich sehr",
+      "bbox": [144, 443, 953, 61]
+    },
+    {
+      "text": "gefreud. Ich habe schon fast die hälfte gelesen,",
+      "bbox": [154, 511, 925, 59]
+    },
+    {
+      "text": "weil es so spannend ist. Die Schockolade ist",
+      "bbox": [146, 572, 889, 58]
+    },
+    {
+      "text": "leider schon alle, die hat mein Bruder gefunden.",
+      "bbox": [138, 635, 940, 53]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "In der Schule läuft es gut. In Mathe haben wir",
+      "bbox": [158, 761, 968, 61]
+    },
+    {
+      "text": "gerade Brüche das finde ich ziemlich schwirig.",
+      "bbox": [154, 821, 920, 67]
+    },
+    {
+      "text": "Dafür habe ich in Deutsch eine Zwei geschrieben.",
+      "bbox": [152, 882, 971, 72]
+    },
+    {
+      "text": "Nächste Woche fahren wir mit der Klasse ins",
+      "bbox": [149, 956, 896, 58]
+    },
+    {
+      "text": "Schullandheim. Ich hoffe das ich mit meiner",
+      "bbox": [161, 1024, 882, 57]
+    },
+    {
+      "text": "besten Freundin in ein Zimmer komme.",
+      "bbox": [148, 1087, 754, 47]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Wann besucht ihr uns wider? Mama sagt, in",
+      "bbox": [158, 1221, 924, 54]
+    },
+    {
+      "text": "den Osterferien hättet ihr vieleicht Zeit. Dann",
+      "bbox": [155, 1266, 971, 69]
+    },
+    {
+      "text": "können wir zusammen Kuchen backen.",
+      "bbox": [151, 1330, 761, 57]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Viele liebe Grüße",
+      "bbox": [159, 1480, 323, 50]
+    },
+    {
+      "text": "eure Lena",
+      "bbox": [153, 1543, 197, 39]
+    }
+  ],
+  "brief--caveat": [
+    {
+      "text": "Hamburg, den 12. März 2026",
+      "bbox": [169, 126, 564, 50]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Liebe Oma, lieber Opa,",
+      "bbox": [157, 248, 416, 53]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "vielen dank für das tolle Paket zu meinem",
+      "bbox": [161, 383, 783, 47]
+    },
+    {
+      "text": "Geburtstag! Über das Buch habe ich mich sehr",
+      "bbox": [158, 433, 890, 65]
+    },
+    {
+      "text": "gefreud. Ich habe schon fast die hälfte gelesen,",
+      "bbox": [159, 508, 899, 56]
+    },
+    {
+      "text": "weil es so spannend ist. Die Schockolade ist leider",
+      "bbox": [160, 567, 907, 52]
+    },
+    {
+      "text": "schon alle, die hat mein Bruder gefunden.",
+      "bbox": [156, 637, 771, 51]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "In der Schule läuft es gut. In Mathe haben wir",
+      "bbox": [155, 760, 915, 52]
+    },
+    {
+      "text": "gerade Brüche das finde ich ziemlich schwirig.",
+      "bbox": [157, 828, 866, 58]
+    },
+    {
+      "text": "Dafür habe ich in Deutsch eine Zwei geschrieben.",
+      "bbox": [153, 891, 952, 62]
+    },
+    {
+      "text": "Nächste Woche fahren wir mit der Klasse ins",
+      "bbox": [154, 956, 866, 47]
+    },
+    {
+      "text": "Schullandheim. Ich hoffe das ich mit meiner",
+      "bbox": [157, 1019, 827, 57]
+    },
+    {
+      "text": "besten Freundin in ein Zimmer komme.",
+      "bbox": [154, 1086, 708, 44]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Wann besucht ihr uns wider? Mama sagt, in den",
+      "bbox": [162, 1213, 923, 54]
+    },
+    {
+      "text": "Osterferien hättet ihr vieleicht Zeit. Dann können",
+      "bbox": [152, 1274, 930, 51]
+    },
+    {
+      "text": "wir zusammen Kuchen backen.",
+      "bbox": [151, 1339, 566, 42]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Viele liebe Grüße",
+      "bbox": [164, 1465, 295, 53]
+    },
+    {
+      "text": "eure Lena",
+      "bbox": [146, 1529, 180, 42]
+    }
+  ],
+  "brief--indieflower": [
+    {
+      "text": "Hamburg, den 12. März 2026",
+      "bbox": [164, 123, 541, 60]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Liebe Oma, lieber Opa,",
+      "bbox": [155, 255, 424, 54]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "vielen dank für das tolle Paket zu meinem",
+      "bbox": [159, 381, 798, 44]
+    },
+    {
+      "text": "Geburtstag! Über das Buch habe ich mich sehr",
+      "bbox": [160, 447, 880, 55]
+    },
+    {
+      "text": "gefreud. Ich habe schon fast die hälfte gelesen,",
+      "bbox": [153, 508, 921, 63]
+    },
+    {
+      "text": "weil es so spannend ist. Die Schockolade ist",
+      "bbox": [150, 574, 875, 51]
+    },
+    {
+      "text": "leider schon alle, die hat mein Bruder gefunden.",
+      "bbox": [154, 634, 921, 74]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "In der Schule läuft es gut. In Mathe haben wir",
+      "bbox": [150, 762, 876, 63]
+    },
+    {
+      "text": "gerade Brüche das finde ich ziemlich schwirig.",
+      "bbox": [146, 829, 856, 60]
+    },
+    {
+      "text": "Dafür habe ich in Deutsch eine Zwei geschrieben.",
+      "bbox": [151, 892, 967, 70]
+    },
+    {
+      "text": "Nächste Woche fahren wir mit der Klasse ins",
+      "bbox": [160, 956, 866, 49]
+    },
+    {
+      "text": "Schullandheim. Ich hoffe das ich mit meiner",
+      "bbox": [151, 1024, 851, 41]
+    },
+    {
+      "text": "besten Freundin in ein Zimmer komme.",
+      "bbox": [145, 1090, 757, 42]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Wann besucht ihr uns wider? Mama sagt, in den",
+      "bbox": [144, 1216, 893, 63]
+    },
+    {
+      "text": "Osterferien hättet ihr vieleicht Zeit. Dann können",
+      "bbox": [147, 1277, 917, 48]
+    },
+    {
+      "text": "wir zusammen Kuchen backen.",
+      "bbox": [141, 1343, 583, 36]
+    },
+    {
+      "text": "",
+      "bbox": null
+    },
+    {
+      "text": "Viele liebe Grüße",
+      "bbox": [142, 1471, 298, 43]
+    },
+    {
+      "text": "eure Lena",
+      "bbox": [145, 1542, 173, 30]
+    }
+  ],
+  "ferien--grundschrift": [
+    {
+      "text": "Letzten Sommer sind wir mit dem Zug an die",
+      "bbox": [164, 121, 909, 59]
+    },
+    {
+      "text": "Ostsee gefahren. Schon am ersten Morgen",
+      "bbox": [157, 189, 879, 69]
+    },
+    {
+      "text": "wollte mein Bruder unbedingt ins Wasser",
+      "bbox": [154, 254, 850, 63]
+    },
+    {
+      "text": "obwohl es ziemlich kalt war. Ich habe mich",
+      "bbox": [151, 310, 855, 45]
+    },
+    {
+      "text": "zuerst nicht getraut, aber dann bin ich doch",
+      "bbox": [161, 374, 919, 59]
+    },
+    {
+      "text": "hinterhergerant. Das Wasser war so kalt das",
+      "bbox": [155, 441, 915, 58]
+    },
+    {
+      "text": "ich laut geschrien habe. Danach haben wir am",
+      "bbox": [162, 510, 946, 58]
+    },
+    {
+      "text": "Strand eine riesige Sandburg gebaut und",
+      "bbox": [163, 574, 814, 60]
+    },
+    {
+      "text": "Muschelen gesammelt. Am Abend sind wir zum",
+      "bbox": [153, 632, 939, 59]
+    },
+    {
+      "text": "essen in ein kleines Restaurant gegangen. Ich",
+      "bbox": [158, 702, 907, 62]
+    },
+    {
+      "text": "habe ein Fischbrötchen bestellt weil ich das",
+      "bbox": [158, 765, 915, 54]
+    },
+    {
+      "text": "nähmlich noch nie probiert hatte. Leider hat es",
+      "bbox": [156, 822, 980, 62]
+    },
+    {
+      "text": "am nächsten Tag die ganze Zeit geregent.",
+      "bbox": [153, 889, 841, 61]
+    },
+    {
+      "text": "Wegen dem Regen sind wir ins Meeresmuseum",
+      "bbox": [145, 956, 948, 58]
+    },
+    {
+      "text": "gegangen. Dort hing das Skelett von einem",
+      "bbox": [158, 1023, 880, 57]
+    },
+    {
+      "text": "Wal von der Decke. Ich freue mich schon auf",
+      "bbox": [157, 1087, 919, 63]
+    },
+    {
+      "text": "nächstes jahr.",
+      "bbox": [154, 1147, 267, 57]
+    }
+  ],
+  "ferien--schulausgangsschrift": [
+    {
+      "text": "Letzten Sommer sind wir mit dem Zug an die",
+      "bbox": [154, 118, 980, 71]
+    },
+    {
+      "text": "Ostsee gefahren. Schon am ersten Morgen",
+      "bbox": [158, 183, 918, 69]
+    },
+    {
+      "text": "wollte mein Bruder unbedingt ins Wasser",
+      "bbox": [169, 255, 883, 61]
+    },
+    {
+      "text": "obwohl es ziemlich kalt war. Ich habe mich",
+      "bbox": [156, 309, 910, 57]
+    },
+    {
+      "text": "zuerst nicht getraut, aber dann bin ich doch",
+      "bbox": [151, 381, 959, 56]
+    },
+    {
+      "text": "hinterhergerant. Das Wasser war so kalt",
+      "bbox": [147, 440, 926, 59]
+    },
+    {
+      "text": "das ich laut geschrien habe. Danach haben",
+      "bbox": [157, 503, 904, 57]
+    },
+    {
+      "text": "wir am Strand eine riesige Sandburg gebaut",
+      "bbox": [160, 570, 937, 67]
+    },
+    {
+      "text": "und Muschelen gesammelt. Am Abend sind",
+      "bbox": [156, 632, 930, 58]
+    },
+    {
+      "text": "wir zum essen in ein kleines Restaurant",
+      "bbox": [149, 704, 855, 45]
+    },
+    {
+      "text": "gegangen. Ich habe ein Fischbrötchen bestellt",
+      "bbox": [150, 759, 966, 55]
+    },
+    {
+      "text": "weil ich das nähmlich noch nie probiert",
+      "bbox": [147, 826, 848, 60]
+    },
+    {
+      "text": "hatte. Leider hat es am nächsten Tag die",
+      "bbox": [145, 890, 891, 71]
+    },
+    {
+      "text": "ganze Zeit geregent. Wegen dem Regen sind",
+      "bbox": [145, 955, 921, 56]
+    },
+    {
+      "text": "wir ins Meeresmuseum gegangen. Dort hing",
+      "bbox": [145, 1024, 943, 68]
+    },
+    {
+      "text": "das Skelett von einem Wal von der Decke.",
+      "bbox": [152, 1080, 898, 46]
+    },
+    {
+      "text": "Ich freue mich schon auf nächstes jahr.",
+      "bbox": [147, 1140, 850, 67]
+    }
+  ],
+  "ferien--caveat": [
+    {
+      "text": "Letzten Sommer sind wir mit dem Zug an die",
+      "bbox": [156, 124, 814, 49]
+    },
+    {
+      "text": "Ostsee gefahren. Schon am ersten Morgen wollte",
+      "bbox": [151, 196, 914, 50]
+    },
+    {
+      "text": "mein Bruder unbedingt ins Wasser obwohl es",
+      "bbox": [158, 252, 849, 49]
+    },
+    {
+      "text": "ziemlich kalt war. Ich habe mich zuerst nicht",
+      "bbox": [158, 322, 862, 47]
+    },
+    {
+      "text": "getraut, aber dann bin ich doch hinterhergerant.",
+      "bbox": [163, 379, 944, 49]
+    },
+    {
+      "text": "Das Wasser war so kalt das ich laut geschrien",
+      "bbox": [164, 443, 863, 58]
+    },
+    {
+      "text": "habe. Danach haben wir am Strand eine riesige",
+      "bbox": [159, 501, 923, 46]
+    },
+    {
+      "text": "Sandburg gebaut und Muschelen gesammelt. Am",
+      "bbox": [158, 574, 886, 54]
+    },
+    {
+      "text": "Abend sind wir zum essen in ein kleines Restaurant",
+      "bbox": [150, 637, 987, 48]
+    },
+    {
+      "text": "gegangen. Ich habe ein Fischbrötchen bestellt weil",
+      "bbox": [162, 704, 937, 44]
+    },
+    {
+      "text": "ich das nähmlich noch nie probiert hatte. Leider",
+      "bbox": [156, 760, 906, 54]
+    },
+    {
+      "text": "hat es am nächsten Tag die ganze Zeit geregent.",
+      "bbox": [164, 829, 921, 51]
+    },
+    {
+      "text": "Wegen dem Regen sind wir ins Meeresmuseum",
+      "bbox": [164, 896, 845, 47]
+    },
+    {
+      "text": "gegangen. Dort hing das Skelett von einem Wal von",
+      "bbox": [150, 959, 979, 56]
+    },
+    {
+      "text": "der Decke. Ich freue mich schon auf nächstes",
+      "bbox": [160, 1016, 883, 51]
+    },
+    {
+      "text": "jahr.",
+      "bbox": [153, 1083, 98, 49]
+    }
+  ],
+  "ferien--indieflower": [
+    {
+      "text": "Letzten Sommer sind wir mit dem Zug an die",
+      "bbox": [143, 132, 851, 57]
+    },
+    {
+      "text": "Ostsee gefahren. Schon am ersten Morgen wollte",
+      "bbox": [148, 194, 941, 60]
+    },
+    {
+      "text": "mein Bruder unbedingt ins Wasser obwohl es",
+      "bbox": [154, 257, 864, 56]
+    },
+    {
+      "text": "ziemlich kalt war. Ich habe mich zuerst nicht",
+      "bbox": [143, 322, 831, 42]
+    },
+    {
+      "text": "getraut, aber dann bin ich doch hinterhergerant.",
+      "bbox": [153, 383, 906, 63]
+    },
+    {
+      "text": "Das Wasser war so kalt das ich laut geschrien",
+      "bbox": [150, 452, 917, 59]
+    },
+    {
+      "text": "habe. Danach haben wir am Strand eine riesige",
+      "bbox": [157, 510, 909, 57]
+    },
+    {
+      "text": "Sandburg gebaut und Muschelen gesammelt. Am",
+      "bbox": [147, 569, 938, 73]
+    },
+    {
+      "text": "Abend sind wir zum essen in ein kleines",
+      "bbox": [157, 632, 782, 50]
+    },
+    {
+      "text": "Restaurant gegangen. Ich habe ein Fischbrötchen",
+      "bbox": [146, 695, 924, 65]
+    },
+    {
+      "text": "bestellt weil ich das nähmlich noch nie probiert",
+      "bbox": [160, 765, 880, 50]
+    },
+    {
+      "text": "hatte. Leider hat es am nächsten Tag die ganze",
+      "bbox": [161, 834, 913, 60]
+    },
+    {
+      "text": "Zeit geregent. Wegen dem Regen sind wir ins",
+      "bbox": [148, 891, 846, 68]
+    },
+    {
+      "text": "Meeresmuseum gegangen. Dort hing das Skelett",
+      "bbox": [160, 953, 936, 68]
+    },
+    {
+      "text": "von einem Wal von der Decke. Ich freue mich",
+      "bbox": [151, 1016, 861, 51]
+    },
+    {
+      "text": "schon auf nächstes jahr.",
+      "bbox": [162, 1090, 473, 56]
+    }
+  ],
+  "handy--grundschrift": [
+    {
+      "text": "Sollten Handys in der Schule verboten werden?",
+      "bbox": [168, 123, 975, 57]
+    },
+    {
+      "text": "Diese Frage wird an unserer Schule gerade",
+      "bbox": [169, 184, 843, 64]
+    },
+    {
+      "text": "heftich diskutiert. Einerseits lenken Handys im",
+      "bbox": [167, 251, 929, 62]
+    },
+    {
+      "text": "Unterricht stark ab. Wer ständig auf das",
+      "bbox": [163, 314, 809, 62]
+    },
+    {
+      "text": "Display schaut bekommt nicht mit, was die",
+      "bbox": [153, 375, 870, 59]
+    },
+    {
+      "text": "Lehrerin erklärt. Außerdem gibt es in den",
+      "bbox": [154, 443, 844, 60]
+    },
+    {
+      "text": "Pausen immer wieder Streit, weil Fotos ohne",
+      "bbox": [155, 501, 903, 57]
+    },
+    {
+      "text": "erlaubnis verschickt werden. Andererseits ist",
+      "bbox": [152, 566, 875, 46]
+    },
+    {
+      "text": "das Handy ein nüzliches Werkzeug. Man kann",
+      "bbox": [155, 631, 950, 59]
+    },
+    {
+      "text": "damit schnell unbekannte wörter nachschlagen",
+      "bbox": [153, 696, 920, 59]
+    },
+    {
+      "text": "oder die Hausaufgaben notieren. Viele Eltern",
+      "bbox": [159, 764, 907, 59]
+    },
+    {
+      "text": "möchte außerdem, das ihre Kinder nach der",
+      "bbox": [155, 823, 911, 61]
+    },
+    {
+      "text": "Schule erreichbar sind. Ein komplettes Verbot",
+      "bbox": [159, 889, 936, 66]
+    },
+    {
+      "text": "halte ich deshalb nicht für sinvoll. Besser wäre",
+      "bbox": [152, 951, 957, 60]
+    },
+    {
+      "text": "es wenn die Handys im Unterricht",
+      "bbox": [154, 1015, 691, 60]
+    },
+    {
+      "text": "ausgeschaltet in der Tasche bleiben und nur",
+      "bbox": [152, 1081, 887, 59]
+    },
+    {
+      "text": "auf Anweisung benutzt werden dürfen. In den",
+      "bbox": [154, 1145, 926, 63]
+    },
+    {
+      "text": "Pausen sollte es eine feste Zone geben in der",
+      "bbox": [154, 1210, 892, 64]
+    },
+    {
+      "text": "man telefonieren darf. So lernen wir,",
+      "bbox": [148, 1271, 755, 59]
+    },
+    {
+      "text": "verantwortungsvol mit dem Handy umzugehen,",
+      "bbox": [146, 1341, 973, 60]
+    },
+    {
+      "text": "und der Unterricht wird trotzdem nicht gestört.",
+      "bbox": [157, 1405, 963, 62]
+    }
+  ],
+  "handy--schulausgangsschrift": [
+    {
+      "text": "Sollten Handys in der Schule verboten werden?",
+      "bbox": [144, 118, 964, 64]
+    },
+    {
+      "text": "Diese Frage wird an unserer Schule gerade",
+      "bbox": [142, 194, 834, 55]
+    },
+    {
+      "text": "heftich diskutiert. Einerseits lenken Handys im",
+      "bbox": [137, 255, 950, 56]
+    },
+    {
+      "text": "Unterricht stark ab. Wer ständig auf das",
+      "bbox": [156, 312, 853, 53]
+    },
+    {
+      "text": "Display schaut bekommt nicht mit, was die",
+      "bbox": [143, 385, 901, 57]
+    },
+    {
+      "text": "Lehrerin erklärt. Außerdem gibt es in den",
+      "bbox": [140, 440, 858, 56]
+    },
+    {
+      "text": "Pausen immer wieder Streit, weil Fotos ohne",
+      "bbox": [158, 512, 913, 46]
+    },
+    {
+      "text": "erlaubnis verschickt werden. Andererseits ist",
+      "bbox": [148, 569, 914, 47]
+    },
+    {
+      "text": "das Handy ein nüzliches Werkzeug. Man kann",
+      "bbox": [150, 629, 930, 67]
+    },
+    {
+      "text": "damit schnell unbekannte wörter nachschlagen",
+      "bbox": [149, 701, 945, 54]
+    },
+    {
+      "text": "oder die Hausaufgaben notieren. Viele Eltern",
+      "bbox": [150, 760, 923, 64]
+    },
+    {
+      "text": "möchte außerdem, das ihre Kinder nach der",
+      "bbox": [145, 829, 874, 58]
+    },
+    {
+      "text": "Schule erreichbar sind. Ein komplettes Verbot",
+      "bbox": [157, 891, 963, 57]
+    },
+    {
+      "text": "halte ich deshalb nicht für sinvoll. Besser wäre",
+      "bbox": [141, 963, 968, 54]
+    },
+    {
+      "text": "es wenn die Handys im Unterricht",
+      "bbox": [141, 1026, 722, 54]
+    },
+    {
+      "text": "ausgeschaltet in der Tasche bleiben und nur auf",
+      "bbox": [156, 1081, 971, 62]
+    },
+    {
+      "text": "Anweisung benutzt werden dürfen. In den",
+      "bbox": [155, 1144, 834, 64]
+    },
+    {
+      "text": "Pausen sollte es eine feste Zone geben in der",
+      "bbox": [161, 1210, 889, 56]
+    },
+    {
+      "text": "man telefonieren darf. So lernen wir,",
+      "bbox": [157, 1285, 719, 52]
+    },
+    {
+      "text": "verantwortungsvol mit dem Handy umzugehen,",
+      "bbox": [155, 1332, 951, 63]
+    },
+    {
+      "text": "und der Unterricht wird trotzdem nicht",
+      "bbox": [164, 1392, 821, 57]
+    },
+    {
+      "text": "gestört.",
+      "bbox": [155, 1481, 159, 53]
+    }
+  ],
+  "handy--caveat": [
+    {
+      "text": "Sollten Handys in der Schule verboten werden?",
+      "bbox": [157, 130, 875, 47]
+    },
+    {
+      "text": "Diese Frage wird an unserer Schule gerade heftich",
+      "bbox": [156, 192, 952, 57]
+    },
+    {
+      "text": "diskutiert. Einerseits lenken Handys im Unterricht",
+      "bbox": [158, 256, 946, 51]
+    },
+    {
+      "text": "stark ab. Wer ständig auf das Display schaut",
+      "bbox": [159, 315, 864, 54]
+    },
+    {
+      "text": "bekommt nicht mit, was die Lehrerin erklärt.",
+      "bbox": [162, 379, 837, 43]
+    },
+    {
+      "text": "Außerdem gibt es in den Pausen immer wieder",
+      "bbox": [159, 444, 848, 54]
+    },
+    {
+      "text": "Streit, weil Fotos ohne erlaubnis verschickt werden.",
+      "bbox": [150, 506, 976, 51]
+    },
+    {
+      "text": "Andererseits ist das Handy ein nüzliches Werkzeug.",
+      "bbox": [148, 575, 944, 51]
+    },
+    {
+      "text": "Man kann damit schnell unbekannte wörter",
+      "bbox": [158, 641, 858, 44]
+    },
+    {
+      "text": "nachschlagen oder die Hausaufgaben notieren. Viele",
+      "bbox": [156, 700, 984, 52]
+    },
+    {
+      "text": "Eltern möchte außerdem, das ihre Kinder nach der",
+      "bbox": [161, 771, 975, 52]
+    },
+    {
+      "text": "Schule erreichbar sind. Ein komplettes Verbot",
+      "bbox": [165, 824, 868, 54]
+    },
+    {
+      "text": "halte ich deshalb nicht für sinvoll. Besser wäre es",
+      "bbox": [164, 894, 943, 45]
+    },
+    {
+      "text": "wenn die Handys im Unterricht ausgeschaltet in",
+      "bbox": [155, 953, 900, 53]
+    },
+    {
+      "text": "der Tasche bleiben und nur auf Anweisung benutzt",
+      "bbox": [158, 1024, 960, 51]
+    },
+    {
+      "text": "werden dürfen. In den Pausen sollte es eine feste",
+      "bbox": [154, 1082, 909, 51]
+    },
+    {
+      "text": "Zone geben in der man telefonieren darf. So lernen",
+      "bbox": [162, 1145, 954, 52]
+    },
+    {
+      "text": "wir, verantwortungsvol mit dem Handy umzugehen,",
+      "bbox": [153, 1212, 927, 52]
+    },
+    {
+      "text": "und der Unterricht wird trotzdem nicht gestört.",
+      "bbox": [164, 1281, 907, 50]
+    }
+  ],
+  "handy--indieflower": [
+    {
+      "text": "Sollten Handys in der Schule verboten werden?",
+      "bbox": [156, 129, 876, 54]
+    },
+    {
+      "text": "Diese Frage wird an unserer Schule gerade",
+      "bbox": [152, 199, 828, 62]
+    },
+    {
+      "text": "heftich diskutiert. Einerseits lenken Handys im",
+      "bbox": [144, 250, 891, 54]
+    },
+    {
+      "text": "Unterricht stark ab. Wer ständig auf das Display",
+      "bbox": [145, 319, 953, 60]
+    },
+    {
+      "text": "schaut bekommt nicht mit, was die Lehrerin erklärt.",
+      "bbox": [148, 382, 987, 49]
+    },
+    {
+      "text": "Außerdem gibt es in den Pausen immer wieder",
+      "bbox": [152, 450, 898, 61]
+    },
+    {
+      "text": "Streit, weil Fotos ohne erlaubnis verschickt",
+      "bbox": [152, 506, 809, 51]
+    },
+    {
+      "text": "werden. Andererseits ist das Handy ein nüzliches",
+      "bbox": [151, 575, 957, 61]
+    },
+    {
+      "text": "Werkzeug. Man kann damit schnell unbekannte",
+      "bbox": [157, 636, 903, 63]
+    },
+    {
+      "text": "wörter nachschlagen oder die Hausaufgaben",
+      "bbox": [147, 700, 872, 62]
+    },
+    {
+      "text": "notieren. Viele Eltern möchte außerdem, das ihre",
+      "bbox": [155, 773, 899, 45]
+    },
+    {
+      "text": "Kinder nach der Schule erreichbar sind. Ein",
+      "bbox": [149, 830, 800, 45]
+    },
+    {
+      "text": "komplettes Verbot halte ich deshalb nicht für",
+      "bbox": [157, 894, 833, 56]
+    },
+    {
+      "text": "sinvoll. Besser wäre es wenn die Handys im",
+      "bbox": [160, 959, 854, 58]
+    },
+    {
+      "text": "Unterricht ausgeschaltet in der Tasche bleiben",
+      "bbox": [153, 1025, 884, 63]
+    },
+    {
+      "text": "und nur auf Anweisung benutzt werden dürfen.",
+      "bbox": [161, 1077, 949, 69]
+    },
+    {
+      "text": "In den Pausen sollte es eine feste Zone geben in",
+      "bbox": [149, 1153, 953, 56]
+    },
+    {
+      "text": "der man telefonieren darf. So lernen wir,",
+      "bbox": [159, 1214, 775, 45]
+    },
+    {
+      "text": "verantwortungsvol mit dem Handy umzugehen,",
+      "bbox": [153, 1284, 884, 60]
+    },
+    {
+      "text": "und der Unterricht wird trotzdem nicht gestört.",
+      "bbox": [163, 1336, 897, 61]
+    }
+  ],
+  "inhaltsangabe--grundschrift": [
+    {
+      "text": "In der Kurzgeschichte „Das Brot“ von Wolfgang",
+      "bbox": [144, 118, 959, 68]
+    },
+    {
+      "text": "Borchert geht es um ein älteres Ehepaar, das",
+      "bbox": [150, 190, 896, 60]
+    },
+    {
+      "text": "seit neununddreisig Jahren verheiratet ist.",
+      "bbox": [154, 252, 817, 61]
+    },
+    {
+      "text": "Eines Nachts wacht die Frau auf, weil sie ein",
+      "bbox": [150, 310, 912, 60]
+    },
+    {
+      "text": "Gereusch aus der Küche hört. Dort findet sie",
+      "bbox": [150, 367, 893, 57]
+    },
+    {
+      "text": "ihren Mann der behauptet, er hätte",
+      "bbox": [151, 447, 723, 56]
+    },
+    {
+      "text": "nachgesehen, ob alles in Ordnung ist. Auf dem",
+      "bbox": [152, 493, 943, 80]
+    },
+    {
+      "text": "Tisch liegen jedoch Brotkrümmel, und die Frau",
+      "bbox": [146, 573, 930, 65]
+    },
+    {
+      "text": "merkt sofort, das er heimlich eine Scheibe Brot",
+      "bbox": [154, 625, 951, 69]
+    },
+    {
+      "text": "gegessen hat. Obwohl sie die Lüge",
+      "bbox": [159, 696, 698, 64]
+    },
+    {
+      "text": "durchschaut, spricht sie ihm nicht darauf an.",
+      "bbox": [155, 766, 926, 62]
+    },
+    {
+      "text": "Statt dessen tut sie so, als hätte sie nichts",
+      "bbox": [159, 831, 861, 49]
+    },
+    {
+      "text": "bemerkt, und sie gehen wieder ins Bett. Am",
+      "bbox": [149, 897, 881, 60]
+    },
+    {
+      "text": "nächsten Abend schiebt sie ihn eine ihrer",
+      "bbox": [156, 957, 805, 45]
+    },
+    {
+      "text": "eigenen Brotscheiben zu und behauptet, sie",
+      "bbox": [156, 1017, 851, 65]
+    },
+    {
+      "text": "vertrage das Brot abends nicht. Die Geschichte",
+      "bbox": [161, 1075, 968, 74]
+    },
+    {
+      "text": "zeigt, wie die Not der nachkriegszeit eine",
+      "bbox": [164, 1148, 835, 61]
+    },
+    {
+      "text": "Beziehung belastet und wie die Frau ihren",
+      "bbox": [165, 1216, 836, 58]
+    },
+    {
+      "text": "Mann trotzdem schützt.",
+      "bbox": [164, 1278, 480, 44]
+    }
+  ],
+  "inhaltsangabe--schulausgangsschrift": [
+    {
+      "text": "In der Kurzgeschichte „Das Brot“ von",
+      "bbox": [151, 122, 789, 54]
+    },
+    {
+      "text": "Wolfgang Borchert geht es um ein älteres",
+      "bbox": [158, 191, 907, 58]
+    },
+    {
+      "text": "Ehepaar, das seit neununddreisig Jahren",
+      "bbox": [153, 252, 843, 57]
+    },
+    {
+      "text": "verheiratet ist. Eines Nachts wacht die Frau",
+      "bbox": [150, 316, 967, 43]
+    },
+    {
+      "text": "auf, weil sie ein Gereusch aus der Küche hört.",
+      "bbox": [159, 374, 952, 62]
+    },
+    {
+      "text": "Dort findet sie ihren Mann der behauptet,",
+      "bbox": [147, 438, 909, 63]
+    },
+    {
+      "text": "er hätte nachgesehen, ob alles in Ordnung",
+      "bbox": [137, 504, 920, 59]
+    },
+    {
+      "text": "ist. Auf dem Tisch liegen jedoch",
+      "bbox": [150, 575, 670, 59]
+    },
+    {
+      "text": "Brotkrümmel, und die Frau merkt sofort,",
+      "bbox": [155, 635, 870, 57]
+    },
+    {
+      "text": "das er heimlich eine Scheibe Brot gegessen",
+      "bbox": [151, 702, 883, 54]
+    },
+    {
+      "text": "hat. Obwohl sie die Lüge durchschaut,",
+      "bbox": [143, 765, 806, 59]
+    },
+    {
+      "text": "spricht sie ihm nicht darauf an. Statt",
+      "bbox": [151, 831, 840, 55]
+    },
+    {
+      "text": "dessen tut sie so, als hätte sie nichts",
+      "bbox": [154, 897, 805, 49]
+    },
+    {
+      "text": "bemerkt, und sie gehen wieder ins Bett. Am",
+      "bbox": [140, 950, 936, 58]
+    },
+    {
+      "text": "nächsten Abend schiebt sie ihn eine ihrer",
+      "bbox": [154, 1016, 878, 47]
+    },
+    {
+      "text": "eigenen Brotscheiben zu und behauptet, sie",
+      "bbox": [144, 1086, 894, 58]
+    },
+    {
+      "text": "vertrage das Brot abends nicht. Die",
+      "bbox": [150, 1150, 761, 54]
+    },
+    {
+      "text": "Geschichte zeigt, wie die Not der",
+      "bbox": [159, 1214, 706, 57]
+    },
+    {
+      "text": "nachkriegszeit eine Beziehung belastet und",
+      "bbox": [150, 1270, 888, 61]
+    },
+    {
+      "text": "wie die Frau ihren Mann trotzdem schützt.",
+      "bbox": [151, 1339, 930, 43]
+    }
+  ],
+  "inhaltsangabe--caveat": [
+    {
+      "text": "In der Kurzgeschichte „Das Brot“ von Wolfgang",
+      "bbox": [155, 121, 903, 52]
+    },
+    {
+      "text": "Borchert geht es um ein älteres Ehepaar, das seit",
+      "bbox": [148, 183, 950, 56]
+    },
+    {
+      "text": "neununddreisig Jahren verheiratet ist. Eines",
+      "bbox": [149, 252, 820, 50]
+    },
+    {
+      "text": "Nachts wacht die Frau auf, weil sie ein Gereusch",
+      "bbox": [158, 322, 935, 43]
+    },
+    {
+      "text": "aus der Küche hört. Dort findet sie ihren Mann",
+      "bbox": [147, 379, 913, 48]
+    },
+    {
+      "text": "der behauptet, er hätte nachgesehen, ob alles in",
+      "bbox": [156, 451, 899, 50]
+    },
+    {
+      "text": "Ordnung ist. Auf dem Tisch liegen jedoch",
+      "bbox": [164, 504, 738, 56]
+    },
+    {
+      "text": "Brotkrümmel, und die Frau merkt sofort, das er",
+      "bbox": [150, 575, 894, 47]
+    },
+    {
+      "text": "heimlich eine Scheibe Brot gegessen hat. Obwohl",
+      "bbox": [150, 639, 915, 50]
+    },
+    {
+      "text": "sie die Lüge durchschaut, spricht sie ihm nicht",
+      "bbox": [161, 699, 869, 52]
+    },
+    {
+      "text": "darauf an. Statt dessen tut sie so, als hätte sie",
+      "bbox": [150, 764, 904, 49]
+    },
+    {
+      "text": "nichts bemerkt, und sie gehen wieder ins Bett. Am",
+      "bbox": [164, 828, 943, 52]
+    },
+    {
+      "text": "nächsten Abend schiebt sie ihn eine ihrer eigenen",
+      "bbox": [159, 889, 934, 52]
+    },
+    {
+      "text": "Brotscheiben zu und behauptet, sie vertrage das",
+      "bbox": [159, 960, 892, 53]
+    },
+    {
+      "text": "Brot abends nicht. Die Geschichte zeigt, wie die",
+      "bbox": [151, 1023, 910, 52]
+    },
+    {
+      "text": "Not der nachkriegszeit eine Beziehung belastet und",
+      "bbox": [153, 1077, 988, 55]
+    },
+    {
+      "text": "wie die Frau ihren Mann trotzdem schützt.",
+      "bbox": [167, 1154, 797, 44]
+    }
+  ],
+  "inhaltsangabe--indieflower": [
+    {
+      "text": "In der Kurzgeschichte „Das Brot“ von Wolfgang",
+      "bbox": [153, 129, 882, 58]
+    },
+    {
+      "text": "Borchert geht es um ein älteres Ehepaar, das seit",
+      "bbox": [143, 192, 973, 62]
+    },
+    {
+      "text": "neununddreisig Jahren verheiratet ist. Eines",
+      "bbox": [152, 258, 828, 60]
+    },
+    {
+      "text": "Nachts wacht die Frau auf, weil sie ein Gereusch",
+      "bbox": [155, 327, 936, 44]
+    },
+    {
+      "text": "aus der Küche hört. Dort findet sie ihren Mann",
+      "bbox": [152, 389, 892, 40]
+    },
+    {
+      "text": "der behauptet, er hätte nachgesehen, ob alles in",
+      "bbox": [150, 447, 896, 59]
+    },
+    {
+      "text": "Ordnung ist. Auf dem Tisch liegen jedoch",
+      "bbox": [150, 510, 773, 67]
+    },
+    {
+      "text": "Brotkrümmel, und die Frau merkt sofort, das er",
+      "bbox": [148, 577, 926, 44]
+    },
+    {
+      "text": "heimlich eine Scheibe Brot gegessen hat. Obwohl",
+      "bbox": [158, 634, 922, 61]
+    },
+    {
+      "text": "sie die Lüge durchschaut, spricht sie ihm nicht",
+      "bbox": [153, 706, 888, 61]
+    },
+    {
+      "text": "darauf an. Statt dessen tut sie so, als hätte sie",
+      "bbox": [159, 766, 948, 45]
+    },
+    {
+      "text": "nichts bemerkt, und sie gehen wieder ins Bett. Am",
+      "bbox": [156, 836, 972, 62]
+    },
+    {
+      "text": "nächsten Abend schiebt sie ihn eine ihrer eigenen",
+      "bbox": [159, 901, 919, 59]
+    },
+    {
+      "text": "Brotscheiben zu und behauptet, sie vertrage das",
+      "bbox": [144, 958, 971, 62]
+    },
+    {
+      "text": "Brot abends nicht. Die Geschichte zeigt, wie die",
+      "bbox": [153, 1020, 905, 55]
+    },
+    {
+      "text": "Not der nachkriegszeit eine Beziehung belastet",
+      "bbox": [156, 1088, 882, 59]
+    },
+    {
+      "text": "und wie die Frau ihren Mann trotzdem schützt.",
+      "bbox": [151, 1152, 887, 40]
+    }
+  ]
+}
