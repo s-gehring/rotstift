@@ -126,6 +126,17 @@ function applyEvent(state: SetupState, event: DownloadEvent, at: number): SetupS
           }),
         },
       };
+    case 'verifying':
+      return known?.state === 'verifying'
+        ? {
+            ...state,
+            statuses: withStatus(state, {
+              ...known,
+              downloadedBytes: event.downloadedBytes,
+              totalBytes: event.totalBytes,
+            }),
+          }
+        : state;
     case 'done':
       return {
         ...state,
@@ -178,9 +189,12 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
       return { ...state, statuses: withStatus(state, action.status) };
     case 'mark': {
       const known = state.statuses[action.modelId];
-      return known
-        ? { ...state, statuses: withStatus(state, { ...known, state: action.state }) }
-        : state;
+      if (known === undefined) return state;
+      const downloadedBytes = action.state === 'verifying' ? 0 : known.downloadedBytes;
+      return {
+        ...state,
+        statuses: withStatus(state, { ...known, state: action.state, downloadedBytes }),
+      };
     }
     case 'event':
       return applyEvent(state, action.event, action.at);

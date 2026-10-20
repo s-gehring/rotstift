@@ -117,9 +117,18 @@ export function App() {
                   status={transcriber}
                   arbeiten={importState.arbeiten}
                   download={setup.status}
+                  loadError={setup.loadError}
+                  onRetry={() => {
+                    void setup.refresh();
+                  }}
                 />
                 <ReviewHint
                   corrector={corrector}
+                  check={correction.setup.setup.status}
+                  loadError={correction.setup.setup.loadError}
+                  onRetry={() => {
+                    void correction.setup.setup.refresh();
+                  }}
                   onSetup={correction.setup.openSetup}
                   {...(hasTexts && { onCheckTexts: checkTexts })}
                 />

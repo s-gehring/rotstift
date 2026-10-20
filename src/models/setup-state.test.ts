@@ -218,6 +218,30 @@ describe('setupReducer', () => {
     expect(refreshed.selectedId).toBe(STRONGER);
   });
 
+  it('follows the check progress only while the model is being checked', () => {
+    const unverified = loaded({ ...missing, state: 'unverified', downloadedBytes: 1000 });
+    const checking = setupReducer(unverified, {
+      type: 'mark',
+      modelId: model.id,
+      state: 'verifying',
+    });
+    expect(checking.statuses[model.id]).toMatchObject({ state: 'verifying', downloadedBytes: 0 });
+    const checked = {
+      type: 'event',
+      at: 0,
+      event: { modelId: model.id, state: 'verifying', downloadedBytes: 400, totalBytes: 1000 },
+    } as const;
+    expect(setupReducer(checking, checked).statuses[model.id]).toMatchObject({
+      state: 'verifying',
+      downloadedBytes: 400,
+    });
+    const done = setupReducer(checking, {
+      type: 'status',
+      status: { ...missing, state: 'ready', downloadedBytes: 1000 },
+    });
+    expect(setupReducer(done, checked)).toBe(done);
+  });
+
   it('marks the state of a known model and ignores unknown ones', () => {
     const state = loaded();
     const marked = setupReducer(state, { type: 'mark', modelId: model.id, state: 'verifying' });

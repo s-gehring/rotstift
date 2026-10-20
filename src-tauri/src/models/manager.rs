@@ -11,7 +11,9 @@ use super::download::{
 };
 use super::import::{ImportOutcome, import_files};
 use super::registry::{ModelEntry, ModelFile, registry};
-use super::verified::{has_valid_marker, marker_path, remove_marker, verify_uninterrupted};
+use super::verified::{
+    has_valid_marker, marker_path, remove_marker, verify_uninterrupted, verify_with_progress,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +41,7 @@ pub struct ModelStatus {
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum Update {
     Progress(Progress),
+    Verifying(Progress),
     Done,
     Cancelled,
     Failed { error: DownloadError },
@@ -171,6 +174,35 @@ async fn inspect(dir: &Path, entry: &ModelEntry) -> ModelStatus {
     }
 }
 
+struct VerifyReport<'a> {
+    model_id: &'a str,
+    progress: Arc<Mutex<Progress>>,
+    emit: Emitter,
+    reported: u64,
+}
+
+impl VerifyReport<'_> {
+    fn advance(&mut self, bytes: u64) {
+        let update = {
+            let mut progress = self.progress.lock().unwrap_or_else(|p| p.into_inner());
+            progress.downloaded_bytes =
+                (progress.downloaded_bytes + bytes).min(progress.total_bytes);
+            *progress
+        };
+        let step = (update.total_bytes / 100).max(1);
+        if update.downloaded_bytes - self.reported < step
+            && update.downloaded_bytes < update.total_bytes
+        {
+            return;
+        }
+        self.reported = update.downloaded_bytes;
+        (self.emit)(DownloadEvent {
+            model_id: self.model_id.to_owned(),
+            update: Update::Verifying(update),
+        });
+    }
+}
+
 impl ModelManager {
     pub fn new() -> Self {
         Self {
@@ -223,7 +255,7 @@ impl ModelManager {
             Some((kind, progress)) => ModelStatus {
                 model_id: entry.id.clone(),
                 state: kind.state(),
-                downloaded_bytes: 0,
+                downloaded_bytes: progress.downloaded_bytes,
                 total_bytes: progress.total_bytes,
             },
             None => inspect(dir, entry).await,
@@ -319,13 +351,28 @@ impl ModelManager {
         self: &Arc<Self>,
         dir: &Path,
         entry: &'static ModelEntry,
+        emit: Emitter,
     ) -> Result<ModelStatus, DownloadError> {
-        let _reservation = self.reserve(entry, JobKind::Verify)?;
+        let mut reservation = self.reserve(entry, JobKind::Verify)?;
+        let mut checks = VerifyReport {
+            model_id: &entry.id,
+            progress: Arc::clone(&reservation.progress),
+            emit,
+            reported: 0,
+        };
         for file in entry.file_list() {
             let complete = installed_bytes(dir, file).await == Some(file.bytes);
-            if complete && !has_valid_marker(dir, file) && !verify_uninterrupted(dir, file).await? {
-                remove_marker(dir, file);
-                fs::remove_file(dir.join(&file.name)).await?;
+            if complete && !has_valid_marker(dir, file) {
+                let valid = verify_with_progress(dir, file, &mut reservation.cancel, &mut |read| {
+                    checks.advance(read);
+                })
+                .await?;
+                if !valid {
+                    remove_marker(dir, file);
+                    fs::remove_file(dir.join(&file.name)).await?;
+                }
+            } else {
+                checks.advance(file.bytes);
             }
         }
         Ok(inspect(dir, entry).await)

@@ -416,6 +416,15 @@ pub(super) async fn seed_hasher(
     hasher: &mut Sha256,
     cancel: &mut watch::Receiver<bool>,
 ) -> Result<(), DownloadError> {
+    hash_file(path, hasher, cancel, &mut |_| {}).await
+}
+
+pub(super) async fn hash_file(
+    path: &Path,
+    hasher: &mut Sha256,
+    cancel: &mut watch::Receiver<bool>,
+    on_read: &mut (dyn FnMut(u64) + Send),
+) -> Result<(), DownloadError> {
     let mut reader = File::open(path).await?;
     let mut buffer = vec![0u8; BUFFER_BYTES];
     loop {
@@ -427,5 +436,6 @@ pub(super) async fn seed_hasher(
             return Ok(());
         }
         hasher.update(&buffer[..read]);
+        on_read(read as u64);
     }
 }

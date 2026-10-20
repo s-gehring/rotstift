@@ -7,7 +7,7 @@ import { DEFAULT_MODEL_ID, recommendModel } from './registry.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 import { useModelSetup } from './use-model-setup.ts';
 import { errorOf } from './setup-state.ts';
-import type { ModelState, ModelStatus } from './types.ts';
+import type { DownloadEvent, ModelState, ModelStatus } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -111,6 +111,37 @@ describe('useModelSetup verification', () => {
     await mount(client);
     await vi.waitFor(() => expect(container.textContent).toBe('ready'));
     expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('shows the check progress without reloading the status for every step', async () => {
+    const handlers: ((event: DownloadEvent) => void)[] = [];
+    const { client, status } = fakeClient('unverified', new Promise<ModelStatus>(() => undefined), {
+      onDownload: (handler) => {
+        handlers.push(handler);
+        return Promise.resolve(() => undefined);
+      },
+    });
+    await mount(client);
+    await vi.waitFor(() => expect(latest?.status).toMatchObject({ downloadedBytes: 0 }));
+    const calls = status.mock.calls.length;
+    act(() => {
+      for (const handler of handlers) {
+        handler({ modelId: model.id, state: 'verifying', downloadedBytes: 40, totalBytes: 100 });
+      }
+    });
+    expect(latest?.status).toMatchObject({ state: 'verifying', downloadedBytes: 40 });
+    expect(status).toHaveBeenCalledTimes(calls);
+  });
+
+  it('reports a failed first lookup separately from model errors', async () => {
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      status: () => Promise.reject(new ModelCallError({ kind: 'io', detail: 'unknown path' })),
+    });
+    await mount(client);
+    await vi.waitFor(() =>
+      expect(latest?.loadError).toEqual({ kind: 'io', detail: 'unknown path' }),
+    );
+    expect(latest?.status).toBeNull();
   });
 
   it('refreshes the model status on request', async () => {

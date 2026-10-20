@@ -27,7 +27,8 @@ export const CORRECTOR_MISSING_MESSAGE =
 
 export const CORRECTOR_DESKTOP_ONLY = 'Die Korrektur steht nur in der Desktop-App zur Verfügung.';
 
-const VERIFYING_MESSAGE = 'Das Korrekturmodell wird geprüft. Das dauert einen Moment.';
+const VERIFYING_MESSAGE =
+  'Rotstift prüft einmalig, ob die Dateien des Korrekturmodells vollständig und unbeschädigt sind.';
 
 const MODEL_MESSAGE: Readonly<Record<Exclude<ModelState, 'ready'>, string>> = {
   missing: CORRECTOR_MISSING_MESSAGE,

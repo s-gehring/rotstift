@@ -430,7 +430,8 @@ button.danger:hover:not(:disabled) {
   background: var(--surface);
 }
 
-.download-progress progress {
+.download-progress progress,
+.check-progress {
   width: 100%;
   accent-color: var(--accent);
 }

@@ -51,7 +51,7 @@ describe('sidecarCorrectorStatus', () => {
 
   it.each([
     ['downloading', 'heruntergeladen'],
-    ['unverified', 'geprüft'],
+    ['unverified', 'prüft einmalig'],
     ['corrupt', 'beschädigt'],
   ] as const)('describes the model state %s', (state, text) => {
     const status = sidecarCorrectorStatus({ state, corrector: null });
