@@ -1,4 +1,5 @@
-import { LlmCallError, visionMessage } from '../llm/client.ts';
+import { readWords, type PageReading } from '../correction/uncertain-reading.ts';
+import { LlmCallError, visionMessage, type Completion } from '../llm/client.ts';
 import {
   createLlmEngine,
   type EngineClient,
@@ -101,6 +102,16 @@ function incomplete(message: string): TranscribeResult {
   return { ok: false, error: { kind: 'failed', message } };
 }
 
+function pageReading(
+  answer: Completion,
+  lines: readonly string[],
+  uncertainBelow: number | null,
+): PageReading | null {
+  if (uncertainBelow === null || answer.logprobs === undefined) return null;
+  const words = readWords(answer.text, answer.logprobs, lines);
+  return words === null ? null : { words, uncertainBelow };
+}
+
 export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
   const { client, model } = deps;
   const encode = deps.encode ?? modelImage;
@@ -129,6 +140,7 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
             messages: [visionMessage(model.prompt, [image])],
             temperature: model.request.temperature,
             max_tokens: model.request.maxOutputTokens,
+            ...(model.request.uncertainBelow !== null && { logprobs: true }),
           },
           { signal },
         );
@@ -137,7 +149,8 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
         const { lines, removedThinking } = parseTranscript(answer.text);
         if (removedThinking && lines.length === 0) return incomplete(INCOMPLETE_MESSAGE);
         if (hasRepetitionLoop(lines)) return incomplete(LOOP_MESSAGE);
-        return { ok: true, lines, startupMs: lease.startupMs };
+        const reading = pageReading(answer, lines, model.request.uncertainBelow);
+        return { ok: true, lines, startupMs: lease.startupMs, ...(reading && { reading }) };
       } catch (error) {
         if (signal.aborted) return { ok: false, error: { kind: 'cancelled' } };
         if (error instanceof LlmCallError && error.error.kind === 'exitedUnexpectedly') {

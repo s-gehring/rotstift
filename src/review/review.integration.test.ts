@@ -195,6 +195,7 @@ describe.skipIf(!available)('Berichtigen end to end with the real sidecar', () =
       }
 
       for (const page of pages) {
+        expect(runner.getState().entries[page.id]?.reading?.words.length).toBeGreaterThan(0);
         const result = state.pages[page.id]?.result;
         if (result === undefined || result === null) throw new Error(`no result for ${page.id}`);
         const marks = result.transcript.lines.reduce((sum, line) => sum + line.marks.length, 0);
@@ -211,7 +212,7 @@ describe.skipIf(!available)('Berichtigen end to end with the real sidecar', () =
         });
         writeFileSync(join(OUT, `${page.id}.png`), new Uint8Array(await png.arrayBuffer()));
         report.push(
-          `${page.id}: ${marks} Markierungen, ${located}/${result.transcript.lines.length} Zeilen verortet, ${model.items.length} Notizen gezeichnet, ${result.droppedMarks} verworfen`,
+          `${page.id}: ${marks} Markierungen, ${result.hints.length} Hinweise unsicher gelesen, ${result.statistics.words} Wörter, ${located}/${result.transcript.lines.length} Zeilen verortet, ${model.items.length} Notizen gezeichnet, ${result.droppedMarks} verworfen`,
         );
       }
 

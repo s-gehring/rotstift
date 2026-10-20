@@ -1,3 +1,5 @@
+import type { PageReading } from '../correction/uncertain-reading.ts';
+
 export type TranscribeError =
   | { readonly kind: 'unavailable'; readonly message: string }
   | { readonly kind: 'cancelled' }
@@ -9,7 +11,12 @@ export type TranscribeError =
     };
 
 export type TranscribeResult =
-  | { readonly ok: true; readonly lines: readonly string[]; readonly startupMs?: number }
+  | {
+      readonly ok: true;
+      readonly lines: readonly string[];
+      readonly startupMs?: number;
+      readonly reading?: PageReading;
+    }
   | { readonly ok: false; readonly error: TranscribeError };
 
 export type PagePhase =

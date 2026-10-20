@@ -50,6 +50,33 @@ describe('createReviewExport', () => {
     expect(await encode.mock.calls[0]?.[0].image.text()).toBe('png-b');
   });
 
+  it('exports hints only after they were accepted as marks', async () => {
+    const harness = setupReview(['a']);
+    harness.h.transcripts.a = {
+      ok: true,
+      lines: ['Ich war im Schwimbad.', 'Es war schön.'],
+      reading: { words: [{ text: 'Schwimbad.', confidence: 0.3 }], uncertainBelow: 0.95 },
+    };
+    await harness.flow.start(harness.pages, DEUTSCH);
+    const arbeit: Arbeit = { id: 'x', name: 'Aufsatz Ada', pages: harness.pages };
+    const exporter = createReviewExport();
+    const entries = harness.runner.getState().entries;
+    const exported = () =>
+      exporter.correctedArbeit(arbeit, harness.flow.getState(), entries, DEUTSCH);
+    const marks = () => exported()?.pages[0]?.transcript?.lines.flatMap((line) => line.marks);
+
+    expect(exported()?.statistics).toMatchObject({ words: 7, errors: 0 });
+    expect(marks()).toEqual([]);
+
+    harness.flow.cycleHint('a', 0);
+    expect(exported()?.statistics).toMatchObject({ errors: 1 });
+    expect(marks()).toEqual([expect.objectContaining({ correction: 'Schwimmbad' })]);
+
+    harness.flow.cycleHint('a', 0);
+    expect(exported()?.statistics).toMatchObject({ errors: 0 });
+    expect(marks()).toEqual([]);
+  });
+
   it('leaves incomplete and preview Arbeiten out', async () => {
     const { pages, h, flow, runner, complete, other, corrector } = await reviewed();
     h.corrections['Der Tag war lang.'] = {

@@ -144,6 +144,61 @@ describe('ReviewView', () => {
     expect(total?.textContent).toContain('2 Arbeiten, davon 1 unvollständig');
   });
 
+  it('shows uncertainly read places as hints that a click accepts and a second click discards', async () => {
+    const harness = setupReview(['a']);
+    harness.h.transcripts.a = {
+      ok: true,
+      lines: ['Ich war im Schwimbad.', 'Es war schön.'],
+      reading: { words: [{ text: 'Schwimbad.', confidence: 0.3 }], uncertainBelow: 0.95 },
+    };
+    await harness.flow.start(harness.pages, DEUTSCH);
+    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
+    act(() =>
+      root.render(<Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} />),
+    );
+    const head = () => pageItem(1).querySelector('.review-page-head')?.textContent;
+    const spot = () => pageItem(1).querySelector<SVGGElement>('.hint-spot');
+
+    expect(head()).toContain('0 Fehler');
+    expect(head()).toContain('1 Stelle unsicher gelesen');
+    expect(pageItem(1).querySelectorAll('.mark-list li')).toHaveLength(0);
+    expect(pageItem(1).querySelector('.hint-list summary')?.textContent).toBe(
+      '1 Stelle unsicher gelesen',
+    );
+    const item = pageItem(1).querySelector('.hint-list li');
+    expect(item?.textContent).toContain('„Schwimbad“ → „Schwimmbad“ (unsicher gelesen)');
+    expect(spot()?.getAttribute('role')).toBe('button');
+    expect(spot()?.getAttribute('tabindex')).toBe('0');
+    expect(spot()?.getAttribute('aria-label')).toBe(
+      'Unsicher gelesen: „Schwimbad“ → „Schwimmbad“. Als Fehler übernehmen',
+    );
+    expect(spot()?.querySelector('line')?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(spot()?.querySelector('text')).toBeNull();
+    act(() => {
+      spot()?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    });
+    expect(spot()?.querySelector('text')?.textContent).toBe('„Schwimbad“ → „Schwimmbad“');
+
+    act(() => buttonNamed('Als Fehler übernehmen').click());
+    expect(head()).toContain('1 Fehler');
+    expect(head()).not.toContain('unsicher gelesen');
+    expect(pageItem(1).querySelectorAll('.mark-list li')).toHaveLength(1);
+    expect(pageItem(1).querySelector('.hint-list li')?.textContent).toContain(
+      '(als Fehler übernommen)',
+    );
+    expect(container.querySelector('.class-overview tbody tr')?.textContent).toContain('R (1)');
+    expect(spot()?.querySelector('line')).toBeNull();
+
+    act(() => {
+      spot()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(head()).toContain('0 Fehler');
+    expect(spot()).toBeNull();
+    expect(pageItem(1).querySelector('.hint-list li')?.textContent).toContain('(verworfen)');
+    act(() => buttonNamed('Wiederherstellen').click());
+    expect(head()).toContain('1 Stelle unsicher gelesen');
+  });
+
   it('switches between the page with notes and the original', async () => {
     await reviewed();
     const overlay = () => pageItem(1).querySelector('svg[aria-label="Korrekturen"]');

@@ -76,7 +76,7 @@ describe('registry', () => {
       license: 'Apache-2.0',
       recommendedRamGb: 16,
       server: { contextSize: 4096, imageMaxTokens: 1024, threads: null, gpuLayers: null },
-      request: { maxOutputTokens: 2048, temperature: 0, imageMaxEdge: 1536 },
+      request: { maxOutputTokens: 2048, temperature: 0, imageMaxEdge: 1536, uncertainBelow: 0.9 },
       prompt: TRANSCRIBE_PROMPT,
     });
     expect(stronger && totalBytes(stronger)).toBe(2_497_281_664 + 453_974_304);
@@ -181,6 +181,25 @@ describe('registry', () => {
     expect(parse({ ...corrector, id: DEFAULT_MODEL_ID }, corrector)).toThrow(
       'Standardmodell glm-ocr-q8',
     );
+  });
+
+  it('takes the reading threshold of each transcriber from the registry', () => {
+    expect(recommendModel().request.uncertainBelow).toBe(0.95);
+    expect(findModel('qwen3-vl-4b-q4')?.request.uncertainBelow).toBe(0.9);
+    const transcriber = recommendModel();
+    const corrector = defaultCorrector();
+    const withThreshold = (uncertainBelow: unknown) => ({
+      ...transcriber,
+      request: { ...transcriber.request, uncertainBelow },
+    });
+    expect(parse(withThreshold(null), corrector)).not.toThrow();
+    for (const invalid of [0, 1.2, -0.5, '0.9']) {
+      expect(parse(withThreshold(invalid), corrector)).toThrow(ZodError);
+    }
+    const { uncertainBelow: _omitted, ...withoutThreshold } = transcriber.request;
+    expect(parse({ ...transcriber, request: withoutThreshold }, corrector)).toThrow(ZodError);
+    const correctorRequest = { ...corrector.request, uncertainBelow: 0.95 };
+    expect(parse(transcriber, { ...corrector, request: correctorRequest })).toThrow(ZodError);
   });
 
   it('describes speed and accuracy of the stronger model only', () => {

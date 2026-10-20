@@ -637,6 +637,7 @@ fn leaked_entry_with_id(id: &str, model: ModelFile, mmproj: ModelFile) -> &'stat
             max_output_tokens: 512,
             temperature: 0.0,
             image_max_edge: Some(512),
+            uncertain_below: None,
         },
         line_mode: None,
         system: None,

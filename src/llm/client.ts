@@ -1,5 +1,12 @@
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import type { ChatMessage, ChatRequest, ChatResponse, LlmError, RuntimeStatus } from './types.ts';
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  LlmError,
+  RuntimeStatus,
+  TokenLogprob,
+} from './types.ts';
 
 export type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -10,6 +17,7 @@ export interface ChatOptions {
 export interface Completion {
   text: string;
   finishReason: string | null;
+  logprobs?: readonly TokenLogprob[];
 }
 
 export class LlmCallError extends Error {
@@ -66,7 +74,12 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
       if (typeof content !== 'string') {
         throw new LlmCallError({ kind: 'request', detail: 'response contains no message' });
       }
-      return { text: content, finishReason: choice?.finish_reason ?? null };
+      const logprobs = choice?.logprobs?.content;
+      return {
+        text: content,
+        finishReason: choice?.finish_reason ?? null,
+        ...(Array.isArray(logprobs) && { logprobs }),
+      };
     },
   };
 }

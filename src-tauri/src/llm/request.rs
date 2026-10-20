@@ -26,6 +26,8 @@ pub struct ChatRequest {
     seed: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logprobs: Option<bool>,
     #[serde(default, skip_deserializing)]
     stream: bool,
 }
@@ -182,6 +184,24 @@ mod tests {
                 "stream": false,
             })
         );
+    }
+
+    #[test]
+    fn forwards_logprobs_only_when_requested() {
+        let mut request = vision(PNG);
+        request["logprobs"] = json!(true);
+        let body = serde_json::to_value(ChatRequest::parse(request).unwrap()).unwrap();
+        assert_eq!(body["logprobs"], json!(true));
+        let body = serde_json::to_value(ChatRequest::parse(vision(PNG)).unwrap()).unwrap();
+        assert!(body.get("logprobs").is_none());
+        for field in ["top_logprobs", "n_probs"] {
+            let mut request = vision(PNG);
+            request[field] = json!(5);
+            assert!(rejection(request).contains("unknown field"), "{field}");
+        }
+        let mut request = vision(PNG);
+        request["logprobs"] = json!(5);
+        assert!(!rejection(request).is_empty());
     }
 
     #[test]

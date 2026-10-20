@@ -155,6 +155,7 @@ mod tests {
                 max_output_tokens: 1024,
                 temperature: 0.0,
                 image_max_edge: Some(1024),
+                uncertain_below: Some(0.95),
             },
             line_mode: None,
             system: None,

@@ -61,6 +61,26 @@ describe('createLlmClient', () => {
     });
   });
 
+  it('returns the token log probabilities of the first choice when the server sends them', async () => {
+    const tokens = [{ token: 'Hal', bytes: [72, 97, 108], logprob: -0.1 }];
+    const withTokens: ChatResponse = {
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: 'Hal' },
+          logprobs: { content: tokens },
+        },
+      ],
+    };
+    const { invoke } = fakeInvoke(withTokens);
+    await expect(createLlmClient(invoke).complete({ messages: [] })).resolves.toEqual({
+      text: 'Hal',
+      finishReason: 'stop',
+      logprobs: tokens,
+    });
+  });
+
   it('cancels the request in the runtime when the signal aborts', async () => {
     const calls: [string, Record<string, unknown> | undefined][] = [];
     const invoke: Invoke = (command, args) => {

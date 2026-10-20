@@ -37,6 +37,60 @@ describe('createReviewFlow', () => {
     expect(result?.result?.unplacedLines).toEqual([]);
   });
 
+  it('shows marks on uncertainly read words as hints that only count once accepted', async () => {
+    const { pages, h, flow } = setupReview(['a']);
+    h.transcripts.a = {
+      ok: true,
+      lines: ['Ich war im Schwimbad.', 'Es war schön.'],
+      reading: {
+        words: [
+          { text: 'Ich', confidence: 1 },
+          { text: 'Schwimbad.', confidence: 0.4 },
+        ],
+        uncertainBelow: 0.95,
+      },
+    };
+    await flow.start(pages, DEUTSCH);
+
+    const before = flow.getState().pages.a?.result;
+    expect(before?.transcript.lines[0]?.marks).toEqual([]);
+    expect(before?.statistics).toMatchObject({ words: 7, errors: 0 });
+    expect(before?.hints).toEqual([
+      expect.objectContaining({
+        line: 1,
+        status: 'open',
+        confidence: 0.4,
+        mark: expect.objectContaining({ original: 'Schwimbad', correction: 'Schwimmbad' }),
+      }),
+    ]);
+
+    flow.cycleHint('a', 0);
+    const accepted = flow.getState().pages.a?.result;
+    expect(accepted?.hints[0]?.status).toBe('accepted');
+    expect(accepted?.transcript.lines[0]?.marks).toEqual([
+      expect.objectContaining({ original: 'Schwimbad', correction: 'Schwimmbad' }),
+    ]);
+    expect(accepted?.statistics).toMatchObject({ errors: 1, errorsByType: { R: 1 } });
+
+    flow.cycleHint('a', 0);
+    const dismissed = flow.getState().pages.a?.result;
+    expect(dismissed?.hints[0]?.status).toBe('dismissed');
+    expect(dismissed?.transcript.lines[0]?.marks).toEqual([]);
+    expect(dismissed?.statistics.errors).toBe(0);
+
+    flow.cycleHint('a', 7);
+    flow.cycleHint('missing', 0);
+    expect(flow.getState().pages.a?.result).toBe(dismissed);
+  });
+
+  it('keeps every mark red when the transcript carries no reading confidence', async () => {
+    const { pages, flow } = setupReview(['a']);
+    await flow.start(pages, DEUTSCH);
+    const result = flow.getState().pages.a?.result;
+    expect(result?.hints).toEqual([]);
+    expect(result?.statistics.errors).toBe(1);
+  });
+
   it('reuses transcripts from the word count', async () => {
     const { pages, h, runner, flow } = setupReview();
     runner.start();

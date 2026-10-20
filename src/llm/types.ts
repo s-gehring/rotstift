@@ -40,6 +40,13 @@ export interface ChatRequest {
   max_tokens?: number;
   seed?: number;
   stop?: string[];
+  logprobs?: boolean;
+}
+
+export interface TokenLogprob {
+  token?: string;
+  bytes: number[];
+  logprob: number;
 }
 
 export interface ChatResponse {
@@ -47,6 +54,7 @@ export interface ChatResponse {
     index: number;
     finish_reason: string | null;
     message: { role: string; content: string | null };
+    logprobs?: { content: TokenLogprob[] | null } | null;
   }[];
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }

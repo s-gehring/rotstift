@@ -157,3 +157,9 @@ export function formatRate(rate: number): string {
 export function errorsText(count: number): string {
   return count === 1 ? '1 Fehler' : `${count.toLocaleString('de-DE')} Fehler`;
 }
+
+export function hintsText(count: number): string {
+  return count === 1
+    ? '1 Stelle unsicher gelesen'
+    : `${count.toLocaleString('de-DE')} Stellen unsicher gelesen`;
+}
