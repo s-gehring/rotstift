@@ -7,7 +7,11 @@ use super::process;
 use super::runtime::{
     LlmError, LlmRuntime, RuntimePaths, RuntimeStatus, StartOptions, installed_layout,
 };
-use crate::models::{self, ModelManager, registry::ModelEntry, system};
+use crate::models::{
+    self, ModelManager,
+    registry::{ModelEntry, Reasoning},
+    system,
+};
 
 const REPACK_MIN_RAM_BYTES: u64 = 12 * 1024 * 1024 * 1024;
 
@@ -47,6 +51,7 @@ pub fn start_options(entry: &ModelEntry, total_ram_bytes: u64) -> StartOptions {
         gpu_layers: entry.server.gpu_layers,
         image_max_tokens: entry.server.image_max_tokens,
         no_repack: !entry.server.cpu_repack && total_ram_bytes < REPACK_MIN_RAM_BYTES,
+        reasoning_off: entry.server.reasoning == Reasoning::Off,
     }
 }
 
@@ -106,6 +111,7 @@ mod tests {
         assert_eq!(small.image_max_tokens, None);
         assert!(small.no_repack);
         assert!(!start_options(corrector, 16 * GIB).no_repack);
+        assert!(small.reasoning_off);
     }
 
     #[test]
@@ -117,5 +123,6 @@ mod tests {
             Some(transcriber.files.mmproj.as_ref().unwrap().name.as_str())
         );
         assert!(!options.no_repack);
+        assert!(!options.reasoning_off);
     }
 }

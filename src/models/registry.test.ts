@@ -131,7 +131,13 @@ describe('registry', () => {
           bytes: 2_841_481_184,
         },
       },
-      server: { contextSize: 4096, threads: null, gpuLayers: null, cpuRepack: false },
+      server: {
+        contextSize: 4096,
+        threads: null,
+        gpuLayers: null,
+        cpuRepack: false,
+        reasoning: 'off',
+      },
       request: { maxOutputTokens: 2048, temperature: 0 },
       lineMode: 'numbered',
       prompt: '{text}',
@@ -167,6 +173,8 @@ describe('registry', () => {
     expect(parse({ ...transcriber, server: withoutThreads }, corrector)).toThrow(ZodError);
     const { cpuRepack: _dropped, ...server } = corrector.server;
     expect(parse(transcriber, { ...corrector, server })).toThrow(ZodError);
+    const thinking = { ...corrector.server, reasoning: 'on' };
+    expect(parse(transcriber, { ...corrector, server: thinking })).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, id: 'other-corrector' })).toThrow(
       'Standardmodell gemma-4-e2b-q4',
     );

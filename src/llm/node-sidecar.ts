@@ -51,6 +51,7 @@ function serverArguments(model: AnyModelInfo): string[] {
   const gpuLayers: string | number | null = process.env['ROTSTIFT_GPU_LAYERS'] ?? server.gpuLayers;
   if (gpuLayers !== null) args.push(['--n-gpu-layers', String(gpuLayers)]);
   if (!server.cpuRepack && NO_REPACK) args.push(['--no-repack']);
+  if (server.reasoning === 'off') args.push(['--reasoning', 'off']);
   return args.flat();
 }
 

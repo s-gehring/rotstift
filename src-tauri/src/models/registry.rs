@@ -51,6 +51,14 @@ pub struct ServerParams {
     pub threads: Option<u32>,
     pub gpu_layers: Option<u32>,
     pub cpu_repack: bool,
+    pub reasoning: Reasoning,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Reasoning {
+    Auto,
+    Off,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -410,6 +418,7 @@ mod tests {
         assert_eq!(corrector.total_bytes(), 2_841_481_184);
         assert_eq!(corrector.server.context_size, 4096);
         assert!(!corrector.server.cpu_repack);
+        assert_eq!(corrector.server.reasoning, Reasoning::Off);
         assert_eq!(corrector.line_mode, Some(LineMode::Numbered));
         assert_eq!(corrector.prompt, TEXT_PLACEHOLDER);
         assert!(
@@ -422,6 +431,7 @@ mod tests {
         let transcriber = registry().unwrap().find(DEFAULT_MODEL_ID).unwrap();
         assert_eq!(transcriber.role, Role::Transcriber);
         assert!(transcriber.server.cpu_repack);
+        assert_eq!(transcriber.server.reasoning, Reasoning::Auto);
     }
 
     #[test]
@@ -445,6 +455,16 @@ mod tests {
             m["server"].as_object_mut().unwrap().remove("cpuRepack");
         });
         assert!(error.contains("cpuRepack"), "{error}");
+    }
+
+    #[test]
+    fn rejects_unknown_or_missing_reasoning_modes() {
+        let error = rejection(|m| m["server"]["reasoning"] = json!("on"));
+        assert!(error.contains("unknown variant"), "{error}");
+        let error = rejection(|m| {
+            m["server"].as_object_mut().unwrap().remove("reasoning");
+        });
+        assert!(error.contains("reasoning"), "{error}");
     }
 
     #[test]

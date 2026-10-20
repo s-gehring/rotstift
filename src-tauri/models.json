@@ -25,7 +25,8 @@
         "imageMaxTokens": null,
         "threads": null,
         "gpuLayers": null,
-        "cpuRepack": true
+        "cpuRepack": true,
+        "reasoning": "auto"
       },
       "request": {
         "maxOutputTokens": 2048,
@@ -59,7 +60,8 @@
         "imageMaxTokens": 1024,
         "threads": null,
         "gpuLayers": null,
-        "cpuRepack": true
+        "cpuRepack": true,
+        "reasoning": "auto"
       },
       "request": {
         "maxOutputTokens": 2048,
@@ -86,7 +88,8 @@
         "contextSize": 4096,
         "threads": null,
         "gpuLayers": null,
-        "cpuRepack": false
+        "cpuRepack": false,
+        "reasoning": "off"
       },
       "request": {
         "maxOutputTokens": 2048,

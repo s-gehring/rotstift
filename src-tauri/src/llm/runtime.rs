@@ -38,6 +38,7 @@ pub struct StartOptions {
     pub image_max_tokens: Option<u32>,
     #[serde(default)]
     pub no_repack: bool,
+    pub reasoning_off: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -364,6 +365,7 @@ impl LlmRuntime {
                 "threads": options.threads,
                 "imageMaxTokens": options.image_max_tokens,
                 "noRepack": options.no_repack,
+                "reasoningOff": options.reasoning_off,
             }),
         );
         let log = read_log(child.stderr.take());
@@ -700,6 +702,9 @@ fn server_args(model: &Path, mmproj: Option<&Path>, options: &StartOptions) -> V
     if options.no_repack {
         args.push("--no-repack".into());
     }
+    if options.reasoning_off {
+        args.extend(["--reasoning".into(), "off".into()]);
+    }
     args
 }
 
@@ -762,6 +767,7 @@ mod tests {
             gpu_layers: None,
             image_max_tokens: None,
             no_repack: false,
+            reasoning_off: false,
         }
     }
 
@@ -828,6 +834,15 @@ mod tests {
         assert!(args.contains(&"--offline".into()));
         assert!(!args.contains(&"--no-repack".into()));
         assert!(!args.contains(&"--mmproj".into()));
+        assert!(!args.contains(&"--reasoning".into()));
+    }
+
+    #[test]
+    fn switches_reasoning_off_when_asked() {
+        let mut options = options("m.gguf");
+        options.reasoning_off = true;
+        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
+        assert!(args.windows(2).any(|pair| pair == ["--reasoning", "off"]));
     }
 
     #[test]

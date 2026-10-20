@@ -23,6 +23,7 @@ const serverFields = {
   threads: z.number().int().positive().nullable(),
   gpuLayers: z.number().int().nonnegative().nullable(),
   cpuRepack: z.boolean(),
+  reasoning: z.enum(['auto', 'off']),
 };
 
 const requestFields = {
