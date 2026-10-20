@@ -92,12 +92,13 @@ src/stats/        Statistik über korrigierte Texte
 src/llm/          Client für das lokale Modell (über Rust-Commands)
 src/models/       Modell-Registry, Einrichtungsdialog und Modellverwaltung
 src/pipeline/     Seiten erkennen: Adapter auf das lokale Modell, Fortschritt, Wiederholung
+src/overlay/      Korrekturen wie mit rotem Feinliner auf die Seite zeichnen (SVG-Ebene, PNG-Export)
 scripts/          Werkzeuge, etwa der Download der llama.cpp-Runtime
 src-tauri/        Tauri-Hülle in Rust (Fenster, Dateizugriff, llama-server-Sidecar)
 docs/adr/         Architekturentscheidungen
 ```
 
-Die Entscheidung für den Tech-Stack steht in [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md).
+Die Entscheidung für den Tech-Stack steht in [docs/adr/0001-tech-stack.md](docs/adr/0001-tech-stack.md), die Notation der Korrekturen auf der Seite in [docs/adr/0003-overlay.md](docs/adr/0003-overlay.md).
 
 ## Lizenz
 
