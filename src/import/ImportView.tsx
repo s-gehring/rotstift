@@ -26,6 +26,7 @@ interface ImportViewProps {
   readonly importState: ReturnType<typeof useImportPages>;
   readonly actions?: ReactNode;
   readonly footer?: ReactNode;
+  readonly locked?: boolean;
 }
 
 function ArbeitName({
@@ -56,7 +57,7 @@ function ArbeitName({
   );
 }
 
-export function ImportView({ importState, actions, footer }: ImportViewProps) {
+export function ImportView({ importState, actions, footer, locked = false }: ImportViewProps) {
   const { arbeiten, pages, dispatch, addFiles, busy, notices, dismissNotices } = importState;
   const [announcement, setAnnouncement] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -250,7 +251,12 @@ export function ImportView({ importState, actions, footer }: ImportViewProps) {
       {arbeiten.length === 0 ? (
         <p className="empty">{busy ? 'Seiten werden geladen …' : 'Noch keine Arbeiten geladen.'}</p>
       ) : (
-        <>
+        <fieldset className="import-lock" disabled={locked}>
+          {locked && (
+            <p className="hint">
+              Während der Berichtigung lassen sich die Arbeiten nicht verändern.
+            </p>
+          )}
           <div className="list-header">
             <p>
               {arbeitCountText(arbeiten.length)} · {pageCountText(pages.length)}
@@ -328,7 +334,7 @@ export function ImportView({ importState, actions, footer }: ImportViewProps) {
               </li>
             ))}
           </ul>
-        </>
+        </fieldset>
       )}
 
       <div className="submit-bar">{actions}</div>

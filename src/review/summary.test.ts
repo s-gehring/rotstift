@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ReviewPage, ReviewState } from './review-flow.ts';
-import { combineStatistics, sortedTypes, summarizeArbeit, summarizeClass } from './summary.ts';
+import {
+  combineStatistics,
+  incompleteText,
+  sortedTypes,
+  summarizeArbeit,
+  summarizeClass,
+  type Entries,
+} from './summary.ts';
 import { page } from './test-support.ts';
 
 function reviewPage(status: ReviewPage['status'], words = 0, byType: Record<string, number> = {}) {
@@ -12,6 +19,7 @@ function reviewPage(status: ReviewPage['status'], words = 0, byType: Record<stri
     source: null,
     image: null,
     bboxes: null,
+    warning: null,
     message: null,
     detail: null,
     result:
@@ -26,6 +34,7 @@ function reviewPage(status: ReviewPage['status'], words = 0, byType: Record<stri
             },
             droppedMarks: 0,
             unplacedLines: [],
+            preview: false,
           }
         : null,
   } satisfies ReviewPage;
@@ -34,6 +43,7 @@ function reviewPage(status: ReviewPage['status'], words = 0, byType: Record<stri
 const state: ReviewState = {
   profile: null,
   run: null,
+  stopping: false,
   outcome: 'finished',
   pages: {
     a: reviewPage('done', 100, { R: 3, Z: 1 }),
@@ -90,21 +100,56 @@ describe('summarizeArbeit', () => {
   it('counts corrected, empty and problem pages', () => {
     const [first] = arbeiten;
     if (first === undefined) throw new Error('missing arbeit');
-    expect(summarizeArbeit(first, state)).toMatchObject({
+    expect(summarizeArbeit(first, state, {})).toMatchObject({
       pageCount: 4,
       corrected: 2,
       empty: 1,
       problems: 1,
       open: 0,
+      complete: false,
       statistics: { words: 150, errors: 7 },
+    });
+    expect(incompleteText(summarizeArbeit(first, state, {}))).toBe(
+      'Unvollständig: 3 von 4 Seiten berichtigt',
+    );
+  });
+
+  it('counts empty pages as handled', () => {
+    const arbeit: Arbeit = { id: 'w', name: 'Kurz', pages: [page('a'), page('c')] };
+    expect(summarizeArbeit(arbeit, state, {})).toMatchObject({ complete: true, empty: 1 });
+  });
+
+  it('leaves out pages whose text or rotation changed after the review', () => {
+    const [first] = arbeiten;
+    if (first === undefined) throw new Error('missing arbeit');
+    const entries: Entries = {
+      b: {
+        status: 'done',
+        text: 'Neu bearbeitet.',
+        hasTranscript: true,
+        edited: true,
+        rotation: 0,
+        error: null,
+      },
+    };
+    const rotated: Arbeit = {
+      ...first,
+      pages: first.pages.map((p) => (p.id === 'a' ? { ...p, rotation: 90 as const } : p)),
+    };
+    expect(summarizeArbeit(rotated, state, entries)).toMatchObject({
+      corrected: 0,
+      stale: 2,
+      complete: false,
+      statistics: null,
     });
   });
 });
 
 describe('summarizeClass', () => {
   it('totals only arbeiten with corrected pages', () => {
-    const summary = summarizeClass(arbeiten, state);
+    const summary = summarizeClass(arbeiten, state, {});
     expect(summary.reviewed).toBe(2);
+    expect(summary.incomplete).toBe(1);
     expect(summary.statistics).toMatchObject({
       words: 350,
       errors: 11,

@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
-import { CORRECTOR_MISSING } from './review-flow.ts';
-import { deferred, setupReview, waitFor } from './test-support.ts';
+import { CORRECTOR_MISSING, IMAGE_FAILED, LAYOUT_FAILED, NOT_RERECOGNIZED } from './review-flow.ts';
+import { deferred, setupReview, tick, waitFor } from './test-support.ts';
 
 describe('createReviewFlow', () => {
   it('finishes every transcription before the first correction', async () => {
@@ -26,7 +26,8 @@ describe('createReviewFlow', () => {
 
     const result = flow.getState().pages.a;
     expect(result?.status).toBe('done');
-    expect(result?.image?.url).toBe('blob:a');
+    expect(result?.image).toMatchObject({ width: 1000, height: 1400 });
+    expect(result?.result?.preview).toBe(false);
     const line = result?.result?.transcript.lines[0];
     expect(line?.bbox).toEqual({ x: 100, y: 100, width: 700, height: 40 });
     expect(line?.marks).toEqual([
@@ -136,7 +137,7 @@ describe('createReviewFlow', () => {
   });
 
   it('cancels while locating lines', async () => {
-    const { pages, h, flow, released } = setupReview(['a', 'b']);
+    const { pages, h, flow } = setupReview(['a', 'b']);
     const gate = deferred();
     h.locateGate = gate.promise;
     const running = flow.start(pages, DEUTSCH);
@@ -144,13 +145,15 @@ describe('createReviewFlow', () => {
     expect(flow.getState().run?.phase).toBe('locating');
 
     flow.cancel();
-    await running;
+    await tick();
+    expect(flow.getState().stopping).toBe(true);
     gate.resolve();
+    await running;
 
+    expect(flow.getState().stopping).toBe(false);
     expect(flow.getState().pages.a?.status).toBe('cancelled');
     expect(flow.getState().pages.b?.status).toBe('cancelled');
     expect(h.log.some((entry) => entry.startsWith('C:'))).toBe(false);
-    expect(released).toContain('blob:a');
   });
 
   it('cancels during correction and later continues with the unfinished pages', async () => {
@@ -203,11 +206,124 @@ describe('createReviewFlow', () => {
     expect(result?.unplacedLines).toEqual([1]);
   });
 
-  it('drops pages that left the import and releases their images', async () => {
-    const { pages, flow, released } = setupReview(['a', 'b']);
+  it('drops pages that left the import', async () => {
+    const { pages, flow } = setupReview(['a', 'b']);
     await flow.start(pages, DEUTSCH);
     flow.prune(new Set(['a']));
     expect(Object.keys(flow.getState().pages)).toEqual(['a']);
-    expect(released).toEqual(['blob:b']);
+  });
+
+  it('treats a page whose recognition failed after rotating as unreadable', async () => {
+    const { pages, h, runner, flow } = setupReview(['a', 'b']);
+    await flow.start(pages, DEUTSCH);
+    const rotated = pages.map((p) => (p.id === 'b' ? { ...p, rotation: 90 as const } : p));
+    runner.setPages(rotated);
+    h.transcripts.b = { ok: false, error: { kind: 'failed', message: 'Bild leer' } };
+    h.log.length = 0;
+
+    await flow.start(rotated, DEUTSCH);
+
+    expect(runner.getState().entries.b).toMatchObject({ hasTranscript: true, rotation: 0 });
+    expect(flow.getState().pages.b).toMatchObject({
+      status: 'unreadable',
+      message: 'Die Seite konnte nicht erkannt werden (Bild leer).',
+      result: null,
+    });
+    expect(h.log).toEqual(['T:b']);
+  });
+
+  it('names a rotated page that was not recognized again', async () => {
+    const { pages, runner, flow } = setupReview(['a']);
+    await flow.start(pages, DEUTSCH);
+    runner.edit('a', 'Ich war im Schwimbad.\nEs war schön.');
+    const rotated = pages.map((p) => ({ ...p, rotation: 180 as const }));
+    runner.setPages(rotated);
+
+    await flow.start(rotated, DEUTSCH);
+
+    expect(flow.getState().pages.a).toMatchObject({
+      status: 'unreadable',
+      message: NOT_RERECOGNIZED,
+    });
+  });
+
+  it('recognizes only the retried page again after rotating', async () => {
+    const { pages, h, runner, flow } = setupReview(['a', 'b']);
+    await flow.start(pages, DEUTSCH);
+    runner.edit('a', 'Ich war im Schwimbad.\nEs war schön.');
+    runner.edit('b', 'Wir gingen heim.');
+    const rotated = pages.map((p) => ({ ...p, rotation: 90 as const }));
+    runner.setPages(rotated);
+    h.log.length = 0;
+
+    const [, second] = rotated;
+    if (second === undefined) throw new Error('missing page');
+    await flow.retry(second);
+
+    expect(h.log).toEqual(['T:b', 'L:b', 'C:Wir gingen heim.']);
+    expect(flow.getState().pages.b).toMatchObject({ status: 'done', rotation: 90 });
+  });
+
+  it('keeps correcting when the page image or the line search fails, with a visible note', async () => {
+    const { pages, h, flow } = setupReview(['a', 'b']);
+    h.imageFails = true;
+    const [first, second] = pages;
+    if (first === undefined || second === undefined) throw new Error('missing pages');
+    await flow.start([first], DEUTSCH);
+    h.imageFails = false;
+    h.layoutFails = true;
+    await flow.start([first, second], DEUTSCH);
+
+    expect(flow.getState().pages.a).toMatchObject({
+      status: 'done',
+      image: null,
+      warning: { text: IMAGE_FAILED, detail: 'Bild kaputt' },
+    });
+    expect(flow.getState().pages.b).toMatchObject({
+      status: 'done',
+      warning: { text: LAYOUT_FAILED, detail: 'kaputt' },
+    });
+  });
+
+  it('marks results from the preview corrector', async () => {
+    const { pages, corrector, flow } = setupReview(['a']);
+    flow.setCorrector(corrector, true);
+    await flow.start(pages, DEUTSCH);
+    expect(flow.getState().pages.a?.result?.preview).toBe(true);
+  });
+
+  it('reports an unexpected correction failure in German and keeps the details', async () => {
+    const { pages, h, flow } = setupReview(['a']);
+    h.correctThrows = true;
+    await flow.start(pages, DEUTSCH);
+    expect(flow.getState().pages.a).toMatchObject({
+      status: 'failed',
+      message: 'Der Text konnte nicht korrigiert werden (unerwarteter Fehler).',
+      detail: 'Speicher voll',
+    });
+  });
+
+  it('waits for a running correction to end before it can start again', async () => {
+    const { pages, h, flow, corrector } = setupReview(['a']);
+    const gate = deferred();
+    flow.setCorrector({
+      async correct(lines, profile, signal) {
+        h.log.push('slow');
+        await gate.promise;
+        return corrector.correct(lines, profile, signal);
+      },
+    });
+    const running = flow.start(pages, DEUTSCH);
+    await waitFor(() => h.log.includes('slow'));
+
+    flow.cancel();
+    await tick();
+    expect(flow.getState()).toMatchObject({ stopping: true, run: { phase: 'correcting' } });
+    void flow.start(pages, DEUTSCH);
+    expect(h.log.filter((entry) => entry === 'slow')).toHaveLength(1);
+
+    gate.resolve();
+    await running;
+    expect(flow.getState()).toMatchObject({ stopping: false, run: null, outcome: 'cancelled' });
   });
 });

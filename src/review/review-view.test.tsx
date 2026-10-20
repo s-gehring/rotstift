@@ -7,7 +7,8 @@ import { createFakeCorrector } from '../correction/fake-corrector.ts';
 import type { CorrectorStatus } from '../correction/provider.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
-import type { ReviewFlow } from './review-flow.ts';
+import type { Runner } from '../pipeline/runner.ts';
+import { LAYOUT_FAILED, type ReviewFlow } from './review-flow.ts';
 import { PREVIEW_NOTICE, ReviewControls, ReviewHint } from './ReviewControls.tsx';
 import { ReviewView } from './ReviewView.tsx';
 import { deferred, setupReview, waitFor } from './test-support.ts';
@@ -30,19 +31,23 @@ afterEach(() => {
 
 function Harness({
   flow,
+  runner,
   arbeiten,
   preview = false,
 }: {
   readonly flow: ReviewFlow;
+  readonly runner: Runner;
   readonly arbeiten: readonly Arbeit[];
   readonly preview?: boolean;
 }) {
   const state = useSyncExternalStore(flow.subscribe, flow.getState);
+  const runState = useSyncExternalStore(runner.subscribe, runner.getState);
   return (
     <ReviewView
       arbeiten={arbeiten}
       flow={flow}
       state={state}
+      entries={runState.entries}
       canRetry
       preview={preview}
       onBack={() => undefined}
@@ -80,7 +85,11 @@ async function reviewed(preview = false) {
     { id: 'y', name: 'Aufsatz Ben', pages: [d] },
   ];
   await harness.flow.start(harness.pages, DEUTSCH);
-  act(() => root.render(<Harness flow={harness.flow} arbeiten={arbeiten} preview={preview} />));
+  act(() =>
+    root.render(
+      <Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} preview={preview} />,
+    ),
+  );
   return { ...harness, arbeiten };
 }
 
@@ -99,12 +108,19 @@ describe('ReviewView', () => {
       [...row.children].map((cell) => cell.textContent),
     );
     expect(rows).toEqual([
-      ['Aufsatz Ada', '1 von 3 berichtigt, 1 leer, 1 mit Problem', '7', '1', '14,3', 'R (1)'],
+      [
+        'Aufsatz Ada',
+        'Unvollständig: 2 von 3 Seiten berichtigt, 1 leer, 1 mit Problem',
+        '7',
+        '1',
+        '14,3',
+        'R (1)',
+      ],
       ['Aufsatz Ben', '1 von 1 berichtigt', '1', '0', '0,0', 'keine'],
     ]);
     const total = container.querySelector('.class-overview tfoot tr');
     expect(total?.textContent).toContain('Klasse gesamt');
-    expect(total?.textContent).toContain('2 Arbeiten');
+    expect(total?.textContent).toContain('2 Arbeiten, davon 1 unvollständig');
   });
 
   it('switches between the page with notes and the original', async () => {
@@ -117,7 +133,7 @@ describe('ReviewView', () => {
     );
     act(() => original?.querySelector('input')?.click());
     expect(overlay()).toBeNull();
-    expect(pageItem(1).querySelector('img')?.getAttribute('src')).toBe('blob:a');
+    expect(pageItem(1).querySelector('img')?.getAttribute('src')).toMatch(/^blob:/);
   });
 
   it('marks empty and failed pages and retries a failed page on request', async () => {
@@ -125,7 +141,9 @@ describe('ReviewView', () => {
     expect(pageItem(3).querySelector('.status')?.textContent).toBe(
       'Keine Schrift erkannt, nicht berichtigt',
     );
-    expect(pageItem(2).querySelector('.status')?.textContent).toBe('Korrektur fehlgeschlagen');
+    expect(pageItem(2).querySelector('.status')?.textContent).toBe(
+      'Problem: Korrektur fehlgeschlagen',
+    );
     expect(pageItem(2).querySelector('.error-text')?.textContent).toBe(
       'Der Text konnte nicht korrigiert werden (Zeitüberschreitung).',
     );
@@ -136,6 +154,32 @@ describe('ReviewView', () => {
       await waitFor(() => pageItem(2).dataset.status === 'done');
     });
     expect(pageItem(2).querySelector('.status')?.textContent).toBe('0 Fehler');
+  });
+
+  it('marks a page as outdated after its text was edited and leaves it out of the statistics', async () => {
+    const { runner } = await reviewed();
+    act(() => runner.edit('a', 'Ganz neuer Text.'));
+    expect(pageItem(1).querySelector('.status')?.textContent).toBe(
+      'Veraltet: Nach Drehen oder Bearbeiten bitte erneut berichtigen',
+    );
+    expect(pageItem(1).querySelector('svg[aria-label="Korrekturen"]')).toBeNull();
+    expect(pageItem(1).querySelector('.mark-list')).toBeNull();
+    expect(buttonNamed('Seite 1 erneut berichtigen')).toBeDefined();
+    const ada = container.querySelector('.class-overview tbody tr');
+    expect(ada?.children[1]?.textContent).toContain('1 veraltet');
+    expect(ada?.children[2]?.textContent).toBe('–');
+  });
+
+  it('shows why the notes could not be drawn', async () => {
+    const harness = setupReview(['a']);
+    harness.h.layoutFails = true;
+    await harness.flow.start(harness.pages, DEUTSCH);
+    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
+    act(() =>
+      root.render(<Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} />),
+    );
+    expect(pageItem(1).querySelector('.notice.warn')?.textContent).toBe(LAYOUT_FAILED);
+    expect(pageItem(1).textContent).toContain('kaputt');
   });
 
   it('opens another arbeit from the class overview', async () => {
@@ -152,11 +196,11 @@ describe('ReviewView', () => {
   });
 
   it('shows the phase and cancels a running review', async () => {
-    const { pages, h, flow } = setupReview(['a']);
+    const { pages, h, flow, runner } = setupReview(['a']);
     const gate = deferred();
     h.correctGate = gate.promise;
     const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages }];
-    act(() => root.render(<Harness flow={flow} arbeiten={arbeiten} />));
+    act(() => root.render(<Harness flow={flow} runner={runner} arbeiten={arbeiten} />));
     let running: Promise<void> = Promise.resolve();
     await act(async () => {
       running = flow.start(pages, DEUTSCH);
@@ -171,7 +215,9 @@ describe('ReviewView', () => {
       await running;
     });
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Abgebrochen.');
-    expect(pageItem(1).querySelector('.status')?.textContent).toBe('Abgebrochen, nicht berichtigt');
+    expect(pageItem(1).querySelector('.status')?.textContent).toBe(
+      'Problem: Abgebrochen, nicht berichtigt',
+    );
   });
 });
 
@@ -186,7 +232,7 @@ function controls(corrector: CorrectorStatus | null, onStart = vi.fn<() => void>
     root.render(
       <>
         <ReviewControls
-          state={{ pages: {}, profile: null, run: null, outcome: null }}
+          state={{ pages: {}, profile: null, run: null, stopping: false, outcome: null }}
           profile={DEUTSCH}
           onProfile={() => undefined}
           transcriber={READY_TRANSCRIBER}

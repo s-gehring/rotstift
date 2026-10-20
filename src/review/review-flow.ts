@@ -5,13 +5,12 @@ import { describeCorrectError, type Corrector } from '../correction/corrector.ts
 import type { ImportPage, Rotation } from '../import/pages.ts';
 import type { LayoutLocator } from '../layout/layout-client.ts';
 import type { LayoutResult } from '../layout/types.ts';
-import type { Runner } from '../pipeline/runner.ts';
+import type { PageEntry, Runner } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
 import type { Statistics } from '../stats/statistics.ts';
 
-export interface PageImage {
+export interface ReviewImage {
   readonly blob: Blob;
-  readonly url: string;
   readonly width: number;
   readonly height: number;
 }
@@ -26,14 +25,21 @@ export interface CorrectedPage {
   readonly statistics: Statistics;
   readonly droppedMarks: number;
   readonly unplacedLines: readonly number[];
+  readonly preview: boolean;
+}
+
+export interface PageWarning {
+  readonly text: string;
+  readonly detail: string;
 }
 
 export interface ReviewPage {
   readonly status: ReviewStatus;
   readonly rotation: Rotation;
   readonly source: string | null;
-  readonly image: PageImage | null;
+  readonly image: ReviewImage | null;
   readonly bboxes: readonly (Bbox | undefined)[] | null;
+  readonly warning: PageWarning | null;
   readonly result: CorrectedPage | null;
   readonly message: string | null;
   readonly detail: string | null;
@@ -49,6 +55,7 @@ export interface ReviewState {
   readonly pages: Readonly<Record<string, ReviewPage>>;
   readonly profile: CorrectionProfile | null;
   readonly run: ReviewRun | null;
+  readonly stopping: boolean;
   readonly outcome: 'finished' | 'cancelled' | null;
 }
 
@@ -60,16 +67,31 @@ export type TranscriptionSource = Pick<
 export interface ReviewDeps {
   readonly transcription: TranscriptionSource;
   readonly locator: Pick<LayoutLocator, 'locate'>;
-  readonly loadImage: (page: ImportPage) => Promise<PageImage>;
-  readonly releaseImage?: (image: PageImage) => void;
+  readonly loadImage: (page: ImportPage) => Promise<ReviewImage>;
 }
 
 export const CORRECTOR_MISSING =
   'Das Korrekturmodell fehlt. Bitte zuerst das Korrekturmodell einrichten.';
 
+export const IMAGE_FAILED =
+  'Das Seitenbild konnte nicht vorbereitet werden. Die Fehler stehen nur in der Liste.';
+
+export const LAYOUT_FAILED =
+  'Die Zeilen wurden auf der Seite nicht gefunden. Die Fehler stehen nur in der Liste.';
+
+export const NOT_RERECOGNIZED = 'Die Seite wurde nach dem Drehen nicht neu erkannt.';
+
 const UNREADABLE = 'Die Seite wurde nicht erkannt.';
 
-const EMPTY: ReviewState = { pages: {}, profile: null, run: null, outcome: null };
+const UNEXPECTED = 'unerwarteter Fehler';
+
+const EMPTY: ReviewState = {
+  pages: {},
+  profile: null,
+  run: null,
+  stopping: false,
+  outcome: null,
+};
 
 const ABORTED = Symbol('aborted');
 
@@ -83,6 +105,10 @@ const ACTIVE: ReadonlySet<ReviewStatus> = new Set([
 interface Readable {
   readonly page: ImportPage;
   readonly lines: readonly string[];
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | typeof ABORTED> {
@@ -126,14 +152,36 @@ function blankPage(rotation: Rotation): ReviewPage {
     source: null,
     image: null,
     bboxes: null,
+    warning: null,
     result: null,
     message: null,
     detail: null,
   };
 }
 
-export function isRunning(state: ReviewState): boolean {
-  return state.run !== null;
+export function sourceOf(entry: PageEntry | undefined): string | null {
+  return entry?.hasTranscript ? entry.text : null;
+}
+
+export function isStale(
+  review: ReviewPage,
+  page: Pick<ImportPage, 'rotation'>,
+  entry: PageEntry | undefined,
+): boolean {
+  if (review.status !== 'done' && review.status !== 'empty') return false;
+  return review.rotation !== page.rotation || review.source !== sourceOf(entry);
+}
+
+function transcriptProblem(entry: PageEntry | undefined, page: ImportPage): string | null {
+  if (entry === undefined) return UNREADABLE;
+  const reason = entry.error ? describeError(entry.error) : null;
+  if (entry.status === 'error' || !entry.hasTranscript) return reason ?? UNREADABLE;
+  if (entry.rotation !== page.rotation) return reason ?? NOT_RERECOGNIZED;
+  return null;
+}
+
+function needsRecognition(entry: PageEntry, page: ImportPage): boolean {
+  return entry.status === 'error' || !entry.hasTranscript || entry.rotation !== page.rotation;
 }
 
 export function createReviewFlow(deps: ReviewDeps) {
@@ -141,7 +189,9 @@ export function createReviewFlow(deps: ReviewDeps) {
   const listeners = new Set<() => void>();
   let state: ReviewState = EMPTY;
   let active: AbortController | null = null;
+  let inflight: Promise<unknown> = Promise.resolve();
   let corrector: Corrector | null = null;
+  let preview = false;
 
   const commit = (next: ReviewState) => {
     state = next;
@@ -158,13 +208,12 @@ export function createReviewFlow(deps: ReviewDeps) {
     commit({ ...state, run });
   };
 
-  const release = (image: PageImage | null) => {
-    if (image !== null) deps.releaseImage?.(image);
-  };
-
-  const transcriptText = (id: string): string | null => {
-    const entry = transcription.getState().entries[id];
-    return entry?.hasTranscript ? entry.text : null;
+  const track = <T>(promise: Promise<T>): Promise<T> => {
+    inflight = promise.then(
+      () => undefined,
+      () => undefined,
+    );
+    return promise;
   };
 
   const isCurrent = (page: ImportPage): boolean => {
@@ -172,19 +221,23 @@ export function createReviewFlow(deps: ReviewDeps) {
     return (
       existing !== undefined &&
       (existing.status === 'done' || existing.status === 'empty') &&
-      existing.rotation === page.rotation &&
-      existing.source === transcriptText(page.id)
+      !isStale(existing, page, transcription.getState().entries[page.id])
     );
   };
 
-  const untilSettled = (): Promise<void> =>
+  const isIdle = () => {
+    const { batch, entries } = transcription.getState();
+    return batch === null && !Object.values(entries).some((entry) => entry.status === 'running');
+  };
+
+  const untilIdle = (): Promise<void> =>
     new Promise((resolve) => {
-      if (transcription.getState().batch === null) {
+      if (isIdle()) {
         resolve();
         return;
       }
       const unsubscribe = transcription.subscribe(() => {
-        if (transcription.getState().batch === null) {
+        if (isIdle()) {
           unsubscribe();
           resolve();
         }
@@ -217,7 +270,7 @@ export function createReviewFlow(deps: ReviewDeps) {
     try {
       begin();
       mirror();
-      await untilSettled();
+      await untilIdle();
     } finally {
       unsubscribe();
     }
@@ -228,21 +281,20 @@ export function createReviewFlow(deps: ReviewDeps) {
     const readable: Readable[] = [];
     for (const page of targets) {
       const entry = entries[page.id];
-      if (entry === undefined || !entry.hasTranscript) {
+      const problem = transcriptProblem(entry, page);
+      if (entry === undefined || problem !== null) {
         patch(page.id, {
           status: 'unreadable',
-          message: entry?.error ? describeError(entry.error) : UNREADABLE,
+          message: problem ?? UNREADABLE,
           detail: null,
+          result: null,
         });
         continue;
       }
       const lines = entry.text.split('\n');
       const previous = state.pages[page.id];
       const sameSource = previous?.source === entry.text && previous.rotation === page.rotation;
-      if (!sameSource && previous !== undefined) {
-        release(previous.image);
-        patch(page.id, { image: null, bboxes: null });
-      }
+      if (!sameSource) patch(page.id, { image: null, bboxes: null, warning: null });
       patch(page.id, { source: entry.text, rotation: page.rotation, result: null });
       if (lines.every((line) => line.trim() === '')) {
         patch(page.id, { status: 'empty', message: null, detail: null });
@@ -253,32 +305,38 @@ export function createReviewFlow(deps: ReviewDeps) {
     return readable;
   };
 
+  const locatePage = async (page: ImportPage, lines: readonly string[], signal: AbortSignal) => {
+    patch(page.id, { status: 'locating', warning: null });
+    let image: ReviewImage | null = null;
+    let bboxes: (Bbox | undefined)[] = lines.map(() => undefined);
+    let warning: PageWarning | null = null;
+    try {
+      const loaded = await abortable(track(deps.loadImage(page)), signal);
+      if (loaded === ABORTED) return false;
+      image = loaded;
+    } catch (error) {
+      warning = { text: IMAGE_FAILED, detail: errorText(error) };
+    }
+    if (image !== null) {
+      try {
+        const layout = await abortable(track(deps.locator.locate(image.blob, lines)), signal);
+        if (layout === ABORTED) return false;
+        bboxes = toBboxes(layout, lines.length);
+      } catch (error) {
+        warning = { text: LAYOUT_FAILED, detail: errorText(error) };
+      }
+    }
+    patch(page.id, { status: 'waiting', image, bboxes, warning });
+    return true;
+  };
+
   const locatePhase = async (readable: readonly Readable[], signal: AbortSignal) => {
     let finished = 0;
     setRun({ phase: 'locating', total: readable.length, finished });
     for (const { page, lines } of readable) {
       const existing = state.pages[page.id];
-      if (existing?.image === null || existing?.bboxes === null) {
-        patch(page.id, { status: 'locating' });
-        const loading = deps.loadImage(page);
-        const image = await abortable(loading, signal).catch(() => null);
-        if (image === ABORTED) {
-          loading.then(release, () => undefined);
-          return;
-        }
-        let bboxes: (Bbox | undefined)[] = lines.map(() => undefined);
-        if (image !== null) {
-          const layout = await abortable(deps.locator.locate(image.blob, lines), signal).catch(
-            () => null,
-          );
-          if (layout === ABORTED) {
-            release(image);
-            return;
-          }
-          if (layout !== null) bboxes = toBboxes(layout, lines.length);
-        }
-        patch(page.id, { status: 'waiting', image, bboxes });
-      }
+      const located = existing?.image != null && existing.bboxes !== null;
+      if (!located && !(await locatePage(page, lines, signal))) return;
       finished += 1;
       setRun({ phase: 'locating', total: readable.length, finished });
     }
@@ -290,20 +348,22 @@ export function createReviewFlow(deps: ReviewDeps) {
     signal: AbortSignal,
   ) => {
     let finished = 0;
+    const current = corrector;
+    const isPreview = preview;
     setRun({ phase: 'correcting', total: readable.length, finished });
     for (const { page, lines } of readable) {
       if (signal.aborted) return;
-      if (corrector === null) {
+      if (current === null) {
         patch(page.id, { status: 'failed', message: CORRECTOR_MISSING, detail: null });
       } else {
         patch(page.id, { status: 'correcting', message: null, detail: null });
         const bboxes = state.pages[page.id]?.bboxes ?? undefined;
-        const result = await abortable(
-          correctPage({ lines, profile, corrector, signal, ...(bboxes && { bboxes }) }),
-          signal,
-        ).catch((error: unknown): CorrectPageResult => ({
+        const work = track(
+          correctPage({ lines, profile, corrector: current, signal, ...(bboxes && { bboxes }) }),
+        );
+        const result = await abortable(work, signal).catch((error: unknown): CorrectPageResult => ({
           ok: false,
-          error: { kind: 'failed', message: String(error) },
+          error: { kind: 'failed', message: UNEXPECTED, detail: errorText(error) },
         }));
         if (result === ABORTED) return;
         if (result.ok) {
@@ -314,15 +374,17 @@ export function createReviewFlow(deps: ReviewDeps) {
               statistics: result.statistics,
               droppedMarks: result.droppedMarks,
               unplacedLines: unplacedLines(result.transcript),
+              preview: isPreview,
             },
           });
         } else if (result.error.kind === 'cancelled') {
           patch(page.id, { status: 'cancelled' });
         } else {
+          const { error } = result;
           patch(page.id, {
             status: 'failed',
-            message: describeCorrectError(result.error),
-            detail: result.error.kind === 'failed' ? (result.error.detail ?? null) : null,
+            message: describeCorrectError(error),
+            detail: error.kind === 'failed' ? (error.detail ?? null) : null,
           });
         }
       }
@@ -347,7 +409,7 @@ export function createReviewFlow(deps: ReviewDeps) {
           ? blankPage(page.rotation)
           : { ...existing, status: 'waiting', message: null, detail: null };
     }
-    commit({ ...state, pages, profile, outcome: null });
+    commit({ ...state, pages, profile, outcome: null, stopping: false });
     try {
       await transcribePhase(targets, begin);
       if (aborted()) return;
@@ -356,7 +418,7 @@ export function createReviewFlow(deps: ReviewDeps) {
       if (aborted()) return;
       await correctPhase(readable, profile, abort.signal);
     } finally {
-      const cancelled = abort.signal.aborted;
+      const cancelled = aborted();
       if (cancelled) {
         const next = { ...state.pages };
         for (const page of targets) {
@@ -366,15 +428,16 @@ export function createReviewFlow(deps: ReviewDeps) {
           }
         }
         commit({ ...state, pages: next });
+        await inflight;
       }
       if (active === abort) active = null;
-      commit({ ...state, run: null, outcome: cancelled ? 'cancelled' : 'finished' });
+      commit({
+        ...state,
+        run: null,
+        stopping: false,
+        outcome: cancelled ? 'cancelled' : 'finished',
+      });
     }
-  };
-
-  const reset = () => {
-    for (const page of Object.values(state.pages)) release(page.image);
-    commit({ ...state, pages: {} });
   };
 
   return {
@@ -386,7 +449,9 @@ export function createReviewFlow(deps: ReviewDeps) {
 
     start: (pages: readonly ImportPage[], profile: CorrectionProfile): Promise<void> => {
       if (active !== null) return Promise.resolve();
-      if (state.profile !== null && state.profile.id !== profile.id) reset();
+      if (state.profile !== null && state.profile.id !== profile.id) {
+        commit({ ...state, pages: {} });
+      }
       const targets = pages.filter((page) => !isCurrent(page));
       if (targets.length === 0) {
         commit({ ...state, profile, outcome: 'finished' });
@@ -405,16 +470,18 @@ export function createReviewFlow(deps: ReviewDeps) {
       return process([page], profile, () => {
         const entry = transcription.getState().entries[page.id];
         if (entry === undefined) transcription.start();
-        else if (!entry.hasTranscript) transcription.retry(page.id);
+        else if (needsRecognition(entry, page)) transcription.retry(page.id);
       });
     },
 
-    setCorrector: (next: Corrector | null) => {
+    setCorrector: (next: Corrector | null, isPreview = false) => {
       corrector = next;
+      preview = next !== null && isPreview;
     },
 
     cancel: () => {
       if (active === null || active.signal.aborted) return;
+      commit({ ...state, stopping: true });
       active.abort();
       if (state.run?.phase === 'transcribing') transcription.cancel();
     },
@@ -423,16 +490,13 @@ export function createReviewFlow(deps: ReviewDeps) {
       const removed = Object.keys(state.pages).filter((id) => !present.has(id));
       if (removed.length === 0) return;
       const pages = { ...state.pages };
-      for (const id of removed) {
-        release(pages[id]?.image ?? null);
-        delete pages[id];
-      }
+      for (const id of removed) delete pages[id];
       commit({ ...state, pages });
     },
 
     dispose: () => {
       active?.abort();
-      reset();
+      commit({ ...state, pages: {} });
     },
   };
 }

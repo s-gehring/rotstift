@@ -60,6 +60,7 @@ export function App() {
           arbeiten={importState.arbeiten}
           flow={review.flow}
           state={review.state}
+          entries={count.state.entries}
           canRetry={!reviewBlocked(transcriber, corrector)}
           preview={corrector?.state === 'ready' && corrector.preview}
           onBack={() => {
@@ -70,6 +71,7 @@ export function App() {
         <>
           <ImportView
             importState={importState}
+            locked={reviewing}
             actions={
               <CountControls
                 count={count}

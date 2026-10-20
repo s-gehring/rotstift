@@ -7,15 +7,19 @@ import type { ImportPage } from '../import/pages.ts';
 import { AnnotatedPage } from '../overlay/AnnotatedPage.tsx';
 import { formatCount, pagesText, wordsText } from '../results/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import { useObjectUrl } from './page-image.ts';
 import type { ReviewFlow, ReviewPage, ReviewState, ReviewStatus } from './review-flow.ts';
 import { PREVIEW_NOTICE } from './ReviewControls.tsx';
 import {
   errorsText,
   formatRate,
+  incompleteText,
+  pageCondition,
   sortedTypes,
   summarizeArbeit,
   summarizeClass,
   type ArbeitReview,
+  type Entries,
 } from './summary.ts';
 import './review.css';
 
@@ -25,6 +29,7 @@ interface ReviewViewProps {
   readonly arbeiten: readonly Arbeit[];
   readonly flow: ReviewFlow;
   readonly state: ReviewState;
+  readonly entries: Entries;
   readonly canRetry: boolean;
   readonly preview: boolean;
   readonly onBack: () => void;
@@ -37,10 +42,12 @@ const STATUS_TEXT: Readonly<Record<ReviewStatus, string>> = {
   correcting: 'Korrektur läuft …',
   done: 'berichtigt',
   empty: 'Keine Schrift erkannt, nicht berichtigt',
-  unreadable: 'Nicht erkannt, nicht berichtigt',
-  failed: 'Korrektur fehlgeschlagen',
-  cancelled: 'Abgebrochen, nicht berichtigt',
+  unreadable: 'Problem: Nicht erkannt, nicht berichtigt',
+  failed: 'Problem: Korrektur fehlgeschlagen',
+  cancelled: 'Problem: Abgebrochen, nicht berichtigt',
 };
+
+const STALE_TEXT = 'Veraltet: Nach Drehen oder Bearbeiten bitte erneut berichtigen';
 
 const PHASE_TEXT = {
   transcribing: 'Texterkennung',
@@ -50,8 +57,9 @@ const PHASE_TEXT = {
 
 const RETRYABLE: ReadonlySet<ReviewStatus> = new Set(['unreadable', 'failed', 'cancelled']);
 
-function progressText(state: ReviewState, arbeiten: readonly Arbeit[]): string {
+function progressText(state: ReviewState, arbeiten: readonly Arbeit[], entries: Entries): string {
   const { run } = state;
+  if (state.stopping) return 'Wird abgebrochen …';
   if (run !== null) {
     const label = PHASE_TEXT[run.phase];
     if (run.total === 0) return `${label} …`;
@@ -59,7 +67,7 @@ function progressText(state: ReviewState, arbeiten: readonly Arbeit[]): string {
   }
   if (state.outcome === 'cancelled') return 'Abgebrochen.';
   if (state.outcome === 'finished') {
-    const summary = summarizeClass(arbeiten, state);
+    const summary = summarizeClass(arbeiten, state, entries);
     const pages = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.pageCount, 0);
     const corrected = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.corrected, 0);
     const problems = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.problems, 0);
@@ -103,17 +111,19 @@ function topTypes(statistics: Statistics, profile: CorrectionProfile): string {
 function ClassOverview({
   arbeiten,
   state,
+  entries,
   profile,
   selected,
   onSelect,
 }: {
   readonly arbeiten: readonly Arbeit[];
   readonly state: ReviewState;
+  readonly entries: Entries;
   readonly profile: CorrectionProfile;
   readonly selected: string | undefined;
   readonly onSelect: (id: string) => void;
 }) {
-  const summary = summarizeClass(arbeiten, state);
+  const summary = summarizeClass(arbeiten, state, entries);
   const total = summary.statistics;
   return (
     <section className="class-overview" aria-labelledby="class-overview-title">
@@ -131,7 +141,11 @@ function ClassOverview({
         </thead>
         <tbody>
           {summary.arbeiten.map((arbeit) => (
-            <tr key={arbeit.id} aria-current={arbeit.id === selected ? 'true' : undefined}>
+            <tr
+              key={arbeit.id}
+              aria-current={arbeit.id === selected ? 'true' : undefined}
+              data-complete={arbeit.complete}
+            >
               <th scope="row">
                 <button
                   type="button"
@@ -154,7 +168,10 @@ function ClassOverview({
           <tfoot>
             <tr>
               <th scope="row">Klasse gesamt</th>
-              <td>{summary.reviewed === 1 ? '1 Arbeit' : `${summary.reviewed} Arbeiten`}</td>
+              <td>
+                {summary.reviewed === 1 ? '1 Arbeit' : `${summary.reviewed} Arbeiten`}
+                {summary.incomplete > 0 && `, davon ${summary.incomplete} unvollständig`}
+              </td>
               <td>{formatCount(total.words)}</td>
               <td>{formatCount(total.errors)}</td>
               <td>{formatRate(total.errorsPer100Words)}</td>
@@ -174,9 +191,13 @@ function ClassOverview({
 }
 
 function pagesCell(arbeit: ArbeitReview): string {
-  const parts = [`${arbeit.corrected} von ${arbeit.pageCount} berichtigt`];
+  const head = arbeit.complete
+    ? `${arbeit.pageCount} von ${arbeit.pageCount} berichtigt`
+    : incompleteText(arbeit);
+  const parts = [head];
   if (arbeit.empty > 0) parts.push(`${arbeit.empty} leer`);
   if (arbeit.problems > 0) parts.push(`${arbeit.problems} mit Problem`);
+  if (arbeit.stale > 0) parts.push(`${arbeit.stale} veraltet`);
   return parts.join(', ');
 }
 
@@ -217,6 +238,7 @@ function PageReview({
   page,
   position,
   review,
+  entries,
   profile,
   display,
   arbeitName,
@@ -226,28 +248,32 @@ function PageReview({
   readonly page: ImportPage;
   readonly position: number;
   readonly review: ReviewPage | undefined;
+  readonly entries: Entries;
   readonly profile: CorrectionProfile;
   readonly display: Display;
   readonly arbeitName: string;
   readonly canRetry: boolean;
   readonly onRetry: () => void;
 }) {
+  const stale = pageCondition(page, review, entries) === 'stale';
   const status = review?.status ?? 'waiting';
-  const image = review?.image ?? null;
-  const result = review?.result ?? null;
+  const image = stale ? null : (review?.image ?? null);
+  const result = stale ? null : (review?.result ?? null);
+  const imageUrl = useObjectUrl(image?.blob ?? null);
   const headingId = useId();
   const alt = `Seite ${position} von ${arbeitName}`;
+  let statusText = STATUS_TEXT[status];
+  if (stale) statusText = STALE_TEXT;
+  else if (status === 'done' && result) statusText = errorsText(result.statistics.errors);
   return (
-    <li className="review-page" data-status={status}>
+    <li className="review-page" data-status={stale ? 'stale' : status}>
       <section aria-labelledby={headingId}>
         <div className="review-page-head">
           <h4 id={headingId}>Seite {position}</h4>
-          <span className="status" data-status={status}>
-            {status === 'done' && result
-              ? errorsText(result.statistics.errors)
-              : STATUS_TEXT[status]}
+          <span className="status" data-status={stale ? 'stale' : status}>
+            {statusText}
           </span>
-          {canRetry && RETRYABLE.has(status) && (
+          {canRetry && (stale || RETRYABLE.has(status)) && (
             <button type="button" onClick={onRetry}>
               Seite {position} erneut berichtigen
             </button>
@@ -257,27 +283,33 @@ function PageReview({
         {review?.detail && <p className="hint">{review.detail}</p>}
         <div className="review-page-body">
           <div className="review-stage">
-            {image !== null && result !== null && display === 'notes' ? (
+            {image !== null && imageUrl !== null && result !== null && display === 'notes' ? (
               <AnnotatedPage
-                imageUrl={image.url}
+                imageUrl={imageUrl}
                 size={{ width: image.width, height: image.height }}
                 transcript={result.transcript}
                 profile={profile}
                 alt={`${alt}, mit Korrekturen`}
               />
             ) : (
-              <img src={image?.url ?? page.thumbnailUrl} alt={alt} />
+              <img src={imageUrl ?? page.thumbnailUrl} alt={alt} />
             )}
           </div>
           <div className="review-page-info">
-            {result !== null && result.unplacedLines.length > 0 && (
+            {!stale && review?.warning && (
+              <>
+                <p className="notice warn">{review.warning.text}</p>
+                <p className="hint">{review.warning.detail}</p>
+              </>
+            )}
+            {!review?.warning && result !== null && result.unplacedLines.length > 0 && (
               <p className="notice warn">
                 {result.unplacedLines.length === 1
                   ? `Zeile ${result.unplacedLines[0]} wurde auf der Seite nicht gefunden. Ihre Fehler stehen nur in der Liste.`
                   : `Die Zeilen ${result.unplacedLines.join(', ')} wurden auf der Seite nicht gefunden. Ihre Fehler stehen nur in der Liste.`}
               </p>
             )}
-            {review !== undefined && <MarkList page={review} profile={profile} />}
+            {review !== undefined && !stale && <MarkList page={review} profile={profile} />}
           </div>
         </div>
       </section>
@@ -289,17 +321,19 @@ function ArbeitDetail({
   arbeit,
   flow,
   state,
+  entries,
   profile,
   canRetry,
 }: {
   readonly arbeit: Arbeit;
   readonly flow: ReviewFlow;
   readonly state: ReviewState;
+  readonly entries: Entries;
   readonly profile: CorrectionProfile;
   readonly canRetry: boolean;
 }) {
   const [display, setDisplay] = useState<Display>('notes');
-  const summary = summarizeArbeit(arbeit, state);
+  const summary = summarizeArbeit(arbeit, state, entries);
   const statistics = summary.statistics;
   const toggleName = useId();
   const running = state.run !== null;
@@ -335,12 +369,7 @@ function ArbeitDetail({
             <strong>{wordsText(statistics.words)}</strong> ·{' '}
             <strong>{errorsText(statistics.errors)}</strong> ·{' '}
             {formatRate(statistics.errorsPer100Words)} Fehler je 100 Wörter
-            {summary.corrected < summary.pageCount && (
-              <span className="hint">
-                {' '}
-                (aus {summary.corrected} von {pagesText(summary.pageCount)})
-              </span>
-            )}
+            {!summary.complete && <span className="hint"> ({incompleteText(summary)})</span>}
           </p>
           <TypeList statistics={statistics} profile={profile} />
         </div>
@@ -354,6 +383,7 @@ function ArbeitDetail({
             page={page}
             position={index + 1}
             review={state.pages[page.id]}
+            entries={entries}
             profile={profile}
             display={display}
             arbeitName={arbeit.name}
@@ -366,7 +396,15 @@ function ArbeitDetail({
   );
 }
 
-export function ReviewView({ arbeiten, flow, state, canRetry, preview, onBack }: ReviewViewProps) {
+export function ReviewView({
+  arbeiten,
+  flow,
+  state,
+  entries,
+  canRetry,
+  preview,
+  onBack,
+}: ReviewViewProps) {
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const profile = state.profile;
   const reviewed = arbeiten.filter((arbeit) =>
@@ -374,6 +412,7 @@ export function ReviewView({ arbeiten, flow, state, canRetry, preview, onBack }:
   );
   const current = reviewed.find((arbeit) => arbeit.id === selected) ?? reviewed[0];
   const running = state.run !== null;
+  const previewResults = Object.values(state.pages).some((page) => page.result?.preview === true);
 
   return (
     <section className="review" aria-labelledby="review-title">
@@ -384,15 +423,15 @@ export function ReviewView({ arbeiten, flow, state, canRetry, preview, onBack }:
         <h2 id="review-title">Berichtigung</h2>
         {profile !== null && <span className="hint">Korrekturprofil {profile.name}</span>}
         {running && (
-          <button type="button" className="primary" onClick={flow.cancel}>
+          <button type="button" className="primary" disabled={state.stopping} onClick={flow.cancel}>
             Abbrechen
           </button>
         )}
         <p className="progress" role="status">
-          {progressText(state, arbeiten)}
+          {progressText(state, arbeiten, entries)}
         </p>
       </div>
-      {preview && <p className="notice demo">{PREVIEW_NOTICE}</p>}
+      {(preview || previewResults) && <p className="notice demo">{PREVIEW_NOTICE}</p>}
       {profile === null || current === undefined ? (
         <p className="hint">Noch nichts berichtigt.</p>
       ) : (
@@ -400,6 +439,7 @@ export function ReviewView({ arbeiten, flow, state, canRetry, preview, onBack }:
           <ClassOverview
             arbeiten={reviewed}
             state={state}
+            entries={entries}
             profile={profile}
             selected={current.id}
             onSelect={setSelected}
@@ -409,6 +449,7 @@ export function ReviewView({ arbeiten, flow, state, canRetry, preview, onBack }:
             arbeit={current}
             flow={flow}
             state={state}
+            entries={entries}
             profile={profile}
             canRetry={canRetry}
           />

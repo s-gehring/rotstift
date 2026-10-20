@@ -3,7 +3,7 @@ import type { CorrectorStatus } from '../correction/provider.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { createLayoutLocator } from '../layout/layout-client.ts';
 import type { Runner } from '../pipeline/runner.ts';
-import { loadPageImage, releasePageImage } from './page-image.ts';
+import { loadPageImage } from './page-image.ts';
 import { createReviewFlow } from './review-flow.ts';
 
 export function useReview(
@@ -19,14 +19,14 @@ export function useReview(
         transcription: runner,
         locator: created,
         loadImage: loadPageImage,
-        releaseImage: releasePageImage,
       }),
     };
   });
   const state = useSyncExternalStore(flow.subscribe, flow.getState);
 
   useEffect(() => {
-    flow.setCorrector(corrector?.state === 'ready' ? corrector.corrector : null);
+    if (corrector?.state === 'ready') flow.setCorrector(corrector.corrector, corrector.preview);
+    else flow.setCorrector(null);
   }, [flow, corrector]);
 
   useEffect(() => {

@@ -4,7 +4,7 @@ import type { LayoutResult } from '../layout/types.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createRunner } from '../pipeline/runner.ts';
 import type { PageTranscriber, TranscribeResult } from '../pipeline/transcriber.ts';
-import { createReviewFlow, type PageImage } from './review-flow.ts';
+import { createReviewFlow, type ReviewImage } from './review-flow.ts';
 
 export function page(id: string): ImportPage {
   return {
@@ -39,7 +39,7 @@ function untilAborted(signal: AbortSignal): Promise<void> {
   });
 }
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+export const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 export async function waitFor(check: () => boolean) {
   for (let i = 0; i < 200; i += 1) {
@@ -67,6 +67,8 @@ export interface Harness {
   correctGate: Promise<void> | null;
   locateGate: Promise<void> | null;
   layoutFails: boolean;
+  imageFails: boolean;
+  correctThrows: boolean;
 }
 
 export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
@@ -81,6 +83,8 @@ export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
     correctGate: null,
     locateGate: null,
     layoutFails: false,
+    imageFails: false,
+    correctThrows: false,
   };
   const transcriber: PageTranscriber = {
     async transcribe(png, signal) {
@@ -97,6 +101,7 @@ export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
     async correct(lines, _profile, signal) {
       const first = lines[0] ?? '';
       h.log.push(`C:${first}`);
+      if (h.correctThrows) throw new Error('Speicher voll');
       if (h.correctGate !== null) {
         await Promise.race([h.correctGate, untilAborted(signal)]);
         if (signal.aborted) return { ok: false, error: { kind: 'cancelled' } };
@@ -110,14 +115,12 @@ export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
   });
   runner.setTranscriber(transcriber);
   runner.setPages(pages);
-  const released: string[] = [];
   const flow = createReviewFlow({
     transcription: runner,
-    loadImage: (p): Promise<PageImage> =>
-      Promise.resolve({ blob: new Blob([p.id]), url: `blob:${p.id}`, width: 1000, height: 1400 }),
-    releaseImage: (image) => {
-      released.push(image.url);
-    },
+    loadImage: (p): Promise<ReviewImage> =>
+      h.imageFails
+        ? Promise.reject(new Error('Bild kaputt'))
+        : Promise.resolve({ blob: new Blob([p.id]), width: 1000, height: 1400 }),
     locator: {
       async locate(blob, lines): Promise<LayoutResult> {
         const id = blob instanceof Blob ? await blob.text() : '';
@@ -136,5 +139,5 @@ export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
     },
   });
   flow.setCorrector(corrector);
-  return { pages, h, runner, flow, transcriber, corrector, released };
+  return { pages, h, runner, flow, transcriber, corrector };
 }
