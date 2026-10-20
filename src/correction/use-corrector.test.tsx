@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SidecarCorrector } from '../llm/sidecar-corrector.ts';
 import type { ModelClient } from '../models/client.ts';
 import type { CreateCorrector } from '../models/corrector-setup.tsx';
@@ -9,7 +9,7 @@ import { defaultCorrector } from '../models/registry.ts';
 import type { ModelState } from '../models/types.ts';
 import { CORRECTOR_MISSING_MESSAGE } from './provider.ts';
 import { useCorrector, type CorrectorChoice } from './use-corrector.ts';
-import { tick } from '../review/test-support.ts';
+import { tick, waitFor } from '../review/test-support.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -65,6 +65,10 @@ async function render(client: ModelClient | null) {
   return create;
 }
 
+beforeAll(async () => {
+  await import('./preview-corrector.ts');
+});
+
 beforeEach(() => {
   container = document.createElement('div');
   root = createRoot(container);
@@ -97,6 +101,7 @@ describe('useCorrector', () => {
 
   it('falls back to the preview corrector in the browser', async () => {
     const create = await render(null);
+    await act(() => waitFor(() => latest?.status !== null));
     expect(latest?.status).toMatchObject({ state: 'ready', preview: true });
     expect(latest?.setup.setup.available).toBe(false);
     expect(create).not.toHaveBeenCalled();
