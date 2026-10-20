@@ -8,7 +8,7 @@ import { startablePages, type RunState } from '../pipeline/runner.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import { buildResults, classTotals, pagesText, wordsText } from '../results/summary.ts';
 import { engineText, type ReviewEngine } from '../review/engine-phase.ts';
-import type { ReviewState } from '../review/review-flow.ts';
+import type { ReviewPhase, ReviewState, ReviewStatus } from '../review/review-flow.ts';
 import { pageCondition, summarizeClass } from '../review/summary.ts';
 import type { ModelRole, RunKind, RunProgress } from './types.ts';
 
@@ -89,20 +89,77 @@ export function openPageCount(
   }).length;
 }
 
-const PHASE_TEXT = {
-  transcribing: 'Texterkennung',
-  locating: 'Zeilen suchen',
-  correcting: 'Korrektur',
-} as const;
+const PHASE_WEIGHT: Readonly<Record<ReviewPhase, number>> = {
+  transcribing: 0.6,
+  locating: 0.05,
+  correcting: 0.35,
+};
 
-function remaining(count: RunState, now: number): string | null {
+const FINISHED: ReadonlySet<ReviewStatus> = new Set([
+  'done',
+  'empty',
+  'unreadable',
+  'failed',
+  'cancelled',
+]);
+
+const LOADING_TEXT = 'Modell wird geladen …';
+
+export interface RunStart {
+  readonly pageIds: readonly string[];
+  readonly at: number;
+  readonly fraction: number;
+}
+
+function activePageIds(review: ReviewState): string[] {
+  return Object.entries(review.pages)
+    .filter(([, page]) => !FINISHED.has(page.status))
+    .map(([id]) => id);
+}
+
+function share(finished: number, total: number): number {
+  return total === 0 ? 1 : Math.min(1, finished / total);
+}
+
+export function reviewFraction(
+  review: ReviewState,
+  count: RunState,
+  pageIds: readonly string[],
+): number {
+  const { run } = review;
+  if (run === null) return 0;
+  const { transcribing, locating, correcting } = PHASE_WEIGHT;
+  if (run.phase === 'transcribing') {
+    const transcribed = pageIds.filter((id) => {
+      const status = count.entries[id]?.status;
+      return status === 'done' || status === 'error';
+    }).length;
+    return transcribing * share(transcribed, pageIds.length);
+  }
+  if (run.phase === 'locating') return transcribing + locating * share(run.finished, run.total);
+  return transcribing + locating + correcting * share(run.finished, run.total);
+}
+
+export function startRun(review: ReviewState, count: RunState, at: number): RunStart {
+  const pageIds = activePageIds(review);
+  return { pageIds, at, fraction: reviewFraction(review, count, pageIds) };
+}
+
+function countRemaining(count: RunState, now: number): string | null {
   const progress = describeProgress(count, now);
   if (progress === null || progress.remainingMs === null) return null;
   return `noch ${formatRemaining(progress.remainingMs)}`;
 }
 
-function position(finished: number, total: number): string {
-  return `Seite ${Math.min(finished + 1, total)} von ${total}`;
+function reviewRemaining(fraction: number, start: RunStart, now: number): string | null {
+  const gained = fraction - start.fraction;
+  const elapsed = now - start.at;
+  if (gained <= 0 || elapsed <= 0) return null;
+  return `noch ${formatRemaining((elapsed * (1 - fraction)) / gained)}`;
+}
+
+function pagesLabel(finished: number, total: number): string {
+  return `Seite ${Math.min(finished, total)} von ${total}`;
 }
 
 export function runProgress(
@@ -110,28 +167,34 @@ export function runProgress(
   count: RunState,
   engine: ReviewEngine,
   now: number,
+  start: RunStart | null = null,
 ): RunProgress | null {
   const { run } = review;
   if (run !== null) {
     if (review.stopping) return { label: 'Wird abgebrochen …', detail: null, value: null, max: 1 };
-    const phase = PHASE_TEXT[run.phase];
-    const extra =
-      engineText(run, engine) ?? (run.phase === 'transcribing' ? remaining(count, now) : null);
-    const detail = extra === null ? phase : `${phase} · ${extra}`;
-    if (run.total === 0) return { label: `${phase} …`, detail: extra, value: null, max: 1 };
+    const pageIds = start?.pageIds ?? activePageIds(review);
+    const fraction = reviewFraction(review, count, pageIds);
+    const finished = pageIds.filter((id) => {
+      const page = review.pages[id];
+      return page !== undefined && FINISHED.has(page.status);
+    }).length;
+    const loading = engineText(run, engine) !== null;
     return {
-      label: position(run.finished, run.total),
-      detail,
-      value: run.finished,
-      max: run.total,
+      label: pagesLabel(finished, pageIds.length),
+      detail: loading
+        ? LOADING_TEXT
+        : start === null
+          ? null
+          : reviewRemaining(fraction, start, now),
+      value: Math.round(fraction * 100),
+      max: 100,
     };
   }
   const { batch } = count;
   if (batch === null) return null;
-  const starting = engine.transcriber === 'starting';
   return {
-    label: position(batch.finished, batch.total),
-    detail: starting ? 'Texterkennung startet …' : remaining(count, now),
+    label: pagesLabel(batch.finished, batch.total),
+    detail: engine.transcriber === 'starting' ? LOADING_TEXT : countRemaining(count, now),
     value: batch.finished,
     max: batch.total,
   };

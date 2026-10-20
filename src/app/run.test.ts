@@ -3,7 +3,7 @@ import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { PageEntry, RunState } from '../pipeline/runner.ts';
-import { IDLE_ENGINE } from '../review/engine-phase.ts';
+import { IDLE_ENGINE, type ReviewEngine } from '../review/engine-phase.ts';
 import type { ReviewPage, ReviewState } from '../review/review-flow.ts';
 import { page } from '../review/test-support.ts';
 import {
@@ -16,6 +16,7 @@ import {
   runProgress,
   saveRunKind,
   startDecision,
+  startRun,
   type KindStorage,
 } from './run.ts';
 
@@ -190,15 +191,19 @@ describe('open pages for correcting', () => {
   });
 });
 
+const pending = (status: PageEntry['status']) => entry('', { status });
+
 describe('runProgress', () => {
+  const waiting = reviewed(null, { status: 'waiting' });
+
   it('shows nothing while idle', () => {
     expect(runProgress(EMPTY_REVIEW, runState({}), IDLE_ENGINE, 0)).toBeNull();
   });
 
-  it('shows the counted page and says when the recognition starts', () => {
+  it('counts finished pages while counting words and says when the model loads', () => {
     const counting = runState({}, { batch: { total: 3, finished: 1 } });
     expect(runProgress(EMPTY_REVIEW, counting, IDLE_ENGINE, 0)).toEqual({
-      label: 'Seite 2 von 3',
+      label: 'Seite 1 von 3',
       detail: null,
       value: 1,
       max: 3,
@@ -206,10 +211,10 @@ describe('runProgress', () => {
     expect(
       runProgress(EMPTY_REVIEW, counting, { transcriber: 'starting', corrector: 'idle' }, 0)
         ?.detail,
-    ).toBe('Texterkennung startet …');
+    ).toBe('Modell wird geladen …');
   });
 
-  it('estimates the remaining time once a page has been measured', () => {
+  it('estimates the remaining time of counting once a page has been measured', () => {
     const counting = runState(
       {},
       { batch: { total: 3, finished: 1 }, durationsMs: [30_000], runningSince: 0 },
@@ -217,35 +222,128 @@ describe('runProgress', () => {
     expect(runProgress(EMPTY_REVIEW, counting, IDLE_ENGINE, 0)?.detail).toBe('noch etwa 1 Minute');
   });
 
-  it('names the phase of a correction run and the engine that is loading', () => {
-    const transcribing = reviewState({}, { run: { phase: 'transcribing', total: 4, finished: 0 } });
-    expect(runProgress(transcribing, runState({}), IDLE_ENGINE, 0)).toEqual({
-      label: 'Seite 1 von 4',
-      detail: 'Texterkennung',
-      value: 0,
-      max: 4,
-    });
-    const correcting = reviewState({}, { run: { phase: 'correcting', total: 4, finished: 2 } });
-    expect(
-      runProgress(correcting, runState({}), { transcriber: 'idle', corrector: 'starting' }, 0)
-        ?.detail,
-    ).toBe('Korrektur · Korrekturmodell wird geladen …');
-    expect(
-      runProgress(correcting, runState({}), { transcriber: 'ready', corrector: 'idle' }, 0)?.detail,
-    ).toBe('Korrektur · Modellwechsel wird vorbereitet …');
+  it('fills one bar over all steps of a correction run without naming them', () => {
+    const begin = reviewState(
+      { a: waiting, b: waiting },
+      { run: { phase: 'transcribing', total: 2, finished: 0 } },
+    );
+    const queued = runState({ a: pending('waiting'), b: pending('waiting') });
+    const start = startRun(begin, queued, 0);
+    const steps: [ReviewState, RunState][] = [
+      [begin, queued],
+      [begin, runState({ a: pending('done'), b: pending('running') })],
+      [
+        reviewState(begin.pages, { run: { phase: 'transcribing', total: 0, finished: 0 } }),
+        runState({ a: pending('done'), b: pending('error') }),
+      ],
+      [reviewState(begin.pages, { run: { phase: 'locating', total: 2, finished: 0 } }), queued],
+      [reviewState(begin.pages, { run: { phase: 'locating', total: 2, finished: 1 } }), queued],
+      [reviewState(begin.pages, { run: { phase: 'correcting', total: 2, finished: 0 } }), queued],
+      [
+        reviewState(
+          { a: reviewed('a'), b: waiting },
+          { run: { phase: 'correcting', total: 2, finished: 1 } },
+        ),
+        queued,
+      ],
+      [
+        reviewState(
+          { a: reviewed('a'), b: reviewed('b') },
+          { run: { phase: 'correcting', total: 2, finished: 2 } },
+        ),
+        queued,
+      ],
+    ];
+    const progress = steps.map(([review, count]) =>
+      runProgress(review, count, IDLE_ENGINE, 0, start),
+    );
+    const values = progress.map((step) => step?.value ?? -1);
+    expect(values[0]).toBe(0);
+    expect(new Set(values).size).toBe(values.length - 1);
+    expect(values.at(-1)).toBe(100);
+    for (let index = 1; index < values.length; index += 1) {
+      expect(values[index]).toBeGreaterThanOrEqual(values[index - 1] ?? 0);
+    }
+    expect(progress.map((step) => step?.label)).toEqual([
+      'Seite 0 von 2',
+      'Seite 0 von 2',
+      'Seite 0 von 2',
+      'Seite 0 von 2',
+      'Seite 0 von 2',
+      'Seite 0 von 2',
+      'Seite 1 von 2',
+      'Seite 2 von 2',
+    ]);
+    expect(progress.every((step) => step?.max === 100 && step.detail === null)).toBe(true);
   });
 
-  it('shows an indeterminate phase without page count and the cancellation', () => {
-    const locating = reviewState({}, { run: { phase: 'locating', total: 0, finished: 0 } });
-    expect(runProgress(locating, runState({}), IDLE_ENGINE, 0)).toMatchObject({
-      label: 'Zeilen suchen …',
-      value: null,
+  it('counts pages without text as finished and leaves out pages outside the run', () => {
+    const review = reviewState(
+      { a: reviewed('', { status: 'empty' }), b: waiting, c: waiting, old: reviewed('alt') },
+      { run: { phase: 'locating', total: 2, finished: 0 } },
+    );
+    const start = startRun(
+      reviewState(
+        { a: waiting, b: waiting, c: waiting, old: reviewed('alt') },
+        { run: { phase: 'transcribing', total: 3, finished: 0 } },
+      ),
+      runState({}),
+      0,
+    );
+    expect(runProgress(review, runState({}), IDLE_ENGINE, 0, start)?.label).toBe('Seite 1 von 3');
+  });
+
+  it('estimates the remaining time from the progress made since the start', () => {
+    const begin = reviewState(
+      { a: waiting, b: waiting },
+      { run: { phase: 'transcribing', total: 2, finished: 0 } },
+    );
+    const start = startRun(begin, runState({ a: pending('waiting'), b: pending('waiting') }), 0);
+    expect(
+      runProgress(begin, runState({ a: pending('running') }), IDLE_ENGINE, 30_000, start)?.detail,
+    ).toBeNull();
+    const halfTranscribed = runState({ a: pending('done'), b: pending('running') });
+    expect(runProgress(begin, halfTranscribed, IDLE_ENGINE, 60_000, start)?.detail).toBe(
+      'noch etwa 3 Minuten',
+    );
+  });
+
+  it('waits for real progress before estimating a run whose pages were already read', () => {
+    const transcribed = runState({ a: pending('done'), b: pending('done') });
+    const begin = reviewState(
+      { a: waiting, b: waiting },
+      { run: { phase: 'transcribing', total: 0, finished: 0 } },
+    );
+    const start = startRun(begin, transcribed, 0);
+    expect(start.fraction).toBeCloseTo(0.6);
+    const locating = reviewState(begin.pages, {
+      run: { phase: 'locating', total: 2, finished: 0 },
     });
+    expect(runProgress(locating, transcribed, IDLE_ENGINE, 5_000, start)?.detail).toBeNull();
+  });
+
+  it('only mentions the model while loading or switching it holds the run up', () => {
+    const correcting = reviewState(
+      { a: waiting },
+      { run: { phase: 'correcting', total: 1, finished: 0 } },
+    );
+    const start = startRun(correcting, runState({}), 0);
+    const detail = (engine: ReviewEngine) =>
+      runProgress(correcting, runState({}), engine, 0, start)?.detail;
+    expect(detail({ transcriber: 'idle', corrector: 'starting' })).toBe('Modell wird geladen …');
+    expect(detail({ transcriber: 'ready', corrector: 'idle' })).toBe('Modell wird geladen …');
+    expect(detail({ transcriber: 'idle', corrector: 'ready' })).toBeNull();
+  });
+
+  it('shows the cancellation without progress', () => {
     const stopping = reviewState(
       {},
       { run: { phase: 'correcting', total: 2, finished: 1 }, stopping: true },
     );
-    expect(runProgress(stopping, runState({}), IDLE_ENGINE, 0)?.label).toBe('Wird abgebrochen …');
+    expect(runProgress(stopping, runState({}), IDLE_ENGINE, 0)).toMatchObject({
+      label: 'Wird abgebrochen …',
+      value: null,
+    });
   });
 });
 
