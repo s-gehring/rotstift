@@ -15,7 +15,7 @@ export const BINARIES =
   process.env['ROTSTIFT_BINARIES'] ??
   join(import.meta.dirname, '..', '..', 'src-tauri', 'binaries');
 const LIBRARY_VAR = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
-export const model = recommendModel(null);
+export const model = recommendModel();
 
 function sidecarPath(): string {
   const override = process.env['ROTSTIFT_SIDECAR'];
