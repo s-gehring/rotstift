@@ -201,7 +201,7 @@ mod tests {
         }
         let mut request = vision(PNG);
         request["logprobs"] = json!(5);
-        assert!(!rejection(request).is_empty());
+        assert!(rejection(request).contains("invalid type"));
     }
 
     #[test]

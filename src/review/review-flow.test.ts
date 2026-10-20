@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import { CORRECTOR_MISSING, IMAGE_FAILED, LAYOUT_FAILED, NOT_RERECOGNIZED } from './review-flow.ts';
-import { deferred, setupReview, tick, waitFor } from './test-support.ts';
+import { deferred, readingOf, setupReview, tick, waitFor } from './test-support.ts';
 
 describe('createReviewFlow', () => {
   it('finishes every transcription before the first correction', async () => {
@@ -42,13 +42,7 @@ describe('createReviewFlow', () => {
     h.transcripts.a = {
       ok: true,
       lines: ['Ich war im Schwimbad.', 'Es war schön.'],
-      reading: {
-        words: [
-          { text: 'Ich', confidence: 1 },
-          { text: 'Schwimbad.', confidence: 0.4 },
-        ],
-        uncertainBelow: 0.95,
-      },
+      reading: readingOf(['Ich war im Schwimbad.', 'Es war schön.'], { 'Schwimbad.': 0.4 }),
     };
     await flow.start(pages, DEUTSCH);
 
@@ -64,7 +58,7 @@ describe('createReviewFlow', () => {
       }),
     ]);
 
-    flow.cycleHint('a', 0);
+    flow.setHint('a', 0, 'accepted');
     const accepted = flow.getState().pages.a?.result;
     expect(accepted?.hints[0]?.status).toBe('accepted');
     expect(accepted?.transcript.lines[0]?.marks).toEqual([
@@ -72,15 +66,55 @@ describe('createReviewFlow', () => {
     ]);
     expect(accepted?.statistics).toMatchObject({ errors: 1, errorsByType: { R: 1 } });
 
-    flow.cycleHint('a', 0);
+    flow.setHint('a', 0, 'dismissed');
     const dismissed = flow.getState().pages.a?.result;
     expect(dismissed?.hints[0]?.status).toBe('dismissed');
     expect(dismissed?.transcript.lines[0]?.marks).toEqual([]);
     expect(dismissed?.statistics.errors).toBe(0);
 
-    flow.cycleHint('a', 7);
-    flow.cycleHint('missing', 0);
+    flow.setHint('a', 0, 'dismissed');
+    flow.setHint('a', 7, 'open');
+    flow.setHint('missing', 0, 'open');
     expect(flow.getState().pages.a?.result).toBe(dismissed);
+  });
+
+  it('treats an edited line as certain and keeps the confidence of the other lines', async () => {
+    const { pages, h, runner, flow } = setupReview(['a']);
+    const read = ['Die Wält ist rund.', 'Wir waren im Schwimbad.', 'Die Welt ist groß.'];
+    h.transcripts.a = {
+      ok: true,
+      lines: read,
+      reading: readingOf(read, { Wält: 0.4, 'Schwimbad.': 0.3, Welt: 0.6 }),
+    };
+    runner.start();
+    await waitFor(() => runner.getState().batch === null);
+    runner.edit('a', 'Die Welt ist rund.\nWir waren im Schwimbad.\nDie Welt ist groß.');
+    h.corrections['Die Welt ist rund.'] = {
+      ok: true,
+      correctedText: 'Die Welt ist Rund.\nWir waren im Schwimmbad.\nDie Welt ist groß.',
+    };
+    await flow.start(pages, DEUTSCH);
+
+    const result = flow.getState().pages.a?.result;
+    expect(result?.transcript.lines.map((line) => line.marks.map((mark) => mark.original))).toEqual(
+      [['rund'], [], []],
+    );
+    expect(result?.hints.map((hint) => [hint.line, hint.mark.original])).toEqual([
+      [2, 'Schwimbad'],
+    ]);
+  });
+
+  it('forgets the reading confidence when the edit changes the number of lines', async () => {
+    const { pages, h, runner, flow } = setupReview(['a']);
+    const read = ['Ich war im Schwimbad.', 'Es war schön.'];
+    h.transcripts.a = { ok: true, lines: read, reading: readingOf(read, { 'Schwimbad.': 0.3 }) };
+    runner.start();
+    await waitFor(() => runner.getState().batch === null);
+    runner.edit('a', 'Ich war im Schwimbad.');
+    expect(runner.getState().entries.a?.reading).toBeNull();
+    h.corrections['Ich war im Schwimbad.'] = { ok: true, correctedText: 'Ich war im Schwimmbad.' };
+    await flow.start(pages, DEUTSCH);
+    expect(flow.getState().pages.a?.result).toMatchObject({ hints: [], statistics: { errors: 1 } });
   });
 
   it('keeps every mark red when the transcript carries no reading confidence', async () => {

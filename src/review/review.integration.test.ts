@@ -231,7 +231,7 @@ describe.skipIf(!available)('Berichtigen end to end with the real sidecar', () =
       }
 
       for (const page of pages) {
-        expect(runner.getState().entries[page.id]?.reading?.words.length).toBeGreaterThan(0);
+        expect(runner.getState().entries[page.id]?.reading?.lines.flat().length).toBeGreaterThan(0);
         const result = state.pages[page.id]?.result;
         if (result === undefined || result === null) throw new Error(`no result for ${page.id}`);
         const marks = result.transcript.lines.reduce((sum, line) => sum + line.marks.length, 0);

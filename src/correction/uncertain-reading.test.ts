@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { transcriptSchema, type Mark, type Transcript } from '../annotations/transcript.ts';
 import {
+  editReading,
   nextHintStatus,
   openHints,
   readWords,
@@ -33,13 +34,19 @@ const omission = (offset: number, correction: string): Mark => ({
   offset,
 });
 
-const reading = (words: [string, number][], uncertainBelow = 0.95): PageReading => ({
-  words: words.map(([text, confidence]) => ({ text, confidence })),
+const reading = (
+  lines: readonly string[],
+  uncertain: Readonly<Record<string, number>>,
+  uncertainBelow = 0.95,
+): PageReading => ({
+  lines: lines.map((line) =>
+    Array.from(line.matchAll(/\S+/gu), ([text]) => ({ text, confidence: uncertain[text] ?? 1 })),
+  ),
   uncertainBelow,
 });
 
 describe('readWords', () => {
-  it('keeps the lowest token probability of each word of the parsed lines', () => {
+  it('keeps the lowest token probability of each word, line by line', () => {
     const content = '```\nDas Hauß\nsteht\n```';
     const tokens = [
       token('```\n', 0.5),
@@ -50,9 +57,12 @@ describe('readWords', () => {
       token('eht', 0.9),
       token('\n```', 0.5),
     ];
-    const words = readWords(content, tokens, ['Das Hauß', 'steht']);
-    expect(words?.map((word) => word.text)).toEqual(['Das', 'Hauß', 'steht']);
-    expect(words?.map((word) => word.confidence)).toEqual([
+    const lines = readWords(content, tokens, ['Das Hauß', 'steht']);
+    expect(lines?.map((words) => words.map((word) => word.text))).toEqual([
+      ['Das', 'Hauß'],
+      ['steht'],
+    ]);
+    expect(lines?.flat().map((word) => word.confidence)).toEqual([
       expect.closeTo(0.99, 6),
       expect.closeTo(0.3, 6),
       expect.closeTo(0.9, 6),
@@ -65,42 +75,57 @@ describe('readWords', () => {
 });
 
 describe('wordProbabilities', () => {
-  it('spreads each word confidence over its characters and treats unknown words as certain', () => {
-    const words = reading([
-      ['Ich', 1],
-      ['Lusammen', 0.4],
-      ['kam', 0.8],
-    ]).words;
-    expect(wordProbabilities(['Ich Lusammen', 'neu kam'], words)).toEqual([
+  it('spreads each word confidence over its characters within its own line', () => {
+    const { lines } = reading(['Ich  Lusammen', 'neu kam'], { Lusammen: 0.4, kam: 0.8 });
+    expect(wordProbabilities(['Ich Lusammen', 'neu kam'], lines)).toEqual([
       [1, 1, 1, 1, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4],
       [1, 1, 1, 1, 0.8, 0.8, 0.8],
     ]);
   });
+
+  it('treats a line whose words changed as certain without borrowing from other lines', () => {
+    const { lines } = reading(['Die Wält ist', 'rund wie die Welt'], { Wält: 0.4, Welt: 0.6 });
+    expect(wordProbabilities(['Die Welt ist', 'rund wie die Welt'], lines)).toEqual([
+      Array.from('Die Welt ist', () => 1),
+      [...Array.from('rund wie die ', () => 1), 0.6, 0.6, 0.6, 0.6],
+    ]);
+  });
+});
+
+describe('editReading', () => {
+  const before = ['Die Wält ist', 'rund wie die Welt'];
+  const read = reading(before, { Wält: 0.4, Welt: 0.6 });
+
+  it('forgets the confidence of edited lines and keeps the others', () => {
+    const edited = editReading(read, before, ['Die Welt ist', 'rund wie die Welt']);
+    expect(edited?.lines[0]).toEqual([]);
+    expect(edited?.lines[1]).toBe(read.lines[1]);
+    expect(edited?.uncertainBelow).toBe(0.95);
+  });
+
+  it('drops the reading when lines were added or removed', () => {
+    expect(editReading(read, before, ['Die Wält ist rund wie die Welt'])).toBeNull();
+    expect(editReading(null, before, before)).toBeNull();
+  });
 });
 
 describe('separateUncertain', () => {
+  const texts = ['Die Lusammenkunft war gut', 'Das Hauß'];
   const transcript: Transcript = {
     lines: [
       {
         number: 1,
-        text: 'Die Lusammenkunft war gut',
+        text: texts[0] ?? '',
         marks: [error(4, 'Lusammenkunft', 'Zusammenkunft'), omission(21, ',')],
       },
-      { number: 2, text: 'Das Hauß', marks: [error(4, 'Hauß', 'Haus')] },
+      { number: 2, text: texts[1] ?? '', marks: [error(4, 'Hauß', 'Haus')] },
     ],
   };
 
   it('turns marks on uncertainly read words into open hints and keeps the rest', () => {
     const separated = separateUncertain(
       transcript,
-      reading([
-        ['Die', 1],
-        ['Lusammenkunft', 0.42],
-        ['war', 0.99],
-        ['gut', 1],
-        ['Das', 1],
-        ['Hauß', 0.96],
-      ]),
+      reading(texts, { Lusammenkunft: 0.42, war: 0.99, Hauß: 0.96 }),
     );
     expect(separated.transcript.lines.map((line) => line.marks)).toEqual([
       [omission(21, ',')],
@@ -117,24 +142,21 @@ describe('separateUncertain', () => {
   });
 
   it('counts an omission as uncertain when a neighbouring word is', () => {
-    const separated = separateUncertain(
-      transcript,
-      reading([
-        ['Lusammenkunft', 1],
-        ['war', 0.5],
-      ]),
-    );
+    const separated = separateUncertain(transcript, reading(texts, { war: 0.5 }));
     expect(separated.hints.map((hint) => hint.mark)).toEqual([omission(21, ',')]);
   });
 
-  it('treats everything as certain without a reading', () => {
+  it('treats everything as certain without a matching reading', () => {
     expect(separateUncertain(transcript, null)).toEqual({ transcript, hints: [] });
+    const shorter = reading(['Die Lusammenkunft war gut'], { Lusammenkunft: 0.1 });
+    expect(separateUncertain(transcript, shorter)).toEqual({ transcript, hints: [] });
   });
 
   it('uses the threshold of the reading', () => {
-    const words: [string, number][] = [['Hauß', 0.96]];
-    expect(separateUncertain(transcript, reading(words, 0.95)).hints).toEqual([]);
-    expect(separateUncertain(transcript, reading(words, 0.98)).hints).toHaveLength(1);
+    expect(separateUncertain(transcript, reading(texts, { Hauß: 0.96 }, 0.95)).hints).toEqual([]);
+    expect(separateUncertain(transcript, reading(texts, { Hauß: 0.96 }, 0.98)).hints).toHaveLength(
+      1,
+    );
   });
 });
 

@@ -109,7 +109,7 @@ function pageReading(
 ): PageReading | null {
   if (uncertainBelow === null || answer.logprobs === undefined) return null;
   const words = readWords(answer.text, answer.logprobs, lines);
-  return words === null ? null : { words, uncertainBelow };
+  return words === null ? null : { lines: words, uncertainBelow };
 }
 
 export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {

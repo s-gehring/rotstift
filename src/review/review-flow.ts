@@ -3,9 +3,9 @@ import type { Bbox, Transcript } from '../annotations/transcript.ts';
 import { correctPage, type CorrectPageResult } from '../correction/correct-page.ts';
 import { describeCorrectError, type Corrector } from '../correction/corrector.ts';
 import {
-  nextHintStatus,
   separateUncertain,
   withAcceptedHints,
+  type HintStatus,
   type PageReading,
   type ReadingHint,
 } from '../correction/uncertain-reading.ts';
@@ -495,12 +495,12 @@ export function createReviewFlow(deps: ReviewDeps) {
       });
     },
 
-    cycleHint: (id: string, index: number) => {
+    setHint: (id: string, index: number, status: HintStatus) => {
       const result = state.pages[id]?.result;
       const hint = result?.hints[index];
-      if (result == null || hint === undefined) return;
+      if (result == null || hint === undefined || hint.status === status) return;
       const hints = result.hints.map((entry, position) =>
-        position === index ? { ...entry, status: nextHintStatus(entry.status) } : entry,
+        position === index ? { ...entry, status } : entry,
       );
       patch(id, { result: withHints({ ...result, hints }) });
     },

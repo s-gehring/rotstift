@@ -8,7 +8,7 @@ export interface WordReading {
 }
 
 export interface PageReading {
-  readonly words: readonly WordReading[];
+  readonly lines: readonly (readonly WordReading[])[];
   readonly uncertainBelow: number;
 }
 
@@ -32,10 +32,10 @@ export function readWords(
   content: string,
   tokens: readonly TokenProbability[],
   lines: readonly string[],
-): WordReading[] | null {
+): WordReading[][] | null {
   const probabilities = charProbabilities(content, tokens);
   if (probabilities === null) return null;
-  return lineProbabilities(content, probabilities, lines).flatMap((perChar, index) =>
+  return lineProbabilities(content, probabilities, lines).map((perChar, index) =>
     Array.from(lines[index]?.matchAll(WORD) ?? [], (match) => ({
       text: match[0],
       confidence: Math.min(1, ...perChar.slice(match.index, match.index + match[0].length)),
@@ -43,19 +43,32 @@ export function readWords(
   );
 }
 
+export function editReading(
+  reading: PageReading | null,
+  before: readonly string[],
+  after: readonly string[],
+): PageReading | null {
+  if (reading === null || before.length !== after.length) return null;
+  return {
+    ...reading,
+    lines: reading.lines.map((words, index) => (before[index] === after[index] ? words : [])),
+  };
+}
+
 export function wordProbabilities(
   lines: readonly string[],
-  words: readonly WordReading[],
+  readings: readonly (readonly WordReading[])[],
 ): number[][] {
-  let cursor = 0;
-  return lines.map((line) => {
+  return lines.map((line, index) => {
     const result = Array.from(line, () => 1);
-    for (const match of line.matchAll(WORD)) {
-      const found = words.findIndex((word, index) => index >= cursor && word.text === match[0]);
-      if (found === -1) continue;
-      result.fill(words[found]?.confidence ?? 1, match.index, match.index + match[0].length);
-      cursor = found + 1;
-    }
+    const words = [...line.matchAll(WORD)];
+    const read = readings[index] ?? [];
+    const same =
+      words.length === read.length && words.every((match, at) => match[0] === read[at]?.text);
+    if (!same) return result;
+    words.forEach((match, at) => {
+      result.fill(read[at]?.confidence ?? 1, match.index, match.index + match[0].length);
+    });
     return result;
   });
 }
@@ -64,10 +77,12 @@ export function separateUncertain(
   transcript: Transcript,
   reading: PageReading | null,
 ): SeparatedMarks {
-  if (reading === null) return { transcript, hints: [] };
+  if (reading === null || reading.lines.length !== transcript.lines.length) {
+    return { transcript, hints: [] };
+  }
   const probabilities = wordProbabilities(
     transcript.lines.map((line) => line.text),
-    reading.words,
+    reading.lines,
   );
   const hints: ReadingHint[] = [];
   const lines = transcript.lines.map((line, index) => {

@@ -42,7 +42,7 @@ const transcriberSchema = z.strictObject({
   request: z.strictObject({
     ...requestFields,
     imageMaxEdge: z.number().int().min(64),
-    uncertainBelow: z.number().gt(0).max(1).nullable(),
+    uncertainBelow: z.number().gt(0).lt(1).nullable(),
   }),
   prompt: z.string().min(1),
 });

@@ -336,7 +336,7 @@ impl Registry {
                 || !(0.0..=2.0).contains(&request.temperature)
                 || request
                     .uncertain_below
-                    .is_some_and(|threshold| !(threshold > 0.0 && threshold <= 1.0))
+                    .is_some_and(|threshold| !(threshold > 0.0 && threshold < 1.0))
             {
                 return Err(format!("model {id}: invalid request parameters"));
             }
@@ -619,7 +619,7 @@ mod tests {
                 .contains("maxOutputTokens")
         );
         assert!(rejection(|m| m["prompt"] = json!("  ")).contains("prompt"));
-        for threshold in [json!(0.0), json!(1.5), json!(-0.1)] {
+        for threshold in [json!(0.0), json!(1.0), json!(1.5), json!(-0.1)] {
             assert!(
                 rejection(|m| m["request"]["uncertainBelow"] = threshold.clone())
                     .contains("request"),
@@ -627,6 +627,13 @@ mod tests {
             );
         }
         assert!(Registry::parse("{\"models\": []}").is_err());
+    }
+
+    #[test]
+    fn a_transcriber_may_switch_the_reading_threshold_off() {
+        let json = json_with(0, |m| m["request"]["uncertainBelow"] = Value::Null);
+        let registry = Registry::parse(&json).unwrap();
+        assert_eq!(registry.models[0].request.uncertain_below, None);
     }
 
     #[test]

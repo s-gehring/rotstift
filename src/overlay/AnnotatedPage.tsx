@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import type { ReadingHint } from '../correction/uncertain-reading.ts';
@@ -17,7 +17,7 @@ export interface AnnotatedPageProps {
   readonly alt?: string;
   readonly className?: string;
   readonly hints?: readonly ReadingHint[];
-  readonly onHint?: (index: number) => void;
+  readonly onToggleHint?: (index: number) => void;
 }
 
 const HINT_COLOR = '#5f6368';
@@ -31,7 +31,7 @@ export function AnnotatedPage({
   alt = '',
   className,
   hints,
-  onHint,
+  onToggleHint,
 }: AnnotatedPageProps) {
   const model = useMemo(
     () => layoutOverlay(transcript, { page: size, profile, ...(locator ? { locator } : {}) }),
@@ -69,7 +69,7 @@ export function AnnotatedPage({
           transcript={transcript}
           hints={hints}
           {...(locator && { locator })}
-          {...(onHint && { onHint })}
+          {...(onToggleHint && { onToggleHint })}
         />
       )}
     </div>
@@ -81,13 +81,13 @@ function HintLayer({
   transcript,
   hints,
   locator,
-  onHint,
+  onToggleHint,
 }: {
   readonly size: PageSize;
   readonly transcript: Transcript;
   readonly hints: readonly ReadingHint[];
   readonly locator?: TextLocator;
-  readonly onHint?: (index: number) => void;
+  readonly onToggleHint?: (index: number) => void;
 }) {
   const spots = useMemo(
     () => layoutHints(transcript, hints, locator),
@@ -108,7 +108,7 @@ function HintLayer({
           spot={spot}
           selected={selected === spot.index}
           onSelect={(on) => setSelected(on ? spot.index : null)}
-          onCycle={() => onHint?.(spot.index)}
+          onToggle={() => onToggleHint?.(spot.index)}
         />
       ))}
     </svg>
@@ -117,7 +117,7 @@ function HintLayer({
 
 function hintLabel(spot: HintSpot): string {
   const state = spot.status === 'open' ? 'Unsicher gelesen' : 'Als Fehler übernommen';
-  const action = spot.status === 'open' ? 'Als Fehler übernehmen' : 'Verwerfen';
+  const action = spot.status === 'open' ? 'Als Fehler übernehmen' : 'Wieder als Hinweis zeigen';
   return `${state}: ${markText(spot.mark)}. ${action}`;
 }
 
@@ -125,19 +125,20 @@ function HintElement({
   spot,
   selected,
   onSelect,
-  onCycle,
+  onToggle,
 }: {
   readonly spot: HintSpot;
   readonly selected: boolean;
   readonly onSelect: (selected: boolean) => void;
-  readonly onCycle: () => void;
+  readonly onToggle: () => void;
 }) {
+  const pointer = useRef(false);
   const stroke = Math.max(1.5, spot.height * 0.05);
   const fontSize = Math.max(10, spot.height * 0.55);
   const onKeyDown = (event: KeyboardEvent<SVGGElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
-    onCycle();
+    onToggle();
   };
   return (
     <g
@@ -147,12 +148,22 @@ function HintElement({
       aria-label={hintLabel(spot)}
       data-status={spot.status}
       data-hint={spot.index}
-      onClick={onCycle}
+      onPointerDown={() => {
+        pointer.current = true;
+      }}
+      onClick={() => {
+        pointer.current = false;
+        if (selected) onToggle();
+        else onSelect(true);
+      }}
       onKeyDown={onKeyDown}
-      onFocus={() => onSelect(true)}
-      onBlur={() => onSelect(false)}
-      onMouseEnter={() => onSelect(true)}
-      onMouseLeave={() => onSelect(false)}
+      onFocus={() => {
+        if (!pointer.current) onSelect(true);
+      }}
+      onBlur={() => {
+        pointer.current = false;
+        onSelect(false);
+      }}
     >
       <rect
         className="hint-spot__area"

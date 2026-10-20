@@ -5,7 +5,7 @@ import type { PageImageEncoder } from '../export/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { arbeitExportBlock, createReviewExport } from './export-input.ts';
-import { setupReview } from './test-support.ts';
+import { readingOf, setupReview } from './test-support.ts';
 
 async function reviewed() {
   const harness = setupReview(['a', 'b', 'c']);
@@ -55,7 +55,7 @@ describe('createReviewExport', () => {
     harness.h.transcripts.a = {
       ok: true,
       lines: ['Ich war im Schwimbad.', 'Es war schön.'],
-      reading: { words: [{ text: 'Schwimbad.', confidence: 0.3 }], uncertainBelow: 0.95 },
+      reading: readingOf(['Ich war im Schwimbad.', 'Es war schön.'], { 'Schwimbad.': 0.3 }),
     };
     await harness.flow.start(harness.pages, DEUTSCH);
     const arbeit: Arbeit = { id: 'x', name: 'Aufsatz Ada', pages: harness.pages };
@@ -68,11 +68,11 @@ describe('createReviewExport', () => {
     expect(exported()?.statistics).toMatchObject({ words: 7, errors: 0 });
     expect(marks()).toEqual([]);
 
-    harness.flow.cycleHint('a', 0);
+    harness.flow.setHint('a', 0, 'accepted');
     expect(exported()?.statistics).toMatchObject({ errors: 1 });
     expect(marks()).toEqual([expect.objectContaining({ correction: 'Schwimmbad' })]);
 
-    harness.flow.cycleHint('a', 0);
+    harness.flow.setHint('a', 0, 'dismissed');
     expect(exported()?.statistics).toMatchObject({ errors: 0 });
     expect(marks()).toEqual([]);
   });

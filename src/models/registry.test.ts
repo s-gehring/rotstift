@@ -193,7 +193,7 @@ describe('registry', () => {
       request: { ...transcriber.request, uncertainBelow },
     });
     expect(parse(withThreshold(null), corrector)).not.toThrow();
-    for (const invalid of [0, 1.2, -0.5, '0.9']) {
+    for (const invalid of [0, 1, 1.2, -0.5, '0.9']) {
       expect(parse(withThreshold(invalid), corrector)).toThrow(ZodError);
     }
     const { uncertainBelow: _omitted, ...withoutThreshold } = transcriber.request;

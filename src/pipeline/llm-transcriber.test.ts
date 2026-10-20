@@ -391,11 +391,15 @@ describe('describeLlmError', () => {
       expect(result).toMatchObject({ ok: true, lines: ['Hallo Wält', 'Zweite'] });
       if (!result.ok) throw new Error('expected a transcript');
       expect(result.reading?.uncertainBelow).toBe(model.request.uncertainBelow);
-      const words = result.reading?.words.map((word) => [word.text, word.confidence]);
+      const words = result.reading?.lines.map((line) =>
+        line.map((word) => [word.text, word.confidence]),
+      );
       expect(words).toEqual([
-        ['Hallo', 1],
-        ['Wält', expect.closeTo(0.4, 6)],
-        ['Zweite', expect.closeTo(0.97, 6)],
+        [
+          ['Hallo', 1],
+          ['Wält', expect.closeTo(0.4, 6)],
+        ],
+        [['Zweite', expect.closeTo(0.97, 6)]],
       ]);
     });
 

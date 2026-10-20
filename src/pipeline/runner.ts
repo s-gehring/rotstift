@@ -1,4 +1,4 @@
-import type { PageReading } from '../correction/uncertain-reading.ts';
+import { editReading, type PageReading } from '../correction/uncertain-reading.ts';
 import type { ImportPage, Rotation } from '../import/pages.ts';
 import { browserDiagnostics, createHeartbeat, type PipelineDiagnostics } from './diagnostics.ts';
 import type {
@@ -503,8 +503,10 @@ export function createRunner(deps: RunnerDeps) {
     },
 
     edit: (id: string, text: string) => {
-      if (state.entries[id]?.status !== 'done') return;
-      patchEntry(id, { text, edited: true });
+      const entry = state.entries[id];
+      if (entry?.status !== 'done') return;
+      const reading = editReading(entry.reading, entry.text.split('\n'), text.split('\n'));
+      patchEntry(id, { text, edited: true, reading });
     },
   };
 }

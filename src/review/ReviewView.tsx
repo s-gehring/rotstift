@@ -2,7 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import { listErrors } from '../annotations/transcript.ts';
-import { openHints, type HintStatus } from '../correction/uncertain-reading.ts';
+import { nextHintStatus, openHints, type HintStatus } from '../correction/uncertain-reading.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { saveClassPdf, saveCorrectedPdf } from '../export/save-pdf.ts';
@@ -283,7 +283,7 @@ function HintList({
   onHint,
 }: {
   readonly result: CorrectedPage;
-  readonly onHint: (index: number) => void;
+  readonly onHint: (index: number, status: HintStatus) => void;
 }) {
   if (result.hints.length === 0) return null;
   const open = openHints(result.hints);
@@ -306,7 +306,7 @@ function HintList({
             <button
               type="button"
               aria-label={`${HINT_ACTION[hint.status]}: Zeile ${hint.line}, ${markText(hint.mark)}`}
-              onClick={() => onHint(index)}
+              onClick={() => onHint(index, nextHintStatus(hint.status))}
             >
               {HINT_ACTION[hint.status]}
             </button>
@@ -365,7 +365,7 @@ function PageReview({
   readonly arbeitName: string;
   readonly canRetry: boolean;
   readonly onRetry: () => void;
-  readonly onHint: (index: number) => void;
+  readonly onHint: (index: number, status: HintStatus) => void;
 }) {
   const stale = pageCondition(page, review, entries) === 'stale';
   const status = review?.status ?? 'waiting';
@@ -375,6 +375,7 @@ function PageReview({
   const headingId = useId();
   const alt = `Seite ${position} von ${arbeitName}`;
   let statusText = STATUS_TEXT[status];
+  const open = result === null ? 0 : openHints(result.hints);
   if (stale) statusText = STALE_TEXT;
   else if (status === 'done' && result) statusText = errorsText(result.statistics.errors);
   return (
@@ -385,9 +386,7 @@ function PageReview({
           <span className="status" data-status={stale ? 'stale' : status}>
             {statusText}
           </span>
-          {result !== null && openHints(result.hints) > 0 && (
-            <span className="status hint-count">{hintsText(openHints(result.hints))}</span>
-          )}
+          {open > 0 && <span className="status hint-count">{hintsText(open)}</span>}
           {canRetry && (stale || RETRYABLE.has(status)) && (
             <button type="button" onClick={onRetry}>
               Seite {position} erneut berichtigen
@@ -406,7 +405,10 @@ function PageReview({
                 profile={profile}
                 alt={`${alt}, mit Korrekturen`}
                 hints={result.hints}
-                onHint={onHint}
+                onToggleHint={(index) => {
+                  const current = result.hints[index]?.status;
+                  onHint(index, current === 'open' ? 'accepted' : 'open');
+                }}
               />
             ) : (
               <img src={imageUrl ?? page.thumbnailUrl} alt={alt} />
@@ -530,7 +532,7 @@ function ArbeitDetail({
             arbeitName={arbeit.name}
             canRetry={canRetry && !running}
             onRetry={() => void flow.retry(page)}
-            onHint={(hint) => flow.cycleHint(page.id, hint)}
+            onHint={(hint, status) => flow.setHint(page.id, hint, status)}
           />
         ))}
       </ol>
