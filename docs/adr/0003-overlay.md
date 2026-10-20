@@ -47,7 +47,7 @@ Bekannt sind nur Zeilenboxen. `TextLocator.span(line, start, end)` liefert den x
 `layoutOverlay` rechnet in Seitenpixeln ein Modell aus Strichen und Texten. Daraus entstehen beide Ausgaben mit identischer Geometrie:
 
 - `AnnotatedPage` zeigt Bild und SVG-Ebene (`viewBox` in Seitenkoordinaten, scharf bei jedem Zoom, `pointer-events: none`).
-- `rasterizeAnnotatedPage` zeichnet Seite und Modell auf ein Canvas und liefert ein PNG. Der Export geht absichtlich nicht über ein SVG als Bild, weil die Schrift dort in der WebView nicht zuverlässig geladen wird.
+- `rasterizeAnnotatedPage` zeichnet Seite und Modell auf ein Canvas und liefert ein PNG oder, mit `type`, `quality` und `maxEdge`, ein verkleinertes JPEG (so nutzt es der PDF-Export). Der Export geht absichtlich nicht über ein SVG als Bild, weil die Schrift dort in der WebView nicht zuverlässig geladen wird.
 
 Zeilen ohne `bbox` können nicht gezeichnet werden. Das Modell nennt sie in `skippedLines`.
 
