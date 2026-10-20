@@ -7,8 +7,8 @@ export interface Candidate extends BBox {
   readonly row: number;
 }
 
-const MIN_MARGINAL = 0.9;
-const MIN_GROUP_MARGINAL = 0.8;
+const MIN_MARGINAL = 0.8;
+const MIN_GROUP_MARGINAL = 0.7;
 const FIT_WEIGHT = 0.5;
 const TALL_BAND_RATIO = 1.7;
 const GROUP_CONFIDENCE = 0.7;

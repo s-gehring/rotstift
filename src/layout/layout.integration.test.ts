@@ -152,7 +152,7 @@ describe.skipIf(!datasetAvailable)('real transcripts of handwritten dataset page
       process.stdout.write(
         `\n${rows.join('\n')}\nZugeordnet ${assigned}/${lines} (${((100 * assigned) / lines).toFixed(1)} %), Zeilenzahl gleich auf ${matching}/${PAGES} Seiten\n`,
       );
-      expect(assigned / lines).toBeGreaterThan(0.6);
+      expect(assigned / lines).toBeGreaterThan(0.88);
     },
     30 * 60 * 1000,
   );

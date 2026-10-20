@@ -16,9 +16,9 @@ export interface AlignedGroup {
   readonly marginal: number;
 }
 
-const MERGE_PENALTY = 0.6;
+const MERGE_PENALTY = 1.0;
 const SPLIT_PENALTY = 1.0;
-const SKIP_TRANSCRIPT_BASE = 1.0;
+const SKIP_TRANSCRIPT_BASE = 0.7;
 const SKIP_DETECTED_BASE = 0.25;
 const SHORT_LINE_DAMPING = 3;
 const MAX_GROUP = 3;
@@ -26,10 +26,18 @@ const MAX_SKIP = 6;
 const GAP_TOLERANCE = 0.4;
 const GAP_WEIGHT = 3;
 const GAP_CAP = 3;
-const SHARPNESS = 3;
+const EDGE_SKIP = 0.6;
+const SHARPNESS = 4;
+
+const WIDTH_SIGMA = 0.25;
+const HUBER = 2;
 
 export function mismatch(inkChars: number, chars: number): number {
-  return Math.abs(Math.log((inkChars + SHORT_LINE_DAMPING) / (chars + SHORT_LINE_DAMPING)));
+  const u =
+    Math.abs(Math.log((inkChars + SHORT_LINE_DAMPING) / (chars + SHORT_LINE_DAMPING))) /
+    WIDTH_SIGMA;
+  const nats = u <= HUBER ? 0.5 * u * u : HUBER * u - 0.5 * HUBER * HUBER;
+  return nats / SHARPNESS;
 }
 
 interface Edge {
@@ -74,16 +82,19 @@ export function align(input: AlignInput, withMarginals: boolean): AlignedGroup[]
   const lengthSum = prefix(lengths);
   const skippedRows = prefix(lengths.map((_, j) => 1 + (blanksBefore[j] ?? 0)));
 
+  const band = Math.abs(n - m) + MAX_SKIP;
   const edgesFrom = (i0: number, j0: number, visit: (edge: Edge) => void) => {
+    if (Math.abs(i0 - j0) > band + MAX_GROUP) return;
     const start = i0 === 0 && j0 === 0;
     const detectedReach = start ? n : MAX_SKIP;
     const transcriptReach = start ? m : MAX_SKIP;
     for (let sd = 0; sd <= detectedReach && i0 + sd < n; sd += 1) {
       const ds = i0 + sd;
-      const skipped = item(detectedSkip, ds) - item(detectedSkip, i0);
+      const skipped = (item(detectedSkip, ds) - item(detectedSkip, i0)) * (start ? EDGE_SKIP : 1);
       const extraRows = item(substantialCount, ds) - item(substantialCount, i0);
       for (let st = 0; st <= transcriptReach && j0 + st < m; st += 1) {
         const js = j0 + st;
+        if (Math.abs(ds - js) > band) continue;
         const skippedTranscript = item(transcriptSkip, js) - item(transcriptSkip, j0);
         let gap = 0;
         if (!start) {
@@ -121,8 +132,7 @@ export function align(input: AlignInput, withMarginals: boolean): AlignedGroup[]
   };
 
   const finalCost = (i: number, j: number) =>
-    item(detectedSkip, n) -
-    item(detectedSkip, i) +
+    (item(detectedSkip, n) - item(detectedSkip, i)) * EDGE_SKIP +
     (item(transcriptSkip, m) - item(transcriptSkip, j));
 
   const states = (n + 1) * stride;
@@ -176,9 +186,12 @@ export function align(input: AlignInput, withMarginals: boolean): AlignedGroup[]
   }
   path.reverse();
 
-  const marginals = new Map<string, number>();
-  const key = (edge: Edge) =>
-    `${edge.firstDetected}:${edge.detectedCount}:${edge.firstTranscript}:${edge.transcriptCount}`;
+  const marginals = new Float64Array(withMarginals ? n * m * MAX_GROUP * MAX_GROUP : 0);
+  const slot = (edge: Edge) =>
+    ((edge.firstDetected * m + edge.firstTranscript) * MAX_GROUP + edge.detectedCount - 1) *
+      MAX_GROUP +
+    edge.transcriptCount -
+    1;
   if (withMarginals) {
     const beta = new Float64Array(states).fill(-Infinity);
     for (let i = n; i >= 0; i -= 1) {
@@ -201,7 +214,7 @@ export function align(input: AlignInput, withMarginals: boolean): AlignedGroup[]
           const posterior = Math.exp(
             weight - SHARPNESS * edge.cost + (beta[edge.to] ?? -Infinity) - normaliser,
           );
-          marginals.set(key(edge), (marginals.get(key(edge)) ?? 0) + posterior);
+          marginals[slot(edge)] = (marginals[slot(edge)] ?? 0) + posterior;
         });
       }
     }
@@ -210,6 +223,6 @@ export function align(input: AlignInput, withMarginals: boolean): AlignedGroup[]
   return path.map((edge) => ({
     detected: Array.from({ length: edge.detectedCount }, (_, k) => edge.firstDetected + k),
     transcript: Array.from({ length: edge.transcriptCount }, (_, k) => edge.firstTranscript + k),
-    marginal: withMarginals ? Math.min(1, marginals.get(key(edge)) ?? 0) : 1,
+    marginal: withMarginals ? Math.min(1, marginals[slot(edge)] ?? 0) : 1,
   }));
 }

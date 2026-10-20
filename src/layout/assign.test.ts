@@ -100,15 +100,15 @@ describe('assignLines', () => {
     const chars = [36, 40, 33, 45, 38, 31, 42, 35, 39, 44];
     const detected = stack(chars, {});
     const pieces: Candidate[] = [
-      { x: 100, y: 100, width: 200, height: 40, inkCount: 900, row: 120 },
-      { x: 340, y: 104, width: 180, height: 38, inkCount: 800, row: 123 },
+      { x: 100, y: 100, width: 300, height: 40, inkCount: 900, row: 120 },
+      { x: 420, y: 104, width: 300, height: 38, inkCount: 800, row: 123 },
     ];
     detected.splice(0, 1, ...pieces);
     const result = assignLines(
       detected,
-      [42, ...chars.slice(1)].map((count) => sentence(count)),
+      [60, ...chars.slice(1)].map((count) => sentence(count)),
     );
-    expect(result[0]?.bbox).toEqual({ x: 100, y: 100, width: 420, height: 42 });
+    expect(result[0]?.bbox).toEqual({ x: 100, y: 100, width: 620, height: 42 });
     expect(result[1]?.bbox.y).toBe(160);
   });
 
