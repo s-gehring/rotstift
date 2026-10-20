@@ -1,124 +1,28 @@
+import { align, mismatch, type AlignedGroup, type AlignInput } from './align.ts';
 import { item, median } from './signal.ts';
 import type { BBox, LineLocation } from './types.ts';
 
 export interface Candidate extends BBox {
   readonly inkCount: number;
+  readonly row: number;
 }
 
-const MERGE_PENALTY = 0.6;
-const SPLIT_PENALTY = 1.0;
-const SKIP_TRANSCRIPT_BASE = 1.0;
-const SKIP_DETECTED_BASE = 0.25;
-const SHORT_LINE_DAMPING = 3;
-const MAX_GROUP = 3;
-const MIN_CONFIDENCE = 0.2;
+const MIN_MARGINAL = 0.9;
+const MIN_GROUP_MARGINAL = 0.8;
+const FIT_WEIGHT = 0.5;
 const TALL_BAND_RATIO = 1.7;
 const GROUP_CONFIDENCE = 0.7;
-
-type Step = { detected: number; transcript: number } | null;
-
-interface Group {
-  readonly detected: readonly number[];
-  readonly transcript: readonly number[];
-}
+const SUBSTANTIAL_WIDTH = 0.35;
+const SUBSTANTIAL_HEIGHT = 0.5;
 
 export function lineLength(text: string): number {
   return Array.from(text.trim().replace(/\s+/gu, ' ')).length;
 }
 
-function mismatch(inkChars: number, chars: number): number {
-  return Math.abs(Math.log((inkChars + SHORT_LINE_DAMPING) / (chars + SHORT_LINE_DAMPING)));
-}
-
-function align(
-  widths: readonly number[],
-  lengths: readonly number[],
-  pixelsPerChar: number,
-): Step[][] {
-  const n = widths.length;
-  const m = lengths.length;
-  const typical = Math.max(1, median(lengths));
-  const cost: number[][] = Array.from({ length: n + 1 }, () =>
-    Array.from({ length: m + 1 }, () => Infinity),
-  );
-  const back: Step[][] = Array.from({ length: n + 1 }, () =>
-    Array.from({ length: m + 1 }, (): Step => null),
-  );
-  item(cost, 0)[0] = 0;
-
-  const widthSum = (from: number, count: number) => {
-    let sum = 0;
-    for (let k = from; k < from + count; k += 1) sum += widths[k] ?? 0;
-    return sum;
-  };
-  const lengthSum = (from: number, count: number) => {
-    let sum = 0;
-    for (let k = from; k < from + count; k += 1) sum += lengths[k] ?? 0;
-    return sum;
-  };
-
-  for (let i = 0; i <= n; i += 1) {
-    for (let j = 0; j <= m; j += 1) {
-      const here = item(cost, i)[j] ?? Infinity;
-      if (here === Infinity) continue;
-      const relax = (di: number, dj: number, extra: number) => {
-        const row = cost[i + di];
-        if (row === undefined || j + dj > m) return;
-        const candidate = here + extra;
-        if (candidate < (row[j + dj] ?? Infinity)) {
-          row[j + dj] = candidate;
-          item(back, i + di)[j + dj] = { detected: di, transcript: dj };
-        }
-      };
-      if (i < n) {
-        const inkChars = (widths[i] ?? 0) / pixelsPerChar;
-        relax(1, 0, SKIP_DETECTED_BASE + 0.7 * Math.min(1, inkChars / typical));
-      }
-      if (j < m) {
-        relax(0, 1, SKIP_TRANSCRIPT_BASE + 0.5 * Math.min(1, (lengths[j] ?? 0) / typical));
-      }
-      if (i < n && j < m) {
-        for (let a = 1; a <= MAX_GROUP && i + a <= n; a += 1) {
-          relax(
-            a,
-            1,
-            mismatch(widthSum(i, a) / pixelsPerChar, lengths[j] ?? 0) + MERGE_PENALTY * (a - 1),
-          );
-        }
-        for (let b = 2; b <= MAX_GROUP && j + b <= m; b += 1) {
-          relax(
-            1,
-            b,
-            mismatch((widths[i] ?? 0) / pixelsPerChar, lengthSum(j, b)) + SPLIT_PENALTY * (b - 1),
-          );
-        }
-      }
-    }
-  }
-  return back;
-}
-
-function trace(back: Step[][], n: number, m: number): Group[] {
-  const groups: Group[] = [];
-  let i = n;
-  let j = m;
-  while (i > 0 || j > 0) {
-    const step = item(back, i)[j];
-    if (step === null || step === undefined) break;
-    i -= step.detected;
-    j -= step.transcript;
-    groups.push({
-      detected: Array.from({ length: step.detected }, (_, k) => i + k),
-      transcript: Array.from({ length: step.transcript }, (_, k) => j + k),
-    });
-  }
-  return groups.toReversed();
-}
-
 function estimateScale(
   widths: readonly number[],
   lengths: readonly number[],
-  groups: readonly Group[],
+  groups: readonly AlignedGroup[],
   previous: number,
 ): number {
   const ratios: number[] = [];
@@ -139,27 +43,59 @@ function union(boxes: readonly BBox[]): BBox {
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
+function estimatePitch(candidates: readonly Candidate[]): number {
+  const heights = median(candidates.map((candidate) => candidate.height));
+  const gaps: number[] = [];
+  for (let k = 1; k < candidates.length; k += 1) {
+    const gap = item(candidates, k).row - item(candidates, k - 1).row;
+    if (gap >= heights * 0.4) gaps.push(gap);
+  }
+  return gaps.length > 0 ? median(gaps) : Math.max(1, heights * 1.2);
+}
+
 export function assignLines(
   candidates: readonly Candidate[],
   transcript: readonly string[],
 ): (LineLocation | null)[] {
   const result: (LineLocation | null)[] = transcript.map(() => null);
   const indices: number[] = [];
+  const blanksBefore: number[] = [];
+  let blanks = 0;
   transcript.forEach((text, index) => {
-    if (lineLength(text) > 0) indices.push(index);
+    if (lineLength(text) > 0) {
+      indices.push(index);
+      blanksBefore.push(blanks);
+      blanks = 0;
+    } else {
+      blanks += 1;
+    }
   });
   const lengths = indices.map((index) => lineLength(transcript[index] ?? ''));
   const widths = candidates.map((candidate) => candidate.width);
   if (indices.length === 0 || candidates.length === 0) return result;
 
-  let scale = median(widths) / Math.max(1, median(lengths));
-  let groups: Group[] = [];
-  for (let round = 0; round < 3; round += 1) {
-    groups = trace(align(widths, lengths, scale), candidates.length, lengths.length);
-    scale = estimateScale(widths, lengths, groups, scale);
-  }
-
+  const medianWidth = median(widths);
   const medianHeight = median(candidates.map((candidate) => candidate.height));
+  const input = (pixelsPerChar: number): AlignInput => ({
+    widths,
+    rows: candidates.map((candidate) => candidate.row),
+    substantial: candidates.map(
+      (candidate) =>
+        candidate.width >= medianWidth * SUBSTANTIAL_WIDTH &&
+        candidate.height >= medianHeight * SUBSTANTIAL_HEIGHT,
+    ),
+    lengths,
+    blanksBefore,
+    pitch: estimatePitch(candidates),
+    pixelsPerChar,
+  });
+
+  let scale = medianWidth / Math.max(1, median(lengths));
+  for (let round = 0; round < 2; round += 1) {
+    scale = estimateScale(widths, lengths, align(input(scale), false), scale);
+  }
+  const groups = align(input(scale), true);
+
   for (const group of groups) {
     const { detected, transcript: wanted } = group;
     if (detected.length === 0 || wanted.length === 0) continue;
@@ -169,8 +105,10 @@ export function assignLines(
     const chars = wantedLengths.reduce((sum, length) => sum + length, 0);
     const grouped = detected.length > 1 || wanted.length > 1;
     const confidence =
-      Math.exp(-1.5 * mismatch(inkChars, chars)) * (grouped ? GROUP_CONFIDENCE : 1);
-    if (confidence < MIN_CONFIDENCE) continue;
+      group.marginal *
+      Math.exp(-FIT_WEIGHT * mismatch(inkChars, chars)) *
+      (grouped ? GROUP_CONFIDENCE : 1);
+    if (group.marginal < (grouped ? MIN_GROUP_MARGINAL : MIN_MARGINAL)) continue;
 
     if (wanted.length === 1) {
       result[item(indices, item(wanted, 0))] = { bbox: union(boxes), confidence };

@@ -260,20 +260,25 @@ export function labelComponents(mask: InkMask): Components {
     for (let x = 0; x < width; x += 1) {
       const at = y * width + x;
       if (data[at] !== 1) continue;
-      const neighbours = [
-        x > 0 ? (labels[at - 1] ?? 0) : 0,
-        y > 0 && x > 0 ? (labels[at - width - 1] ?? 0) : 0,
-        y > 0 ? (labels[at - width] ?? 0) : 0,
-        y > 0 && x < width - 1 ? (labels[at - width + 1] ?? 0) : 0,
-      ].filter((label) => label > 0);
-      if (neighbours.length === 0) {
+      const left = x > 0 ? (labels[at - 1] ?? 0) : 0;
+      const upLeft = y > 0 && x > 0 ? (labels[at - width - 1] ?? 0) : 0;
+      const up = y > 0 ? (labels[at - width] ?? 0) : 0;
+      const upRight = y > 0 && x < width - 1 ? (labels[at - width + 1] ?? 0) : 0;
+      if (left === 0 && upLeft === 0 && up === 0 && upRight === 0) {
         parent.push(parent.length);
         labels[at] = parent.length - 1;
         continue;
       }
-      const root = Math.min(...neighbours.map(find));
+      let root = Number.MAX_SAFE_INTEGER;
+      if (left > 0) root = Math.min(root, find(left));
+      if (upLeft > 0) root = Math.min(root, find(upLeft));
+      if (up > 0) root = Math.min(root, find(up));
+      if (upRight > 0) root = Math.min(root, find(upRight));
       labels[at] = root;
-      for (const label of neighbours) parent[find(label)] = root;
+      if (left > 0) parent[find(left)] = root;
+      if (upLeft > 0) parent[find(upLeft)] = root;
+      if (up > 0) parent[find(up)] = root;
+      if (upRight > 0) parent[find(upRight)] = root;
     }
   }
   const count = parent.length;

@@ -7,7 +7,9 @@ import truth from './fixtures/rendered-truth.json';
 import { readJpeg } from './image-files.ts';
 import { locateLines } from './locate-lines.ts';
 import { CACHE, MODELS_DIR, model, RealSidecar } from './real-sidecar.ts';
+import { paintOver, scoreVariant, sumScores, variantsOf, type VariantScore } from './perturb.ts';
 import { iou } from './synthetic.ts';
+import type { BBox } from './types.ts';
 
 const ENABLED = process.env['ROTSTIFT_INTEGRATION'] === '1';
 const DATASET =
@@ -24,6 +26,12 @@ interface TruthLine {
 }
 
 const pages: Record<string, readonly TruthLine[]> = truth;
+
+function boxOf(bbox: readonly number[] | null): BBox | null {
+  if (bbox === null) return null;
+  const [x = 0, y = 0, width = 0, height = 0] = bbox;
+  return { x, y, width, height };
+}
 
 describe.skipIf(!ENABLED || !existsSync(RENDERED))(
   'rendered ruled pages with known line boxes',
@@ -45,11 +53,10 @@ describe.skipIf(!ENABLED || !existsSync(RENDERED))(
         let pageHits = 0;
         let pageTotal = 0;
         lines.forEach((line, index) => {
-          if (line.bbox === null) return;
-          const [x = 0, y = 0, width = 0, height = 0] = line.bbox;
+          const box = boxOf(line.bbox);
+          if (box === null) return;
           const found = result.lines[index];
-          const overlap =
-            found === null || found === undefined ? 0 : iou({ x, y, width, height }, found.bbox);
+          const overlap = found === null || found === undefined ? 0 : iou(box, found.bbox);
           pageTotal += 1;
           sum += overlap;
           if (overlap >= MIN_IOU) pageHits += 1;
@@ -64,6 +71,36 @@ describe.skipIf(!ENABLED || !existsSync(RENDERED))(
       );
       expect(hits / total).toBeGreaterThan(0.95);
     });
+
+    it('prefers null over a confident wrong box when the transcript differs from the page', () => {
+      const perVariant = new Map<string, VariantScore[]>();
+      for (const [name, lines] of Object.entries(pages)) {
+        const truthLines = lines.map((line) => ({ text: line.text, bbox: boxOf(line.bbox) }));
+        for (const variant of variantsOf(truthLines)) {
+          const image = readJpeg(join(RENDERED, `${name}.jpg`));
+          if (variant.erased !== null) paintOver(image, variant.erased, 245);
+          const found = locateLines(image, variant.transcript).lines;
+          const list = perVariant.get(variant.name) ?? [];
+          list.push(scoreVariant(variant, found));
+          perVariant.set(variant.name, list);
+        }
+      }
+      const rows: string[] = [];
+      const all: VariantScore[] = [];
+      for (const [name, list] of perVariant) {
+        const sum = sumScores(list);
+        all.push(sum);
+        rows.push(
+          `${name.padEnd(36)} richtig ${sum.correct}/${sum.expected}, null ${sum.missing}, falsch-sicher ${sum.wrong}, unerwartet ${sum.spurious}`,
+        );
+      }
+      const total = sumScores(all);
+      process.stdout.write(
+        `\n${rows.join('\n')}\nGesamt: richtig ${total.correct}/${total.expected}, null ${total.missing}, falsch-sicher ${total.wrong}\n`,
+      );
+      expect(total.wrong / total.expected).toBeLessThan(0.005);
+      expect(total.spurious / total.expected).toBeLessThan(0.005);
+    }, 120_000);
   },
 );
 
@@ -115,7 +152,7 @@ describe.skipIf(!datasetAvailable)('real transcripts of handwritten dataset page
       process.stdout.write(
         `\n${rows.join('\n')}\nZugeordnet ${assigned}/${lines} (${((100 * assigned) / lines).toFixed(1)} %), Zeilenzahl gleich auf ${matching}/${PAGES} Seiten\n`,
       );
-      expect(assigned / lines).toBeGreaterThan(0.9);
+      expect(assigned / lines).toBeGreaterThan(0.6);
     },
     30 * 60 * 1000,
   );

@@ -4,7 +4,27 @@ import { assignLines, lineLength, type Candidate } from './assign.ts';
 const CHAR = 10;
 
 function candidate(chars: number, top: number, height = 40): Candidate {
-  return { x: 100, y: top, width: chars * CHAR, height, inkCount: chars * 30 };
+  return {
+    x: 100,
+    y: top,
+    width: chars * CHAR,
+    height,
+    inkCount: chars * 30,
+    row: top + height / 2,
+  };
+}
+
+function stack(
+  chars: readonly number[],
+  blanksBefore: Readonly<Record<number, number>>,
+): Candidate[] {
+  let top = 100;
+  return chars.map((count, k) => {
+    top += 60 * (blanksBefore[k] ?? 0);
+    const line = candidate(count, top);
+    top += 60;
+    return line;
+  });
 }
 
 function sentence(chars: number): string {
@@ -33,56 +53,70 @@ describe('assignLines', () => {
   });
 
   it('returns null for blank transcript lines and keeps the others aligned', () => {
-    const detected = [candidate(30, 100), candidate(42, 160), candidate(25, 220)];
-    const result = assignLines(detected, [sentence(30), '', sentence(42), '  ', sentence(25)]);
-    expect(result.map((line) => line?.bbox.y ?? null)).toEqual([100, null, 160, null, 220]);
+    const chars = [30, 42, 25, 38, 33, 41, 29, 36];
+    const detected = stack(chars, { 2: 1 });
+    const transcript = chars.flatMap((count, k) =>
+      k === 2 ? ['', sentence(count)] : [sentence(count)],
+    );
+    const result = assignLines(detected, transcript);
+    expect(result[2]).toBeNull();
+    expect(result.map((line) => line?.bbox.y ?? null)).toEqual([
+      100,
+      160,
+      null,
+      280,
+      340,
+      400,
+      460,
+      520,
+      580,
+    ]);
   });
 
   it('skips a detected stray mark that has little ink', () => {
-    const detected = [
-      candidate(30, 100),
-      candidate(3, 150, 20),
-      candidate(42, 200),
-      candidate(25, 260),
-    ];
-    const result = assignLines(detected, [sentence(30), sentence(42), sentence(25)]);
-    expect(result.map((line) => line?.bbox.y)).toEqual([100, 200, 260]);
+    const chars = [30, 42, 25, 38, 33, 41, 29, 36];
+    const detected = stack(chars, {});
+    detected.splice(3, 0, candidate(3, 190, 20));
+    const result = assignLines(
+      detected,
+      chars.map((count) => sentence(count)),
+    );
+    expect(result.map((line) => line?.bbox.y)).toEqual([100, 160, 220, 280, 340, 400, 460, 520]);
   });
 
   it('returns null for a transcript line without any detected line', () => {
-    const detected = [candidate(30, 100), candidate(40, 160)];
-    const result = assignLines(detected, [sentence(30), sentence(40), sentence(60)]);
-    expect(result.map((line) => line?.bbox.y ?? null)).toEqual([100, 160, null]);
+    const chars = [30, 40, 35, 28, 44, 37, 32, 41, 27, 39];
+    const detected = stack(chars, {});
+    const result = assignLines(detected, [...chars.map((count) => sentence(count)), sentence(90)]);
+    expect(result[10]).toBeNull();
+    const wrong = result
+      .slice(0, 10)
+      .filter((line, k) => line !== null && line.bbox.y !== 100 + 60 * k);
+    expect(wrong).toHaveLength(0);
+    expect(result.filter((line) => line !== null).length).toBeGreaterThanOrEqual(8);
   });
 
   it('merges two detected pieces of one line into one box', () => {
-    const left: Candidate = { x: 100, y: 100, width: 200, height: 40, inkCount: 900 };
-    const right: Candidate = { x: 340, y: 104, width: 180, height: 38, inkCount: 800 };
-    const next = candidate(40, 160);
+    const chars = [36, 40, 33, 45, 38, 31, 42, 35, 39, 44];
+    const detected = stack(chars, {});
+    const pieces: Candidate[] = [
+      { x: 100, y: 100, width: 200, height: 40, inkCount: 900, row: 120 },
+      { x: 340, y: 104, width: 180, height: 38, inkCount: 800, row: 123 },
+    ];
+    detected.splice(0, 1, ...pieces);
     const result = assignLines(
-      [left, right, next, candidate(36, 220)],
-      [sentence(42), sentence(40), sentence(36)],
+      detected,
+      [42, ...chars.slice(1)].map((count) => sentence(count)),
     );
     expect(result[0]?.bbox).toEqual({ x: 100, y: 100, width: 420, height: 42 });
     expect(result[1]?.bbox.y).toBe(160);
   });
 
   it('splits a wide detected line horizontally when the transcript has two lines', () => {
-    const detected = [
-      candidate(36, 100),
-      candidate(40, 160),
-      candidate(60, 220),
-      candidate(38, 280),
-      candidate(41, 340),
-    ];
-    const result = assignLines(detected, [
-      sentence(36),
-      sentence(40),
-      sentence(20),
-      sentence(40),
-      sentence(38),
-      sentence(41),
-    ]);
+    const chars = [36, 40, 60, 38, 41, 35, 39, 43, 34, 37];
+    const detected = stack(chars, {});
+    const transcript = [36, 40, 20, 40, 38, 41, 35, 39, 43, 34, 37].map((count) => sentence(count));
+    const result = assignLines(detected, transcript);
     const first = result[2];
     const second = result[3];
     expect(first?.bbox).toEqual({ x: 100, y: 220, width: 200, height: 40 });
@@ -92,22 +126,17 @@ describe('assignLines', () => {
   });
 
   it('splits a tall detected band vertically when the transcript has two lines', () => {
-    const detected = [
-      candidate(40, 100),
-      candidate(41, 160),
-      candidate(39, 220, 100),
-      candidate(40, 340),
-    ];
-    const result = assignLines(detected, [
-      sentence(40),
-      sentence(41),
-      sentence(20),
-      sentence(19),
-      sentence(40),
-    ]);
-    expect(result[2]?.bbox.y).toBeCloseTo(220, 5);
+    const chars = [40, 41, 39, 40, 38, 42, 37, 41, 36, 40];
+    const detected = stack(chars, {});
+    detected.splice(2, 1, candidate(39, 200, 100));
+    detected.forEach((line, k) => {
+      if (k > 2) detected[k] = { ...line, y: line.y + 40, row: line.row + 40 };
+    });
+    const transcript = [40, 41, 20, 19, 40, 38, 42, 37, 41, 36, 40].map((count) => sentence(count));
+    const result = assignLines(detected, transcript);
+    expect(result[2]?.bbox.y).toBeCloseTo(200, 5);
     expect(result[2]?.bbox.height).toBeGreaterThan(45);
-    expect(result[3]?.bbox.y).toBeGreaterThan(260);
+    expect(result[3]?.bbox.y).toBeGreaterThan(240);
     expect(result[3]?.bbox.width).toBe(390);
   });
 
@@ -126,8 +155,9 @@ describe('assignLines', () => {
     ];
     const result = assignLines(detected, [sentence(30), sentence(40), sentence(35), sentence(70)]);
     const confident = result[0]?.confidence ?? 0;
-    const doubtful = result[3]?.confidence ?? 0;
+    const doubtful = result[3];
     expect(confident).toBeGreaterThan(0.9);
-    expect(doubtful === 0 || doubtful < confident).toBe(true);
+    expect(doubtful).not.toBeNull();
+    expect(doubtful?.confidence ?? 1).toBeLessThan(0.75);
   });
 });

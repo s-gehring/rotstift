@@ -33,9 +33,11 @@ export function detectLineBoxes(image: RgbaImage): {
 
 export function locateLines(image: RgbaImage, transcript: readonly string[]): LayoutResult {
   const detected = detectLineBoxes(image);
+  const tan = Math.tan((detected.skewDegrees * Math.PI) / 180);
   const candidates = detected.boxes.map((box, i) => ({
     ...box,
     inkCount: detected.inkCounts[i] ?? 0,
+    row: box.y + box.height / 2 - (box.x + box.width / 2) * tan,
   }));
   return {
     lines: assignLines(candidates, transcript),

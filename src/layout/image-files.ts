@@ -3,9 +3,96 @@ import { deflateSync } from 'node:zlib';
 import jpeg from 'jpeg-js';
 import type { BBox, RgbaImage } from './types.ts';
 
+export function jpegOrientation(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.length < 4 || view.getUint16(0) !== 0xffd8) return 1;
+  let offset = 2;
+  while (offset + 4 <= bytes.length) {
+    if (view.getUint8(offset) !== 0xff) return 1;
+    const marker = view.getUint8(offset + 1);
+    if (marker === 0xda || marker === 0xd9) return 1;
+    const length = view.getUint16(offset + 2);
+    const body = offset + 4;
+    const isExif =
+      marker === 0xe1 &&
+      length >= 16 &&
+      String.fromCharCode(...bytes.subarray(body, body + 4)) === 'Exif';
+    if (isExif) {
+      const tiff = body + 6;
+      const little = view.getUint16(tiff) === 0x4949;
+      const first = tiff + view.getUint32(tiff + 4, little);
+      const count = view.getUint16(first, little);
+      for (let entry = 0; entry < count; entry += 1) {
+        const at = first + 2 + entry * 12;
+        if (at + 12 > bytes.length) return 1;
+        if (view.getUint16(at, little) === 0x0112) {
+          const value = view.getUint16(at + 8, little);
+          return value >= 1 && value <= 8 ? value : 1;
+        }
+      }
+      return 1;
+    }
+    offset += 2 + length;
+  }
+  return 1;
+}
+
+export function applyOrientation(image: RgbaImage, orientation: number): RgbaImage {
+  if (orientation === 1) return image;
+  const { width, height, data } = image;
+  const swap = orientation >= 5;
+  const outWidth = swap ? height : width;
+  const outHeight = swap ? width : height;
+  const out = new Uint8Array(outWidth * outHeight * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let tx = x;
+      let ty = y;
+      switch (orientation) {
+        case 2:
+          tx = width - 1 - x;
+          break;
+        case 3:
+          tx = width - 1 - x;
+          ty = height - 1 - y;
+          break;
+        case 4:
+          ty = height - 1 - y;
+          break;
+        case 5:
+          tx = y;
+          ty = x;
+          break;
+        case 6:
+          tx = height - 1 - y;
+          ty = x;
+          break;
+        case 7:
+          tx = height - 1 - y;
+          ty = width - 1 - x;
+          break;
+        case 8:
+          tx = y;
+          ty = width - 1 - x;
+          break;
+        default:
+          break;
+      }
+      const from = (y * width + x) * 4;
+      const to = (ty * outWidth + tx) * 4;
+      out.set(data.subarray(from, from + 4), to);
+    }
+  }
+  return { width: outWidth, height: outHeight, data: out };
+}
+
 export function readJpeg(path: string): RgbaImage {
-  const decoded = jpeg.decode(readFileSync(path), { useTArray: true, formatAsRGBA: true });
-  return { width: decoded.width, height: decoded.height, data: decoded.data };
+  const bytes = readFileSync(path);
+  const decoded = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true });
+  return applyOrientation(
+    { width: decoded.width, height: decoded.height, data: decoded.data },
+    jpegOrientation(bytes),
+  );
 }
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {

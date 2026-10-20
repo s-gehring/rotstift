@@ -4,7 +4,10 @@ import type { LayoutImage, LayoutInput, LayoutRequest, LayoutResponse } from './
 import type { LayoutResult } from './types.ts';
 
 export interface WorkerLike {
-  addEventListener(type: 'message' | 'error', listener: (event: Event) => void): void;
+  addEventListener(
+    type: 'message' | 'messageerror' | 'error',
+    listener: (event: Event) => void,
+  ): void;
   postMessage(message: LayoutRequest, transfer: Transferable[]): void;
   terminate(): void;
 }
@@ -57,6 +60,9 @@ export function createLayoutLocator(
       pending.delete(response.id);
       if (response.ok) entry.resolve(response.result);
       else entry.reject(new Error(response.message));
+    });
+    created.addEventListener('messageerror', () => {
+      failAll(new Error('layout worker sent an unreadable message'));
     });
     created.addEventListener('error', (event) => {
       const detail = 'message' in event && typeof event.message === 'string' ? event.message : '';

@@ -79,6 +79,16 @@ describe('createLayoutLocator', () => {
     await expect(locator.locate(PIXELS, [])).resolves.toEqual(RESULT);
   });
 
+  it('rejects pending requests when a message cannot be deserialized', async () => {
+    const worker = new FakeWorker();
+    worker.reply = () => null;
+    const locator = createLayoutLocator(() => worker);
+    const pending = locator.locate(PIXELS, []);
+    worker.dispatchEvent(new Event('messageerror'));
+    await expect(pending).rejects.toThrow('unreadable');
+    expect(worker.terminated).toBe(true);
+  });
+
   it('terminates the worker on dispose and rejects what is pending', async () => {
     const worker = new FakeWorker();
     worker.reply = () => null;
