@@ -15,9 +15,13 @@ const SIMILAR = 1;
 const PUNCTUATION = 0;
 const DIFFERENT = -1;
 
+function glyph(text: string): string {
+  return text.replaceAll(/[„“”«»]/gu, '"').replaceAll(/[‚‘’‹›]/gu, "'");
+}
+
 function pairScore(o: OriginalToken, c: CorrectedToken): number | null {
   if (o.kind !== c.kind) return null;
-  if (o.text === c.text) return EXACT;
+  if (o.text === c.text || (o.kind === 'punct' && glyph(o.text) === glyph(c.text))) return EXACT;
   if (o.kind === 'punct') return PUNCTUATION;
   if (o.text.toLowerCase() === c.text.toLowerCase()) return CASE_ONLY;
   return isSimilar(o.text, c.text) ? SIMILAR : DIFFERENT;

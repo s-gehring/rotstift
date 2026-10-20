@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ImportPage } from '../import/pages.ts';
 import { renderPageToPng } from '../import/render-page.ts';
 import { createRunner } from '../pipeline/runner.ts';
@@ -16,7 +16,16 @@ export function useWordCount(pages: readonly ImportPage[], status: TranscriberSt
     runner.setPages(pages);
   }, [runner, pages]);
 
-  useEffect(() => () => runner.cancel(), [runner]);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      queueMicrotask(() => {
+        if (!mounted.current) runner.dispose();
+      });
+    };
+  }, [runner]);
 
   return { runner, state };
 }

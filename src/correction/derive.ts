@@ -145,6 +145,7 @@ function segmentsOf(tokens: readonly OriginalToken[]): Segment[] {
 export interface DerivedMarks {
   lines: TranscriptLine[];
   droppedOverlaps: number;
+  collapsedRuns: number;
 }
 
 export function deriveMarks(
@@ -315,7 +316,10 @@ export function deriveMarksDetailed(
     }
   }
 
+  let collapsedRuns = 0;
+
   function emitCollapsed(range: Range) {
+    collapsedRuns += 1;
     const slice = ops.slice(range.start, range.end);
     const originals = slice.flatMap((op) => originalOf(op) ?? []);
     const corrected = slice.flatMap((op) => correctedOf(op) ?? []);
@@ -396,7 +400,7 @@ export function deriveMarksDetailed(
     droppedOverlaps += all.length - marks.length;
     return { number: line + 1, text, marks };
   });
-  return { lines: derived, droppedOverlaps };
+  return { lines: derived, droppedOverlaps, collapsedRuns };
 }
 
 function precedes(a: Mark, b: Mark): boolean {

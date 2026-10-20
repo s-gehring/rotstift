@@ -66,7 +66,7 @@ Hinweis zum rpm: Der Sidecar hat `RUNPATH $ORIGIN/../lib`, die Bibliotheken lieg
 
 ## Wie reproduzieren
 
-Der Test lief mit einem lokalen, nicht eingecheckten Patch am Integrationstest: `ROTSTIFT_THREADS` setzt `--threads`, zusätzlich `--device none`, und ein fehlgeschlagener Aufruf bricht den Lauf nicht ab, sondern erscheint als Zeile `FEHLER`. Aufruf je Thread-Zahl N:
+Der Integrationstest braucht dafür keinen lokalen Patch mehr: `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_GPU_LAYERS=0` setzt `--n-gpu-layers 0` und `--device none`, und die Seiten werden vor dem Senden wie in der App auf `imageMaxEdge` verkleinert. Die Messreihe selbst entstand noch mit einem lokalen Patch, der zusätzlich einen fehlgeschlagenen Aufruf als Zeile `FEHLER` ausgab, statt den Lauf abzubrechen. Aufruf je Thread-Zahl N:
 
 ```bash
 pnpm fetch:runtime --target x86_64-unknown-linux-gnu

@@ -1,17 +1,13 @@
-import { execFile, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { request as httpRequest } from 'node:http';
-import { createServer } from 'node:net';
 import { basename, extname, join } from 'node:path';
 import process from 'node:process';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { countWords } from '../src/stats/count-words.ts';
 import { characterEdits, classifyErrors, cleanTranscript, wordEdits } from './metrics.ts';
 import { CANDIDATES, PROMPTS, TRANSCRIBE_PROMPT } from './models.ts';
 import type { Candidate } from './models.ts';
-import { evalDir, llamaServer, modelsDir, samplesDir } from './paths.ts';
+import { evalDir, modelsDir, samplesDir } from './paths.ts';
 import {
   cerByFontTable,
   overviewTable,
@@ -20,6 +16,7 @@ import {
   wordCountByPageTable,
 } from './report.ts';
 import type { ModelRun, PageResult } from './report.ts';
+import { launchServer, postJson, readCompletion } from './server.ts';
 import { parseSample } from './sample.ts';
 import type { Sample } from './sample.ts';
 
@@ -101,67 +98,6 @@ function selectPages(pages: Page[], filter: string[] | undefined): Page[] {
     : pages;
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      server.close(() => {
-        resolve(port);
-      });
-    });
-  });
-}
-
-function watchPeakRss(pid: number): () => number {
-  let peak = 0;
-  const timer = setInterval(() => {
-    execFile('ps', ['-o', 'rss=', '-p', String(pid)], (error, stdout) => {
-      const kilobytes = Number.parseInt(stdout.trim(), 10);
-      if (!error && Number.isFinite(kilobytes)) peak = Math.max(peak, kilobytes * 1024);
-    });
-  }, 200);
-  return () => {
-    clearInterval(timer);
-    return peak;
-  };
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-    ? Object.fromEntries(Object.entries(value))
-    : {};
-}
-
-const count = (value: unknown) => (typeof value === 'number' ? value : 0);
-
-function readCompletion(json: unknown) {
-  const root = record(json);
-  const choices = root['choices'];
-  const message = record(record(Array.isArray(choices) ? choices[0] : undefined)['message']);
-  const timings = record(root['timings']);
-  return {
-    content: typeof message['content'] === 'string' ? message['content'] : '',
-    promptTokens: count(timings['prompt_n']),
-    generatedTokens: count(timings['predicted_n']),
-  };
-}
-
-async function waitForHealth(port: number, exited: () => boolean, timeoutMs: number) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (exited()) throw new Error('llama-server exited during startup');
-    const healthy = await fetch(`http://127.0.0.1:${port}/health`)
-      .then((response) => response.ok)
-      .catch(() => false);
-    if (healthy) return;
-    await sleep(250);
-  }
-  throw new Error('llama-server did not become healthy in time');
-}
-
 async function transcribe(port: number, candidate: Candidate, page: Page, options: Options) {
   const type = IMAGE_TYPES[extname(page.image).toLowerCase()] ?? 'image/jpeg';
   const image = (await readFile(page.image)).toString('base64');
@@ -189,74 +125,16 @@ function promptFor(candidate: Candidate, options: Options): string | null {
     : candidate.prompt;
 }
 
-function postJson(port: number, path: string, payload: unknown) {
-  const body = JSON.stringify(payload);
-  return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const request = httpRequest(
-      {
-        host: '127.0.0.1',
-        port,
-        path,
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
-      },
-      (response) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => {
-          resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString() });
-        });
-        response.on('error', reject);
-      },
-    );
-    request.on('error', reject);
-    request.end(body);
-  });
-}
-
 async function evaluate(candidate: Candidate, pages: Page[], options: Options): Promise<ModelRun> {
   const dir = modelsDir();
-  const { binary, libraryDir } = llamaServer();
-  const port = await freePort();
-  const libraryVariable = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
-  const child = spawn(
-    binary,
-    [
-      ['--model', join(dir, candidate.model.name)],
-      ['--mmproj', join(dir, candidate.mmproj.name)],
-      ['--host', '127.0.0.1'],
-      ['--port', String(port)],
-      ['--ctx-size', String(options.contextSize)],
-      ['--threads', String(options.threads)],
-      ['--threads-batch', String(options.threads)],
-      ['--n-gpu-layers', '0'],
-      ['--device', 'none'],
-      ['--no-mmproj-offload'],
-      ['--parallel', '1'],
-      ['--cache-ram', '0'],
-      ['--no-webui'],
-      ['--offline'],
-      options.imageMaxTokens ? ['--image-max-tokens', String(options.imageMaxTokens)] : [],
-    ].flat(),
-    {
-      cwd: libraryDir,
-      env: { ...process.env, [libraryVariable]: libraryDir },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    },
-  );
-  const log: string[] = [];
-  child.stderr.on('data', (chunk: Buffer) => {
-    log.push(...chunk.toString().split('\n'));
-    log.splice(0, Math.max(0, log.length - 30));
+  const server = await launchServer({
+    model: join(dir, candidate.model.name),
+    mmproj: join(dir, candidate.mmproj.name),
+    contextSize: options.contextSize,
+    threads: options.threads,
+    imageMaxTokens: options.imageMaxTokens,
   });
-  let exited = false;
-  const exit = new Promise<void>((resolve) => {
-    child.once('exit', () => {
-      exited = true;
-      resolve();
-    });
-  });
-  const stopWatching = watchPeakRss(child.pid ?? 0);
+  const port = server.port;
 
   const run: ModelRun = {
     id: candidate.id,
@@ -273,7 +151,7 @@ async function evaluate(candidate: Candidate, pages: Page[], options: Options): 
   };
   const started = performance.now();
   try {
-    await waitForHealth(port, () => exited, 10 * 60_000);
+    await server.ready(10 * 60_000);
     run.loadSeconds = (performance.now() - started) / 1000;
     for (const page of pages) {
       const result = await transcribe(port, candidate, page, options);
@@ -302,12 +180,10 @@ async function evaluate(candidate: Candidate, pages: Page[], options: Options): 
       );
     }
   } catch (error) {
-    run.failure = `${error instanceof Error ? error.message : String(error)}\n${log.join('\n')}`;
+    run.failure = `${error instanceof Error ? error.message : String(error)}\n${server.log()}`;
     console.error(`  ${candidate.id} failed: ${run.failure}`);
   } finally {
-    child.kill();
-    await exit;
-    run.peakRssBytes = stopWatching();
+    run.peakRssBytes = await server.stop();
   }
   return run;
 }
