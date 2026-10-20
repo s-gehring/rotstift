@@ -57,10 +57,12 @@ function App({
   runner,
   status,
   arbeiten,
+  locked = false,
 }: {
   runner: Runner;
   status: TranscriberStatus | null;
   arbeiten: readonly Arbeit[];
+  locked?: boolean;
 }) {
   const state = useSyncExternalStore(runner.subscribe, runner.getState);
   const count = { runner, state };
@@ -68,7 +70,12 @@ function App({
     <>
       <CountControls count={count} status={status} arbeiten={arbeiten} />
       <CountHint count={count} status={status} arbeiten={arbeiten} />
-      <ResultsView arbeiten={arbeiten} count={count} canRetry={status?.state === 'ready'} />
+      <ResultsView
+        arbeiten={arbeiten}
+        count={count}
+        canRetry={status?.state === 'ready'}
+        locked={locked}
+      />
     </>
   );
 }
@@ -242,6 +249,21 @@ describe('with a transcriber', () => {
     type(textarea(), 'eins zwei drei vier fünf');
     expect(words()).toEqual(['5 Wörter', '3 Wörter']);
     expect(container.querySelector('[data-testid=total-words]')?.textContent).toContain('8');
+  });
+
+  it('locks editing, retrying and saving while a review runs', async () => {
+    const runner = mount(ready);
+    await countWords(runner);
+    act(() =>
+      root.render(<App runner={runner} status={ready} arbeiten={initialArbeiten} locked />),
+    );
+    const lock = textarea().closest('fieldset');
+    expect(lock?.disabled).toBe(true);
+    expect(button('Als CSV speichern')?.closest('fieldset')).toBe(lock);
+    expect(button('Klassen-PDF speichern')?.closest('fieldset')).toBe(lock);
+    expect(container.querySelector('.results')?.textContent).toContain(
+      'Während der Berichtigung lassen sich Wortzahlen nicht ändern oder speichern.',
+    );
   });
 
   it('announces the result and disables the button when everything is counted', async () => {

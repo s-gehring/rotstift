@@ -79,7 +79,7 @@ button.primary:disabled {
   gap: 1rem;
 }
 
-.import-lock {
+.lock-area {
   min-width: 0;
   margin: 0;
   padding: 0;

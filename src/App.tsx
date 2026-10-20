@@ -111,6 +111,7 @@ export function App() {
             arbeiten={importState.arbeiten}
             count={count}
             canRetry={transcriber?.state === 'ready'}
+            locked={reviewing}
           />
         </>
       )}

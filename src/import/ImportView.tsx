@@ -251,7 +251,7 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
       {arbeiten.length === 0 ? (
         <p className="empty">{busy ? 'Seiten werden geladen …' : 'Noch keine Arbeiten geladen.'}</p>
       ) : (
-        <fieldset className="import-lock" disabled={locked}>
+        <fieldset className="lock-area" disabled={locked}>
           {locked && (
             <p className="hint">
               Während der Berichtigung lassen sich die Arbeiten nicht verändern.

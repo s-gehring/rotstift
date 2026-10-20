@@ -8,10 +8,17 @@ import type { CorrectorStatus } from '../correction/provider.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { Runner } from '../pipeline/runner.ts';
+import type { SaveOutcome } from '../export/save-file.ts';
+import { saveClassPdf, saveCorrectedPdf, type SavePdfOptions } from '../export/save-pdf.ts';
 import { LAYOUT_FAILED, type ReviewFlow } from './review-flow.ts';
 import { PREVIEW_NOTICE, ReviewControls, ReviewHint } from './ReviewControls.tsx';
 import { ReviewView } from './ReviewView.tsx';
-import { deferred, setupReview, waitFor } from './test-support.ts';
+import { deferred, setupReview, tick, waitFor } from './test-support.ts';
+
+vi.mock('../export/save-pdf.ts', () => ({
+  saveCorrectedPdf: vi.fn<() => void>(),
+  saveClassPdf: vi.fn<() => void>(),
+}));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -265,5 +272,126 @@ describe('ReviewControls', () => {
     controls({ state: 'needs-model', message: 'Korrekturmodell fehlt.' });
     expect(buttonNamed('Berichtigen').disabled).toBe(true);
     expect(container.querySelector('#review-hint')?.textContent).toBe('Korrekturmodell fehlt.');
+  });
+});
+
+function labelled(label: string): HTMLButtonElement {
+  const found = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (found === null) throw new Error(`no button ${label}`);
+  return found;
+}
+
+function controlsOf(label: string): HTMLElement {
+  const found = labelled(label).closest<HTMLElement>('.pdf-controls');
+  if (found === null) throw new Error(`no controls for ${label}`);
+  return found;
+}
+
+describe('saving the review as PDF', () => {
+  it('saves a fully corrected Arbeit with progress, the save dialog phase and the result', async () => {
+    await reviewed();
+    const finish = deferred();
+    let options: SavePdfOptions = {};
+    let outcome: SaveOutcome = { state: 'saved', fileName: 'Aufsatz Ben (korrigiert).pdf' };
+    vi.mocked(saveCorrectedPdf).mockImplementation((_arbeit, given = {}) => {
+      options = given;
+      return finish.promise.then(() => outcome);
+    });
+    act(() => buttonNamed('Aufsatz Ben').click());
+
+    act(() => labelled('Als PDF speichern: Aufsatz Ben').click());
+    expect(vi.mocked(saveCorrectedPdf).mock.calls[0]?.[0]).toMatchObject({
+      title: 'Aufsatz Ben',
+      profile: DEUTSCH,
+      statistics: { words: 1, errors: 0 },
+    });
+    act(() => options.onProgress?.(1, 1));
+    const pdfControls = controlsOf('Als PDF speichern: Aufsatz Ben');
+    expect(pdfControls.textContent).toContain('Seite 1 von 1');
+    expect(pdfControls.textContent).toContain('Abbrechen');
+
+    act(() => options.onPhase?.('saving'));
+    expect(pdfControls.textContent).toContain('Speicherort wählen …');
+    expect(pdfControls.textContent).not.toContain('Abbrechen');
+
+    await act(async () => {
+      finish.resolve();
+      await finish.promise;
+    });
+    expect(pdfControls.querySelector('[role="status"]')?.textContent).toBe(
+      'Gespeichert als „Aufsatz Ben (korrigiert).pdf“.',
+    );
+
+    outcome = { state: 'failed', reason: 'build' };
+    await act(async () => {
+      labelled('Als PDF speichern: Aufsatz Ben').click();
+      await tick();
+    });
+    expect(pdfControls.querySelector('[role="status"]')?.textContent).toBe(
+      'Das PDF konnte nicht erstellt werden. Bitte die Seiten prüfen und es erneut versuchen.',
+    );
+  });
+
+  it('cancels building the PDF', async () => {
+    await reviewed();
+    vi.mocked(saveCorrectedPdf).mockImplementation(
+      (_arbeit, given = {}) =>
+        new Promise((resolve) => {
+          given.signal?.addEventListener('abort', () => resolve({ state: 'cancelled' }));
+        }),
+    );
+    act(() => buttonNamed('Aufsatz Ben').click());
+    act(() => labelled('Als PDF speichern: Aufsatz Ben').click());
+    await act(async () => {
+      buttonNamed('Abbrechen').click();
+      await tick();
+    });
+    expect(
+      controlsOf('Als PDF speichern: Aufsatz Ben').querySelector('[role="status"]')?.textContent,
+    ).toBe('Das Speichern wurde abgebrochen.');
+  });
+
+  it('keeps an incomplete Arbeit out and says why', async () => {
+    await reviewed();
+    expect(labelled('Als PDF speichern: Aufsatz Ada').disabled).toBe(true);
+    expect(controlsOf('Als PDF speichern: Aufsatz Ada').textContent).toContain(
+      'Als PDF speichern lässt sich die Arbeit erst, wenn alle Seiten berichtigt sind.',
+    );
+  });
+
+  it('saves the class PDF with the complete Arbeiten only', async () => {
+    await reviewed();
+    vi.mocked(saveClassPdf).mockResolvedValue({ state: 'cancelled' });
+    expect(container.querySelector('.class-overview')?.textContent).toContain(
+      '1 Arbeit ist nicht vollständig berichtigt und fehlt im Klassen-PDF.',
+    );
+    await act(async () => {
+      labelled('Klassen-PDF mit Korrekturen speichern').click();
+      await tick();
+    });
+    const [arbeiten] = vi.mocked(saveClassPdf).mock.calls.at(-1) ?? [];
+    expect(arbeiten?.map((arbeit) => [arbeit.kind, arbeit.title])).toEqual([
+      ['corrected', 'Aufsatz Ben'],
+    ]);
+    expect(
+      controlsOf('Klassen-PDF mit Korrekturen speichern').querySelector('[role="status"]')
+        ?.textContent,
+    ).toBe('Kein Speicherort gewählt, nichts gespeichert.');
+  });
+
+  it('does not save preview corrections', async () => {
+    const harness = setupReview(['a']);
+    harness.flow.setCorrector(harness.corrector, true);
+    await harness.flow.start(harness.pages, DEUTSCH);
+    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
+    act(() =>
+      root.render(<Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} />),
+    );
+    expect(labelled('Als PDF speichern: Aufsatz Ada').disabled).toBe(true);
+    expect(labelled('Klassen-PDF mit Korrekturen speichern').disabled).toBe(true);
+    expect(container.textContent).toContain(
+      'Vorschau-Korrekturen werden nicht als PDF gespeichert.',
+    );
+    expect(container.textContent).toContain(PREVIEW_NOTICE);
   });
 });

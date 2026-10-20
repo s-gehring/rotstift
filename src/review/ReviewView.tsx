@@ -1,15 +1,23 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import { listErrors, type AnnotatedError } from '../annotations/transcript.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
+import { saveClassPdf, saveCorrectedPdf } from '../export/save-pdf.ts';
 import { AnnotatedPage } from '../overlay/AnnotatedPage.tsx';
 import { formatCount, pagesText, wordsText } from '../results/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import {
+  arbeitExportBlock,
+  createReviewExport,
+  EXPORT_BLOCK_TEXT,
+  type ReviewExport,
+} from './export-input.ts';
 import { useObjectUrl } from './page-image.ts';
 import type { ReviewFlow, ReviewPage, ReviewState, ReviewStatus } from './review-flow.ts';
 import { PREVIEW_NOTICE } from './ReviewControls.tsx';
+import { PdfControls, usePdfSave, type PdfSave } from './ReviewPdf.tsx';
 import {
   errorsText,
   formatRate,
@@ -54,6 +62,8 @@ const PHASE_TEXT = {
   locating: 'Zeilen suchen',
   correcting: 'Korrektur',
 } as const;
+
+const CLASS_SCOPE = 'class';
 
 const RETRYABLE: ReadonlySet<ReviewStatus> = new Set(['unreadable', 'failed', 'cancelled']);
 
@@ -115,6 +125,8 @@ function ClassOverview({
   profile,
   selected,
   onSelect,
+  pdf,
+  exporter,
 }: {
   readonly arbeiten: readonly Arbeit[];
   readonly state: ReviewState;
@@ -122,12 +134,41 @@ function ClassOverview({
   readonly profile: CorrectionProfile;
   readonly selected: string | undefined;
   readonly onSelect: (id: string) => void;
+  readonly pdf: PdfSave;
+  readonly exporter: ReviewExport;
 }) {
   const summary = summarizeClass(arbeiten, state, entries);
   const total = summary.statistics;
+  const included = exporter.classArbeiten(arbeiten, state, entries, profile);
+  const left = arbeiten.length - included.length;
+  let blocked: string | null = null;
+  if (state.run !== null) blocked = EXPORT_BLOCK_TEXT.running;
+  else if (summary.arbeiten.some((arbeit) => arbeit.preview)) blocked = EXPORT_BLOCK_TEXT.preview;
+  else if (included.length === 0) blocked = 'Noch keine Arbeit ist vollständig berichtigt.';
   return (
     <section className="class-overview" aria-labelledby="class-overview-title">
-      <h3 id="class-overview-title">Klassenübersicht</h3>
+      <div className="class-overview-head">
+        <h3 id="class-overview-title">Klassenübersicht</h3>
+        <PdfControls
+          scope={CLASS_SCOPE}
+          label="Klassen-PDF speichern"
+          accessibleLabel="Klassen-PDF mit Korrekturen speichern"
+          pdf={pdf}
+          blocked={blocked}
+          onSave={(trigger) => {
+            pdf.run(CLASS_SCOPE, trigger, (options) =>
+              saveClassPdf(included, { ...options, encodePage: exporter.encodePage }),
+            );
+          }}
+        />
+      </div>
+      {blocked === null && left > 0 && (
+        <p className="hint">
+          {left === 1
+            ? '1 Arbeit ist nicht vollständig berichtigt und fehlt im Klassen-PDF.'
+            : `${left} Arbeiten sind nicht vollständig berichtigt und fehlen im Klassen-PDF.`}
+        </p>
+      )}
       <table>
         <thead>
           <tr>
@@ -324,6 +365,8 @@ function ArbeitDetail({
   entries,
   profile,
   canRetry,
+  pdf,
+  exporter,
 }: {
   readonly arbeit: Arbeit;
   readonly flow: ReviewFlow;
@@ -331,7 +374,10 @@ function ArbeitDetail({
   readonly entries: Entries;
   readonly profile: CorrectionProfile;
   readonly canRetry: boolean;
+  readonly pdf: PdfSave;
+  readonly exporter: ReviewExport;
 }) {
+  const block = arbeitExportBlock(arbeit, state, entries);
   const [display, setDisplay] = useState<Display>('notes');
   const summary = summarizeArbeit(arbeit, state, entries);
   const statistics = summary.statistics;
@@ -341,6 +387,20 @@ function ArbeitDetail({
     <section className="arbeit-review" aria-labelledby="arbeit-review-title">
       <div className="arbeit-review-head">
         <h3 id="arbeit-review-title">{arbeit.name}</h3>
+        <PdfControls
+          scope={arbeit.id}
+          label="Als PDF speichern"
+          accessibleLabel={`Als PDF speichern: ${arbeit.name}`}
+          pdf={pdf}
+          blocked={block === null ? null : EXPORT_BLOCK_TEXT[block]}
+          onSave={(trigger) => {
+            const corrected = exporter.correctedArbeit(arbeit, state, entries, profile);
+            if (corrected === null) return;
+            pdf.run(arbeit.id, trigger, (options) =>
+              saveCorrectedPdf(corrected, { ...options, encodePage: exporter.encodePage }),
+            );
+          }}
+        />
         <fieldset className="display-toggle">
           <legend>Darstellung</legend>
           <label>
@@ -413,6 +473,8 @@ export function ReviewView({
   const current = reviewed.find((arbeit) => arbeit.id === selected) ?? reviewed[0];
   const running = state.run !== null;
   const previewResults = Object.values(state.pages).some((page) => page.result?.preview === true);
+  const pdf = usePdfSave();
+  const exporter = useMemo(() => createReviewExport(), []);
 
   return (
     <section className="review" aria-labelledby="review-title">
@@ -443,6 +505,8 @@ export function ReviewView({
             profile={profile}
             selected={current.id}
             onSelect={setSelected}
+            pdf={pdf}
+            exporter={exporter}
           />
           <ArbeitDetail
             key={current.id}
@@ -452,6 +516,8 @@ export function ReviewView({
             entries={entries}
             profile={profile}
             canRetry={canRetry}
+            pdf={pdf}
+            exporter={exporter}
           />
         </>
       )}

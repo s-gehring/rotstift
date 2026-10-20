@@ -190,3 +190,24 @@ button.link[aria-pressed='true'] {
   font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, currentColor 70%, transparent);
 }
+
+.class-overview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.pdf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.pdf-controls .pdf-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
