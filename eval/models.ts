@@ -214,6 +214,6 @@ export const CANDIDATES: readonly Candidate[] = [
   },
 ];
 
-export function fileUrl(candidate: Candidate, model: ModelFile): string {
-  return `https://huggingface.co/${candidate.repo}/resolve/main/${model.name}`;
+export function fileUrl(candidate: { repo: string; commit?: string }, model: ModelFile): string {
+  return `https://huggingface.co/${candidate.repo}/resolve/${candidate.commit ?? 'main'}/${model.name}`;
 }

@@ -3,7 +3,7 @@ import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import { transcriptSchema } from '../annotations/transcript.ts';
 import type { Mark } from '../annotations/transcript.ts';
-import { deriveMarks } from './derive.ts';
+import { deriveMarks, deriveMarksDetailed } from './derive.ts';
 import type { DeriveOptions } from './derive.ts';
 
 function derive(lines: string[], corrected: string, options: Partial<DeriveOptions> = {}) {
@@ -238,6 +238,19 @@ describe('deriveMarks profile restriction', () => {
   });
 });
 
+describe('deriveMarks quotation marks', () => {
+  it('ignores typographic quotation marks the model substituted', () => {
+    expect(marksOf(['Der "Niwa" ist ein Auto.'], 'Der „Niwa“ ist ein Auto.')).toEqual([[]]);
+    expect(marksOf(['Er sagt: „Hallo“.'], 'Er sagt: "Hallo".')).toEqual([[]]);
+  });
+
+  it('still marks a real quote error next to it', () => {
+    expect(marksOf(['Der "Niwa ist ein Auto.'], 'Der „Niwa“ ist ein Auto.')).toEqual([
+      [omission('Z', '“', 9)],
+    ]);
+  });
+});
+
 describe('deriveMarks rewording', () => {
   const original = ['Der alte Mann geht in die Stadt und kauft ein Brot.'];
   const reworded = 'Ein älterer Herr ging in die Stadt und kaufte ein Brot.';
@@ -249,6 +262,14 @@ describe('deriveMarks rewording', () => {
         error('G', 'kauft', 'kaufte', 36),
       ],
     ]);
+  });
+
+  it('counts the collapsed runs', () => {
+    const derived = deriveMarksDetailed(original, reworded, { profile: DEUTSCH });
+    expect(derived.collapsedRuns).toBe(1);
+    expect(
+      deriveMarksDetailed(original, original[0] ?? '', { profile: DEUTSCH }).collapsedRuns,
+    ).toBe(0);
   });
 
   it('drops the collapsed rewording when A is not allowed', () => {
