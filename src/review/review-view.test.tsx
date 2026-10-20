@@ -3,23 +3,15 @@ import { act, useSyncExternalStore } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
-import { createFakeCorrector } from '../correction/fake-corrector.ts';
-import type { CorrectorStatus } from '../correction/provider.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
-import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { Runner } from '../pipeline/runner.ts';
 import type { SaveOutcome } from '../export/save-file.ts';
 import { saveClassPdf, saveCorrectedPdf, type SavePdfOptions } from '../export/save-pdf.ts';
-import type { ReviewEngine } from './engine-phase.ts';
-import { LAYOUT_FAILED, type ReviewFlow } from './review-flow.ts';
-import {
-  OCR_NOTICE,
-  PDF_FOOTER,
-  PREVIEW_NOTICE,
-  ReviewControls,
-  ReviewHint,
-} from './ReviewControls.tsx';
-import { ReviewView } from './ReviewView.tsx';
+import { createReviewExport, PDF_FOOTER } from './export-input.ts';
+import { LAYOUT_FAILED, type ReviewFlow, type ReviewState } from './review-flow.ts';
+import { usePdfSave } from './ReviewPdf.tsx';
+import { ClassOverview, ReviewView } from './ReviewView.tsx';
+import type { Entries } from './summary.ts';
 import { deferred, readingOf, setupReview, tick, waitFor } from './test-support.ts';
 
 vi.mock('../export/save-pdf.ts', () => ({
@@ -43,32 +35,72 @@ afterEach(() => {
   container.remove();
 });
 
+const exporter = createReviewExport();
+
+function Overview({
+  arbeiten,
+  state,
+  entries,
+  selected,
+  onSelect,
+}: {
+  readonly arbeiten: readonly Arbeit[];
+  readonly state: ReviewState;
+  readonly entries: Entries;
+  readonly selected: string | undefined;
+  readonly onSelect: (id: string) => void;
+}) {
+  const pdf = usePdfSave();
+  if (state.profile === null) return null;
+  return (
+    <ClassOverview
+      arbeiten={arbeiten}
+      state={state}
+      entries={entries}
+      profile={state.profile}
+      selected={selected}
+      onSelect={onSelect}
+      pdf={pdf}
+      exporter={exporter}
+    />
+  );
+}
+
 function Harness({
   flow,
   runner,
   arbeiten,
-  preview = false,
-  engine,
+  arbeitId = 'x',
+  overview = false,
 }: {
   readonly flow: ReviewFlow;
   readonly runner: Runner;
   readonly arbeiten: readonly Arbeit[];
-  readonly preview?: boolean;
-  readonly engine?: ReviewEngine;
+  readonly arbeitId?: string;
+  readonly overview?: boolean;
 }) {
   const state = useSyncExternalStore(flow.subscribe, flow.getState);
   const runState = useSyncExternalStore(runner.subscribe, runner.getState);
   return (
-    <ReviewView
-      arbeiten={arbeiten}
-      flow={flow}
-      state={state}
-      entries={runState.entries}
-      canRetry
-      preview={preview}
-      {...(engine !== undefined && { engine })}
-      onBack={() => undefined}
-    />
+    <>
+      <ReviewView
+        arbeiten={arbeiten}
+        arbeitId={arbeitId}
+        flow={flow}
+        state={state}
+        entries={runState.entries}
+        canRetry
+      />
+      {overview && (
+        <Overview
+          arbeiten={arbeiten}
+          state={state}
+          entries={runState.entries}
+          selected={arbeitId}
+          onSelect={() => undefined}
+        />
+      )}
+    </>
   );
 }
 
@@ -80,17 +112,13 @@ function buttonNamed(name: string): HTMLButtonElement {
   return found;
 }
 
-function statusText(): string | null | undefined {
-  return container.querySelector('[role="status"]')?.textContent;
-}
-
 function pageItem(position: number): HTMLElement {
   const item = container.querySelectorAll<HTMLElement>('.review-page')[position - 1];
   if (item === undefined) throw new Error(`no page ${position}`);
   return item;
 }
 
-async function reviewed(preview = false) {
+async function reviewed(options: { arbeitId?: string; overview?: boolean } = {}) {
   const harness = setupReview(['a', 'b', 'c', 'd']);
   harness.h.transcripts.c = { ok: true, lines: [''] };
   harness.h.corrections['Wir gingen heim.'] = {
@@ -108,7 +136,13 @@ async function reviewed(preview = false) {
   await harness.flow.start(harness.pages, DEUTSCH);
   act(() =>
     root.render(
-      <Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} preview={preview} />,
+      <Harness
+        flow={harness.flow}
+        runner={harness.runner}
+        arbeiten={arbeiten}
+        {...(options.arbeitId !== undefined && { arbeitId: options.arbeitId })}
+        {...(options.overview !== undefined && { overview: options.overview })}
+      />,
     ),
   );
   return { ...harness, arbeiten };
@@ -125,7 +159,9 @@ async function withHint() {
   await harness.flow.start(harness.pages, DEUTSCH);
   const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
   act(() =>
-    root.render(<Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} />),
+    root.render(
+      <Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} overview />,
+    ),
   );
 }
 
@@ -138,6 +174,32 @@ const tap = () =>
     spot()?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 
+function SelectHarness({
+  flow,
+  runner,
+  arbeiten,
+  selected,
+  onSelect,
+}: {
+  readonly flow: ReviewFlow;
+  readonly runner: Runner;
+  readonly arbeiten: readonly Arbeit[];
+  readonly selected: string;
+  readonly onSelect: (id: string) => void;
+}) {
+  const state = useSyncExternalStore(flow.subscribe, flow.getState);
+  const runState = useSyncExternalStore(runner.subscribe, runner.getState);
+  return (
+    <Overview
+      arbeiten={arbeiten}
+      state={state}
+      entries={runState.entries}
+      selected={selected}
+      onSelect={onSelect}
+    />
+  );
+}
+
 describe('ReviewView', () => {
   it('lists every mark of a page with line, code and correction', async () => {
     await reviewed();
@@ -148,7 +210,7 @@ describe('ReviewView', () => {
   });
 
   it('shows the class overview with per-arbeit and class totals', async () => {
-    await reviewed();
+    await reviewed({ overview: true });
     const rows = [...container.querySelectorAll('.class-overview tbody tr')].map((row) =>
       [...row.children].map((cell) => cell.textContent),
     );
@@ -270,7 +332,7 @@ describe('ReviewView', () => {
   });
 
   it('marks a page as outdated after its text was edited and leaves it out of the statistics', async () => {
-    const { runner } = await reviewed();
+    const { runner } = await reviewed({ overview: true });
     act(() => runner.edit('a', 'Ganz neuer Text.'));
     expect(pageItem(1).querySelector('.status')?.textContent).toBe(
       'Veraltet: Nach Drehen oder Bearbeiten bitte erneut berichtigen',
@@ -295,195 +357,30 @@ describe('ReviewView', () => {
     expect(pageItem(1).textContent).toContain('kaputt');
   });
 
-  it('opens another arbeit from the class overview', async () => {
-    await reviewed();
-    expect(container.querySelector('#arbeit-review-title')?.textContent).toBe('Aufsatz Ada');
-    act(() => buttonNamed('Aufsatz Ben').click());
+  it('shows only the selected arbeit', async () => {
+    await reviewed({ arbeitId: 'y' });
     expect(container.querySelector('#arbeit-review-title')?.textContent).toBe('Aufsatz Ben');
-    expect(buttonNamed('Aufsatz Ben').getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelectorAll('.review-page')).toHaveLength(1);
   });
 
-  it('labels the preview corrections', async () => {
-    await reviewed(true);
-    expect(container.textContent).toContain(PREVIEW_NOTICE);
-  });
-
-  it('shows the phase and cancels a running review', async () => {
-    const { pages, h, flow, runner } = setupReview(['a']);
-    const gate = deferred();
-    h.correctGate = gate.promise;
-    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages }];
-    act(() => root.render(<Harness flow={flow} runner={runner} arbeiten={arbeiten} />));
-    let running: Promise<void> = Promise.resolve();
-    await act(async () => {
-      running = flow.start(pages, DEUTSCH);
-      await waitFor(() => flow.getState().run?.phase === 'correcting');
-    });
-    expect(container.querySelector('[role="status"]')?.textContent).toBe(
-      'Korrektur: Seite 1 von 1',
-    );
-
-    await act(async () => {
-      buttonNamed('Abbrechen').click();
-      await running;
-    });
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Abgebrochen.');
-    expect(pageItem(1).querySelector('.status')?.textContent).toBe(
-      'Problem: Abgebrochen, nicht berichtigt',
-    );
-  });
-
-  it('says when the correction model is being loaded', async () => {
-    const { pages, h, flow, runner } = setupReview(['a']);
-    const gate = deferred();
-    h.correctGate = gate.promise;
-    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages }];
-    const render = (engine: ReviewEngine) => {
-      act(() =>
-        root.render(<Harness flow={flow} runner={runner} arbeiten={arbeiten} engine={engine} />),
-      );
-    };
-    render({ transcriber: 'ready', corrector: 'idle' });
-    let running: Promise<void> = Promise.resolve();
-    await act(async () => {
-      running = flow.start(pages, DEUTSCH);
-      await waitFor(() => flow.getState().run?.phase === 'correcting');
-    });
-    expect(statusText()).toBe('Korrektur: Seite 1 von 1 · Modellwechsel wird vorbereitet …');
-
-    render({ transcriber: 'idle', corrector: 'starting' });
-    expect(statusText()).toBe('Korrektur: Seite 1 von 1 · Korrekturmodell wird geladen …');
-
-    render({ transcriber: 'idle', corrector: 'ready' });
-    expect(statusText()).toBe('Korrektur: Seite 1 von 1');
-
-    await act(async () => {
-      gate.resolve();
-      await running;
-    });
-  });
-});
-
-const READY_TRANSCRIBER: TranscriberStatus = {
-  state: 'ready',
-  transcriber: { transcribe: () => Promise.resolve({ ok: true, lines: [] }) },
-  demo: true,
-};
-
-function controls(
-  corrector: CorrectorStatus | null,
-  onStart = vi.fn<() => void>(),
-  onSetup?: () => void,
-) {
-  act(() =>
-    root.render(
-      <>
-        <ReviewControls
-          state={{ pages: {}, profile: null, run: null, stopping: false, outcome: null }}
-          profile={DEUTSCH}
-          onProfile={() => undefined}
-          transcriber={READY_TRANSCRIBER}
-          corrector={corrector}
-          pageCount={2}
-          counting={false}
-          onStart={onStart}
-          onOpen={() => undefined}
-          {...(onSetup !== undefined && { onSetup })}
-        />
-        <ReviewHint corrector={corrector} {...(onSetup !== undefined && { onSetup })} />
-      </>,
-    ),
-  );
-  return onStart;
-}
-
-describe('ReviewControls', () => {
-  it('starts the review with a ready corrector', () => {
-    const onStart = controls({
-      state: 'ready',
-      corrector: createFakeCorrector('x'),
-      preview: true,
-    });
-    act(() => buttonNamed('Berichtigen').click());
-    expect(onStart).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain(PREVIEW_NOTICE);
-  });
-
-  it('stays disabled and says why while the correction model is missing', () => {
-    controls({ state: 'needs-model', message: 'Korrekturmodell fehlt.' });
-    expect(buttonNamed('Berichtigen').disabled).toBe(true);
-    expect(container.querySelector('#review-hint')?.textContent).toBe('Korrekturmodell fehlt.');
-  });
-
-  it('explains the check of the correction model instead of offering the setup', () => {
+  it('calls onSelect with the Arbeit id and marks the selected Arbeit in the class overview', async () => {
+    const { arbeiten, flow, runner } = await reviewed();
+    const onSelect = vi.fn<(id: string) => void>();
     act(() =>
       root.render(
-        <ReviewHint
-          corrector={{ state: 'needs-model', message: 'Korrekturmodell fehlt.' }}
-          check={{
-            modelId: 'gemma-4-e2b-q4',
-            state: 'verifying',
-            downloadedBytes: 700_000_000,
-            totalBytes: 2_800_000_000,
-          }}
-          onSetup={() => undefined}
+        <SelectHarness
+          flow={flow}
+          runner={runner}
+          arbeiten={arbeiten}
+          selected="x"
+          onSelect={onSelect}
         />,
       ),
     );
-    const hint = container.querySelector('#review-hint');
-    expect(hint?.textContent).toBe(
-      'Rotstift prüft einmalig, ob die Dateien des Korrekturmodells vollständig und unbeschädigt sind. 700 MB von 2.800 MB geprüft.',
-    );
-    expect(hint?.querySelector('progress')?.getAttribute('value')).toBe('700000000');
-  });
-
-  it('says when the correction model could not be looked up and retries on request', () => {
-    const onRetry = vi.fn<() => void>();
-    act(() =>
-      root.render(
-        <ReviewHint corrector={null} loadError={{ kind: 'io', detail: 'x' }} onRetry={onRetry} />,
-      ),
-    );
-    expect(container.querySelector('#review-hint')?.textContent).toContain(
-      'Rotstift konnte das Korrekturmodell nicht laden.',
-    );
-    act(() => buttonNamed('Erneut versuchen').click());
-    expect(onRetry).toHaveBeenCalledOnce();
-  });
-
-  it('marks Berichtigen as a preview and warns about reading errors before the start', () => {
-    const onCheckTexts = vi.fn<() => void>();
-    act(() =>
-      root.render(
-        <ReviewHint
-          corrector={{ state: 'ready', corrector: createFakeCorrector('x'), preview: false }}
-          onCheckTexts={onCheckTexts}
-        />,
-      ),
-    );
-    expect(container.textContent).toContain(OCR_NOTICE);
-    expect(OCR_NOTICE).toBe(
-      'Lesefehler der Texterkennung können als Fehler erscheinen. Unsicher gelesene Stellen zeigt Rotstift grau gepunktet zur Prüfung.',
-    );
-    act(() => buttonNamed('Erkannte Texte prüfen').click());
-    expect(onCheckTexts).toHaveBeenCalledOnce();
-
-    controls({ state: 'ready', corrector: createFakeCorrector('x'), preview: false });
-    expect(buttonNamed('Berichtigen').nextElementSibling?.textContent).toBe('Vorschau');
-    expect(container.textContent).not.toContain('Erkannte Texte prüfen');
-  });
-
-  it('opens the correction model setup instead of starting while the model is missing', () => {
-    const onSetup = vi.fn<() => void>();
-    const onStart = controls(
-      { state: 'needs-model', message: 'Korrekturmodell fehlt.' },
-      undefined,
-      onSetup,
-    );
-    act(() => buttonNamed('Berichtigen').click());
-    act(() => buttonNamed('Korrekturmodell einrichten').click());
-    expect(onSetup).toHaveBeenCalledTimes(2);
-    expect(onStart).not.toHaveBeenCalled();
+    expect(buttonNamed('Aufsatz Ada').getAttribute('aria-pressed')).toBe('true');
+    expect(buttonNamed('Aufsatz Ben').getAttribute('aria-pressed')).toBe('false');
+    act(() => buttonNamed('Aufsatz Ben').click());
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('y');
   });
 });
 
@@ -501,7 +398,7 @@ function controlsOf(label: string): HTMLElement {
 
 describe('saving the review as PDF', () => {
   it('saves a fully corrected Arbeit with progress, the save dialog phase and the result', async () => {
-    await reviewed();
+    await reviewed({ arbeitId: 'y' });
     const finish = deferred();
     let options: SavePdfOptions = {};
     let outcome: SaveOutcome = { state: 'saved', fileName: 'Aufsatz Ben (korrigiert).pdf' };
@@ -509,7 +406,6 @@ describe('saving the review as PDF', () => {
       options = given;
       return finish.promise.then(() => outcome);
     });
-    act(() => buttonNamed('Aufsatz Ben').click());
 
     act(() => labelled('Als PDF speichern: Aufsatz Ben').click());
     expect(vi.mocked(saveCorrectedPdf).mock.calls[0]?.[0]).toMatchObject({
@@ -546,14 +442,13 @@ describe('saving the review as PDF', () => {
   });
 
   it('cancels building the PDF', async () => {
-    await reviewed();
+    await reviewed({ arbeitId: 'y' });
     vi.mocked(saveCorrectedPdf).mockImplementation(
       (_arbeit, given = {}) =>
         new Promise((resolve) => {
           given.signal?.addEventListener('abort', () => resolve({ state: 'cancelled' }));
         }),
     );
-    act(() => buttonNamed('Aufsatz Ben').click());
     act(() => labelled('Als PDF speichern: Aufsatz Ben').click());
     await act(async () => {
       buttonNamed('Abbrechen').click();
@@ -573,7 +468,7 @@ describe('saving the review as PDF', () => {
   });
 
   it('saves the class PDF with the complete Arbeiten only', async () => {
-    await reviewed();
+    await reviewed({ overview: true });
     vi.mocked(saveClassPdf).mockResolvedValue({ state: 'cancelled' });
     expect(container.querySelector('.class-overview')?.textContent).toContain(
       '1 Arbeit ist nicht vollständig berichtigt und fehlt im Klassen-PDF.',
@@ -599,13 +494,14 @@ describe('saving the review as PDF', () => {
     await harness.flow.start(harness.pages, DEUTSCH);
     const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
     act(() =>
-      root.render(<Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} />),
+      root.render(
+        <Harness flow={harness.flow} runner={harness.runner} arbeiten={arbeiten} overview />,
+      ),
     );
     expect(labelled('Als PDF speichern: Aufsatz Ada').disabled).toBe(true);
     expect(labelled('Klassen-PDF mit Korrekturen speichern').disabled).toBe(true);
     expect(container.textContent).toContain(
       'Vorschau-Korrekturen werden nicht als PDF gespeichert.',
     );
-    expect(container.textContent).toContain(PREVIEW_NOTICE);
   });
 });

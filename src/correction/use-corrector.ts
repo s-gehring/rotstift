@@ -4,7 +4,7 @@ import {
   useCorrectorSetup,
   type CorrectorSetup,
   type CreateCorrector,
-} from '../models/corrector-setup.tsx';
+} from '../models/corrector-setup.ts';
 import type { Corrector } from './corrector.ts';
 import {
   resolveBrowserCorrector,

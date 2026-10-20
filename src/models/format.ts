@@ -38,18 +38,27 @@ export function pushSample(samples: readonly Sample[], sample: Sample): Sample[]
   return [...kept, sample];
 }
 
-export function remainingText(
+export function remainingMs(
   samples: readonly Sample[],
   downloaded: number,
   total: number,
-): string | null {
+): number | null {
   const first = samples[0];
   const last = samples[samples.length - 1];
   if (first === undefined || last === undefined) return null;
   const span = last.at - first.at;
   const gained = last.bytes - first.bytes;
   if (span < MIN_SPAN_MS || gained <= 0) return null;
-  return formatRemaining(((total - downloaded) / gained) * span);
+  return ((total - downloaded) / gained) * span;
+}
+
+export function remainingText(
+  samples: readonly Sample[],
+  downloaded: number,
+  total: number,
+): string | null {
+  const ms = remainingMs(samples, downloaded, total);
+  return ms === null ? null : formatRemaining(ms);
 }
 
 export function describeDownloadError(error: DownloadError): string {

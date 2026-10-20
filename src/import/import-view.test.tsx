@@ -178,8 +178,5 @@ describe('Arbeiten in the import view', () => {
     const lock = control('Ben entfernen').closest('fieldset');
     expect(lock?.disabled).toBe(true);
     expect(control('Seite 1 von Ben nach rechts drehen').closest('fieldset')).toBe(lock);
-    expect(container.textContent).toContain(
-      'Während der Berichtigung lassen sich die Arbeiten nicht verändern.',
-    );
   });
 });

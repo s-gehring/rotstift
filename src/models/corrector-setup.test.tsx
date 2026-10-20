@@ -4,13 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SidecarCorrector, SidecarCorrectorOptions } from '../llm/sidecar-corrector.ts';
 import type { ModelClient } from './client.ts';
-import {
-  CorrectorManagement,
-  CorrectorSetupDialog,
-  useCorrectorSetup,
-  type CorrectorSetup,
-  type CreateCorrector,
-} from './corrector-setup.tsx';
+import { useCorrectorSetup, type CorrectorSetup, type CreateCorrector } from './corrector-setup.ts';
 import { defaultCorrector, recommendModel, type CorrectorInfo } from './registry.ts';
 import { useModelSetup } from './use-model-setup.ts';
 import type { ModelState, ModelStatus } from './types.ts';
@@ -77,12 +71,7 @@ function Probe({
   useEffect(() => {
     latest = setup;
   });
-  return (
-    <>
-      <CorrectorManagement corrector={setup} />
-      <CorrectorSetupDialog corrector={setup} />
-    </>
-  );
+  return <p>{setup.setup.status?.state}</p>;
 }
 
 const mount = async (client: ModelClient | null, create: CreateCorrector) => {
@@ -91,11 +80,6 @@ const mount = async (client: ModelClient | null, create: CreateCorrector) => {
     await Promise.resolve();
   });
 };
-
-const button = (label: string) =>
-  [...container.querySelectorAll('button')].find((candidate) =>
-    candidate.textContent.startsWith(label),
-  );
 
 beforeEach(() => {
   container = document.createElement('div');
@@ -110,7 +94,7 @@ afterEach(() => {
 });
 
 describe('useCorrectorSetup', () => {
-  it('reports a missing corrector and opens its own setup dialog', async () => {
+  it('reports a missing corrector without building a sidecar', async () => {
     const { client, selection, status } = fakeClient({ [transcriber.id]: 'ready' });
     const { create } = fakeCreate();
     await mount(client, create);
@@ -121,14 +105,6 @@ describe('useCorrectorSetup', () => {
     expect(create).not.toHaveBeenCalled();
     expect(selection).not.toHaveBeenCalled();
     expect(new Set(status.mock.calls.map(([modelId]) => modelId))).toEqual(new Set([corrector.id]));
-
-    const dialog = container.querySelector('dialog');
-    expect(dialog?.hasAttribute('open')).toBe(false);
-    act(() => button('Korrektur einrichten')?.click());
-    expect(latest?.dialogOpen).toBe(true);
-    expect(dialog?.hasAttribute('open')).toBe(true);
-    act(() => button('Schließen')?.click());
-    expect(latest?.dialogOpen).toBe(false);
   });
 
   it('builds the sidecar corrector once the model is ready and refreshes when it vanishes', async () => {
@@ -162,57 +138,7 @@ describe('useCorrectorSetup', () => {
     await mount(null, create);
     expect(latest?.ready).toBe(false);
     expect(latest?.corrector).toBeNull();
-    expect(container.querySelector('dialog')).toBeNull();
-    expect(container.querySelector('section')).toBeNull();
-  });
-});
-
-describe('corrector setup dialog', () => {
-  it('states model, size, license and the privacy promise for a single file', async () => {
-    const { client } = fakeClient({});
-    await mount(client, fakeCreate().create);
-    await vi.waitFor(() => expect(latest?.setup.status?.state).toBe('missing'));
-    const dialog = container.querySelector('dialog');
-    const text = dialog?.textContent ?? '';
-    expect(dialog?.querySelector('h2')?.textContent).toBe('Korrektur einrichten');
-    expect(dialog?.getAttribute('aria-labelledby')).toBe(dialog?.querySelector('h2')?.id);
-    expect(text).toContain('Gemma 4 E2B it (Q4_0)');
-    expect(text).toContain('2,8 GB');
-    expect(text).toContain('huggingface.co (ggml-org/gemma-4-E2B-it-GGUF), Lizenz Apache-2.0');
-    expect(text).toContain('Es wird erst zum Berichtigen gebraucht');
-    expect(text).toContain('Einmaliger Download, danach komplett offline.');
-    expect(text).toContain('Es werden keine Schülerdaten übertragen.');
-    expect(text).toContain('die Datei herunterladen');
-    expect(text).toContain(corrector.files.model.url);
-    expect(text).not.toContain('mmproj');
-    expect(dialog?.querySelectorAll('input[type="radio"]')).toHaveLength(0);
-    expect(button('Herunterladen (2,8 GB)')).toBeDefined();
-  });
-
-  it('confirms when the corrector is ready', async () => {
-    const { client } = fakeClient({ [corrector.id]: 'ready' });
-    await mount(client, fakeCreate().create);
-    await vi.waitFor(() => expect(latest?.ready).toBe(true));
-    expect(container.querySelector('dialog [role="status"]')?.textContent).toBe(
-      'Die Korrektur ist eingerichtet. Berichtigen funktioniert jetzt ohne Internet.',
-    );
-  });
-});
-
-describe('corrector management', () => {
-  it('lists the corrector separately and deletes it only after a confirmation', async () => {
-    const { client } = fakeClient({ [corrector.id]: 'ready' });
-    await mount(client, fakeCreate().create);
-    await vi.waitFor(() => expect(latest?.ready).toBe(true));
-    const section = container.querySelector('section');
-    expect(section?.getAttribute('aria-label')).toBe('Korrektur verwalten');
-    expect(section?.textContent).toContain('Gemma 4 E2B it (Q4_0): Eingerichtet');
-    expect(section?.textContent).toContain('2,8 GB');
-    expect(section?.textContent).not.toContain('Diagnose');
-    act(() => button('Modell löschen')?.click());
-    expect(container.querySelector('[role="alertdialog"]')?.textContent).toContain(
-      'Zum Berichtigen muss es danach erneut heruntergeladen werden.',
-    );
+    expect(latest?.setup.available).toBe(false);
   });
 });
 

@@ -17,7 +17,7 @@
 .arbeit-review {
   margin-top: 1.5rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--color-border);
 }
 
 .class-overview h3,
@@ -35,17 +35,17 @@
 .class-overview th,
 .class-overview td {
   padding: 0.35rem 0.6rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
   vertical-align: top;
 }
 
 .class-overview tbody tr[aria-current='true'] {
-  background: var(--surface);
+  background: var(--color-surface);
 }
 
 .class-overview tbody tr[aria-current='true'] th {
-  box-shadow: inset 4px 0 0 var(--accent);
+  box-shadow: inset 4px 0 0 var(--color-red);
 }
 
 .class-overview tfoot th,
@@ -105,7 +105,7 @@ button.link[aria-pressed='true'] {
   gap: 1rem;
   margin: 0;
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
 }
 
@@ -128,13 +128,13 @@ button.link[aria-pressed='true'] {
 
 .review-page {
   padding: 0.75rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
 }
 
 .review-page[data-status='failed'],
 .review-page[data-status='unreadable'] {
-  border: 2px dashed var(--accent);
+  border: 2px dashed var(--color-red);
 }
 
 .review-page[data-status='empty'],
@@ -170,11 +170,11 @@ button.link[aria-pressed='true'] {
 .review-stage img {
   display: block;
   max-width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
 }
 
 .review-stage .annotated-page {
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border);
 }
 
 .mark-list {
@@ -212,16 +212,6 @@ button.link[aria-pressed='true'] {
   gap: 0.5rem;
 }
 
-.preview-tag {
-  display: inline-block;
-  padding: 0 0.4em;
-  border: 1px dashed currentColor;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  vertical-align: middle;
-}
-
 .hint-count {
   border-bottom: 2px dotted currentColor;
 }
@@ -249,7 +239,7 @@ button.link[aria-pressed='true'] {
 }
 
 .hint-list li[data-status='accepted'] .hint-text {
-  color: var(--accent);
+  color: var(--color-red);
   text-decoration: underline solid;
 }
 

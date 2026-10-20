@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ACCEPT_ATTRIBUTE } from './file-kind.ts';
 import { findPage, type Arbeit } from './arbeiten.ts';
 import { NEW_ARBEIT, PageCard } from './PageCard.tsx';
-import { useFileDrop } from './use-file-drop.ts';
 import type { useImportPages } from './use-import-pages.ts';
 
 type FocusRequest =
@@ -24,9 +23,8 @@ function arbeitCountText(count: number): string {
 
 interface ImportViewProps {
   readonly importState: ReturnType<typeof useImportPages>;
-  readonly actions?: ReactNode;
-  readonly footer?: ReactNode;
   readonly locked?: boolean;
+  readonly onOpenArbeit?: (arbeitId: string) => void;
 }
 
 function ArbeitName({
@@ -57,7 +55,7 @@ function ArbeitName({
   );
 }
 
-export function ImportView({ importState, actions, footer, locked = false }: ImportViewProps) {
+export function ImportView({ importState, locked = false, onOpenArbeit }: ImportViewProps) {
   const { arbeiten, pages, dispatch, addFiles, busy, notices, dismissNotices } = importState;
   const [announcement, setAnnouncement] = useState('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -65,7 +63,6 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
   const pickButton = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const focusRequest = useRef<FocusRequest | null>(null);
-  const dropActive = useFileDrop(addFiles);
   const chosen = arbeiten.filter((arbeit) => selected.has(arbeit.id));
 
   useEffect(() => {
@@ -208,15 +205,9 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
   };
 
   return (
-    <section className="import" aria-labelledby="import-title">
+    <section className="import" aria-label="Arbeiten">
       <div className="import-header">
-        <h2 id="import-title">Arbeiten laden</h2>
-        <button
-          ref={pickButton}
-          type="button"
-          className="primary"
-          onClick={() => input.current?.click()}
-        >
+        <button ref={pickButton} type="button" onClick={() => input.current?.click()}>
           Dateien auswählen
         </button>
         <input
@@ -229,11 +220,6 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
           onChange={onPick}
         />
       </div>
-      <p className="hint">
-        Bilder (PNG, JPEG, WebP) und PDF-Dateien lassen sich auch einfach in dieses Fenster ziehen.
-        Jede Datei wird eine Arbeit, jede PDF-Seite eine Seite darin. Alles bleibt auf diesem
-        Rechner.
-      </p>
 
       {notices.length > 0 && (
         <div className="errors" role="alert">
@@ -252,11 +238,6 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
         <p className="empty">{busy ? 'Seiten werden geladen …' : 'Noch keine Arbeiten geladen.'}</p>
       ) : (
         <fieldset className="lock-area" disabled={locked}>
-          {locked && (
-            <p className="hint">
-              Während der Berichtigung lassen sich die Arbeiten nicht verändern.
-            </p>
-          )}
           <div className="list-header">
             <p>
               {arbeitCountText(arbeiten.length)} · {pageCountText(pages.length)}
@@ -271,13 +252,6 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
               Alle entfernen
             </button>
           </div>
-          {arbeiten.length > 1 && (
-            <p className="hint">
-              Eine Arbeit pro Datei. Wurde eine Arbeit seitenweise eingescannt, die Arbeiten
-              ankreuzen und zusammenführen. Einzelne Seiten lassen sich über „In andere Arbeit …“
-              verschieben.
-            </p>
-          )}
           <ul className="arbeit-list" ref={list}>
             {arbeiten.map((arbeit) => (
               <li key={arbeit.id} className="arbeit">
@@ -295,6 +269,11 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
                     onRename={(name) => dispatch({ type: 'rename', id: arbeit.id, name })}
                   />
                   <span className="hint">{pageCountText(arbeit.pages.length)}</span>
+                  {onOpenArbeit !== undefined && (
+                    <button type="button" onClick={() => onOpenArbeit(arbeit.id)}>
+                      Öffnen
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="danger"
@@ -337,18 +316,9 @@ export function ImportView({ importState, actions, footer, locked = false }: Imp
         </fieldset>
       )}
 
-      <div className="submit-bar">{actions}</div>
-      {footer}
-
       <p className="sr-only" role="status">
         {announcement}
       </p>
-
-      {dropActive && (
-        <div className="drop-overlay" aria-hidden="true">
-          Dateien hier loslassen
-        </div>
-      )}
     </section>
   );
 }
