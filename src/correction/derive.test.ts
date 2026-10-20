@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
+import { DEUTSCH, ENGLISCH, SPANISCH } from '../annotations/profile.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import { transcriptSchema } from '../annotations/transcript.ts';
 import type { Mark } from '../annotations/transcript.ts';
@@ -191,6 +191,17 @@ describe('deriveMarks structure', () => {
         'Wir bauen die Rutsche, weil es regnet.',
       ),
     ).toEqual([[], [omission('Z', ',', 4)], []]);
+  });
+
+  it('puts an omitted opening mark before the next word, also across lines', () => {
+    expect(
+      marksOf(['Hola. Cómo te llamas?'], 'Hola. ¿Cómo te llamas?', { profile: SPANISCH }),
+    ).toEqual([[omission('Z', '¿', 6)]]);
+    expect(
+      marksOf(['Fue un buen día.', 'Cómo te llamas?'], 'Fue un buen día. ¿Cómo te llamas?', {
+        profile: SPANISCH,
+      }),
+    ).toEqual([[], [omission('Z', '¿', 0)]]);
   });
 
   it('drops marks that would overlap', () => {

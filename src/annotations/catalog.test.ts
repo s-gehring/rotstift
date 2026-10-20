@@ -13,6 +13,11 @@ describe('catalog', () => {
     expect(codes).toEqual(expect.arrayContaining(['sp', 'gr', 'voc', 'ww', 'wo', 'p', 't']));
   });
 
+  it.each(['fr', 'es'] as const)('contains the usual correction marks for %s', (language) => {
+    const codes = CATALOG[language].kinds.map((kind) => kind.code);
+    expect(codes).toEqual(expect.arrayContaining(['R', 'Z', 'G', 'W', 'Sb', 'T', 'M']));
+  });
+
   it.each(LANGUAGE_CODES)('has unique, case-insensitively distinct codes for %s', (language) => {
     const codes = CATALOG[language].kinds.map((kind) => kind.code.toLowerCase());
     expect(new Set(codes).size).toBe(codes.length);
@@ -62,6 +67,7 @@ describe('catalog', () => {
 
   it('recognizes language codes', () => {
     expect(isLanguageCode('de')).toBe(true);
-    expect(isLanguageCode('fr')).toBe(false);
+    expect(isLanguageCode('fr')).toBe(true);
+    expect(isLanguageCode('it')).toBe(false);
   });
 });

@@ -144,7 +144,7 @@ describe('registry', () => {
     });
     expect(corrector.files).not.toHaveProperty('mmproj');
     expect(corrector.system).toMatch(
-      /^Du korrigierst die Fehler in einer Schülerarbeit\. Fach: \{subject\}\.\n/u,
+      /^Du korrigierst die Fehler in einer Schülerarbeit\. Fach: \{subject\}\. Der Text ist auf \{language\} geschrieben\.\n/u,
     );
     expect(corrector.system).toContain('Gib nur die Zeilen aus, ohne Erklärung.');
     expect(totalBytes(corrector)).toBe(2_841_481_184);

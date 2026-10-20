@@ -106,3 +106,16 @@ node --experimental-transform-types eval/ocr-threshold.ts --scans ~/Rotstift-Tes
 ```
 
 Der Befehl verkleinert die Seiten je Modell auf `imageMaxEdge` (mit `eval/.venv`, siehe oben), erkennt sie mit Lesesicherheit, korrigiert sie mit Gemma wie in der App und schreibt nach `~/.cache/rotstift/eval/eigene-schrift/` (`--out` ändert das) die Zwischenstände und `bericht.md`: Lesefehler, Kalibrierung und je Schwelle Recall der roten Marken, Recall mit Hinweisen, Hinweise und Fehlalarme je 100 Wörter, dazu die Schwelle nach der Regel und den Wert aus der Registry. Ein abgebrochener Lauf setzt beim nächsten Aufruf fort. `--threads` (Standard 8) und `--thresholds` lassen sich ändern.
+
+## Korrekturprofile (Fremdsprachen und Sachfach)
+
+Misst die App-Kette ab dem Text für ein Profil: Prompt aus der Registry, `createLlmCorrector`, `correctPage`, `deriveMarks`. Der Bericht steht in [docs/evaluations/2026-10-profile.md](../docs/evaluations/2026-10-profile.md).
+
+```bash
+node --experimental-transform-types eval/profiles.ts --set fr --out <Ergebnis.json>
+```
+
+- **Proben:** `samples/profiles/<fr|es|en|sachfach>/*.txt` im Format `{geschrieben|richtig|Art}`. Art ist `R`, `Z`, `G` oder `W` (Wortwahl), im Englischen `sp`, `p`, `gr` oder `voc`. `--set de` nimmt die deutschen Texte aus `samples/texts`. Jeder Text läuft einmal mit Fehlern und einmal korrigiert (Fehlalarme).
+- **Optionen:** `--set` (fr, es, en, de, sachfach), `--model` (Standard `gemma-4-e2b-q4`), `--threads` (4), `--variant` (`app` ist der Prompt der Registry, `plain` lässt die Sätze zur Sprache weg), `--only` (Textnamen), `--out`. `PROFILES_DEBUG=1` gibt die Antworten des Modells aus.
+- **Ausgabe:** Eine JSON-Datei mit allen Marken und Werten je Seite und die Kennzahlen auf der Konsole: Recall und Precision je nach Stelle sowie Art und Stelle, Korrektur richtig, Wortfehler vorher und nachher, Fehlalarme je 100 Wörter und die Zählung je Art.
+- `profiles.test.ts` prüft ohne Modell, dass eine perfekte Korrektur der Proben jede Marke an die richtige Stelle setzt und wie viele die vorgesehene Art bekommen.

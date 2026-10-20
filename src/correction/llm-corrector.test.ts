@@ -233,4 +233,30 @@ describe('createLlmCorrector in numbered mode', () => {
     });
     expect(complete).toHaveBeenCalledTimes(2);
   });
+
+  it('accepts a complete answer whose numbering drifted after the repair', async () => {
+    const answer = '1: Er kam gestern\n2: spät nach Hause, weil der\n3: Bus ausfiel.';
+    const { client, complete } = clientReturning(answer);
+    const lines = ['Er kam gestern', 'spät nach Hause weil', 'der Bus', 'ausfiel.'];
+    const result = await createLlmCorrector({ client, config: numbered }).correct(
+      lines,
+      DEUTSCH,
+      signal(),
+    );
+    expect(result).toEqual({
+      ok: true,
+      correctedText: 'Er kam gestern\nspät nach Hause, weil der\nBus ausfiel.',
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('still fails when the answer stops before the end of the text', async () => {
+    const { client } = clientReturning('1: Er kam gestern\n2: spät nach Hause weil');
+    const result = await createLlmCorrector({ client, config: numbered }).correct(
+      ['Er kam gestern', 'spät nach Hause weil', 'der Bus ausfiel.'],
+      DEUTSCH,
+      signal(),
+    );
+    expect(result.ok).toBe(false);
+  });
 });

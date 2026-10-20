@@ -5,6 +5,8 @@ import type { MarkRole } from './kinds.ts';
 interface Morphology {
   endings: ReadonlySet<string>;
   paradigms: readonly (readonly string[])[];
+  minStem?: number;
+  maxEnding?: number;
 }
 
 const POSSESSIVES = ['mein', 'dein', 'sein', 'ihr', 'unser', 'euer'];
@@ -62,10 +64,195 @@ const ENGLISH: Morphology = {
   ],
 };
 
-const MORPHOLOGY: Record<LanguageCode, Morphology> = { de: GERMAN, en: ENGLISH };
+const FRENCH: Morphology = {
+  minStem: 3,
+  maxEnding: 6,
+  endings: new Set([
+    '',
+    'e',
+    's',
+    'es',
+    'x',
+    't',
+    'nt',
+    'ent',
+    'er',
+    'ez',
+    'é',
+    'ée',
+    'és',
+    'ées',
+    'i',
+    'is',
+    'it',
+    'u',
+    'ue',
+    'us',
+    'ons',
+    'ais',
+    'ait',
+    'aient',
+    'ions',
+    'iez',
+    'a',
+    'ai',
+    'as',
+    'ont',
+    'ant',
+    'ra',
+    'rait',
+    'ront',
+    'erai',
+    'erons',
+    'eux',
+    'euse',
+    'al',
+    'aux',
+  ]),
+  paradigms: [
+    ['le', 'la', 'les'],
+    ['un', 'une', 'des'],
+    ['ce', 'cet', 'cette', 'ces'],
+    ['mon', 'ma', 'mes'],
+    ['ton', 'ta', 'tes'],
+    ['son', 'sa', 'ses'],
+    ['notre', 'nos'],
+    ['votre', 'vos'],
+    ['leur', 'leurs'],
+    ['il', 'elle', 'ils', 'elles'],
+    ['me', 'moi'],
+    ['te', 'toi'],
+    ['lui', 'leur'],
+    [
+      'suis',
+      'es',
+      'est',
+      'sommes',
+      'êtes',
+      'sont',
+      'étais',
+      'était',
+      'étions',
+      'étaient',
+      'ai',
+      'as',
+      'a',
+      'avons',
+      'avez',
+      'ont',
+      'avais',
+      'avait',
+      'avions',
+      'avaient',
+    ],
+    ['vais', 'vas', 'va', 'allons', 'allez', 'vont'],
+    ['fais', 'fait', 'faisons', 'faites', 'font'],
+    ['à', 'de', 'en', 'dans', 'sur', 'pour', 'par', 'avec', 'sans', 'chez', 'vers'],
+  ],
+};
 
-const MIN_STEM = 4;
-const MAX_ENDING = 3;
+const SPANISH: Morphology = {
+  minStem: 3,
+  maxEnding: 6,
+  endings: new Set([
+    '',
+    'o',
+    'a',
+    'os',
+    'as',
+    'e',
+    'es',
+    'en',
+    'an',
+    'ó',
+    'é',
+    'í',
+    'ía',
+    'ían',
+    'aba',
+    'aban',
+    'ábamos',
+    'aron',
+    'ieron',
+    'ado',
+    'ido',
+    'ando',
+    'iendo',
+    'ar',
+    'er',
+    'ir',
+    's',
+    'n',
+    'mos',
+    'amos',
+    'emos',
+    'imos',
+    'áis',
+    'éis',
+    'ás',
+    'és',
+    'ste',
+    'aste',
+    'iste',
+    'ra',
+    'ras',
+    'ran',
+    'ría',
+    'rá',
+    'rán',
+  ]),
+  paradigms: [
+    ['el', 'la', 'los', 'las'],
+    ['un', 'una', 'unos', 'unas'],
+    ['este', 'esta', 'estos', 'estas'],
+    ['ese', 'esa', 'esos', 'esas'],
+    ['mi', 'mis'],
+    ['tu', 'tus'],
+    ['su', 'sus'],
+    ['nuestro', 'nuestra', 'nuestros', 'nuestras'],
+    ['me', 'te', 'se', 'nos', 'os'],
+    ['lo', 'la', 'los', 'las', 'le', 'les'],
+    [
+      'soy',
+      'eres',
+      'es',
+      'somos',
+      'sois',
+      'son',
+      'era',
+      'eras',
+      'éramos',
+      'eran',
+      'fui',
+      'fue',
+      'estoy',
+      'estás',
+      'está',
+      'estamos',
+      'estáis',
+      'están',
+      'estaba',
+      'estaban',
+    ],
+    ['he', 'has', 'ha', 'hemos', 'habéis', 'han', 'había', 'habían'],
+    ['voy', 'vas', 'va', 'vamos', 'vais', 'van', 'iba', 'iban'],
+    ['a', 'en', 'de', 'por', 'para', 'con', 'sin', 'sobre', 'entre', 'hacia', 'desde', 'hasta'],
+  ],
+};
+
+const MORPHOLOGY: Record<LanguageCode, Morphology> = {
+  de: GERMAN,
+  en: ENGLISH,
+  fr: FRENCH,
+  es: SPANISH,
+};
+
+const DEFAULT_MIN_STEM = 4;
+const DEFAULT_MAX_ENDING = 3;
+
+function withoutAccents(text: string): string {
+  return text.normalize('NFD').replaceAll(/\p{M}/gu, '');
+}
 
 function commonPrefix(a: string, b: string): number {
   let length = 0;
@@ -81,10 +268,11 @@ function isInflection(a: string, b: string, morphology: Morphology): boolean {
   const stem = commonPrefix(a, b);
   const endingA = a.slice(stem);
   const endingB = b.slice(stem);
+  const maxEnding = morphology.maxEnding ?? DEFAULT_MAX_ENDING;
   return (
-    stem >= MIN_STEM &&
-    endingA.length <= MAX_ENDING &&
-    endingB.length <= MAX_ENDING &&
+    stem >= (morphology.minStem ?? DEFAULT_MIN_STEM) &&
+    endingA.length <= maxEnding &&
+    endingB.length <= maxEnding &&
     morphology.endings.has(endingA) &&
     morphology.endings.has(endingB)
   );
@@ -99,8 +287,8 @@ export function classifyWordChange(
   const b = correction.toLowerCase();
   if (a === b) return 'spelling';
   const morphology = MORPHOLOGY[language];
-  if (sameParadigm(a, b, morphology.paradigms) || isInflection(a, b, morphology)) {
-    return 'grammar';
-  }
+  if (sameParadigm(a, b, morphology.paradigms)) return 'grammar';
+  if (withoutAccents(a) === withoutAccents(b)) return 'spelling';
+  if (isInflection(a, b, morphology)) return 'grammar';
   return isSimilar(a, b) ? 'spelling' : 'wording';
 }

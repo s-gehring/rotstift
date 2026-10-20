@@ -1,0 +1,3 @@
+Je m'appelle Tom et j'ai quatorze ans. Je vais au {gymnase|collège|W} depuis deux ans. Mon école est assez {grand|grande|G} et les salles sont très {propre|propres|G}. Le lundi, nous avons {mathématique|mathématiques|R}, français et {histoir|histoire|R}. Je n'aime pas {la|les|G} maths, parce que c'est {difficil|difficile|R}. {Mon|Ma|G} matière préférée est le sport. Après les cours, je {mange|prends|W} le goûter avec mes amis{|,|Z} puis je fais mes devoirs. Je pense{,||Z} que l'école est importante pour notre avenir.
+
+Et toi, comment est ton école{|?|Z}

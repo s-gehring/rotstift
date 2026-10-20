@@ -83,6 +83,9 @@ describe('Header', () => {
     expect([...(subject()?.options ?? [])].map((option) => option.textContent)).toEqual([
       'Deutsch',
       'Englisch',
+      'Französisch',
+      'Spanisch',
+      'Sachfach',
     ]);
     click(button('Korrigieren'));
     expect(start).toHaveBeenCalledWith();

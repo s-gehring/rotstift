@@ -15,14 +15,29 @@ Außerhalb des Umfangs: Die Schwere eines Fehlers wird bewusst nicht standardisi
 
 Eine Fehlerart hat ein Kürzel, einen deutschen Namen, eine Kurzbeschreibung und ein Beispiel. Die Kataloge liegen je Sprache in `src/annotations/languages/`. Es gibt keinen bundesweit verbindlichen Satz an Korrekturzeichen. Der Katalog nutzt die verbreitetsten Zeichen.
 
-| Sprache  | Kürzel                                                                                                                |
-| -------- | --------------------------------------------------------------------------------------------------------------------- |
-| Deutsch  | R, Z, G, A, Sb, T, Bz, W (Rechtschreibung, Zeichensetzung, Grammatik, Ausdruck, Satzbau, Tempus, Bezug, Wiederholung) |
-| Englisch | sp, gr, t, wo, p, voc, ww, art                                                                                        |
+| Sprache     | Kürzel                                                                                                                                              |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deutsch     | R, Z, G, A, Sb, T, Bz, W (Rechtschreibung, Zeichensetzung, Grammatik, Ausdruck, Satzbau, Tempus, Bezug, Wiederholung)                               |
+| Englisch    | sp, gr, t, wo, p, voc, ww, art                                                                                                                      |
+| Französisch | R, Z, G, W, Sb, T, M, Präp (Rechtschreibung, Zeichensetzung, Grammatik, Wortschatz, Satzbau, Tempus, Modus, Präposition), Beispiele auf Französisch |
+| Spanisch    | R, Z, G, W, Sb, T, M, Präp (wie Französisch), Beispiele auf Spanisch                                                                                |
 
 Kürzel sind je Sprache eindeutig, auch ohne Beachtung der Groß- und Kleinschreibung. Beim Parsen wird die Schreibweise des Modells auf das Kürzel des Katalogs normalisiert (`sb` wird zu `Sb`).
 
-Eine Sprache ergänzen: Datei `languages/<code>.ts` anlegen, in `catalog.ts` in `LANGUAGE_CODES` und `CATALOG` eintragen. Die Tests prüfen Eindeutigkeit und Beispiele automatisch.
+Eine Sprache ergänzen: Datei `languages/<code>.ts` anlegen, in `catalog.ts` in `LANGUAGE_CODES` und `CATALOG` eintragen, in `src/correction/kinds.ts` die Kürzel für Rechtschreibung, Zeichensetzung, Grammatik, Wortschatz und Satzbau festlegen und in `src/correction/classify.ts` die Wortbildung der Sprache (Endungen, Formenreihen wie Artikel, Pronomen, Hilfsverben) beschreiben. Dann das Profil in `profile.ts` in `BUILT_IN_PROFILES` aufnehmen; die Auswahl in der Oberfläche liest nur diese Liste. Die Tests prüfen Eindeutigkeit und Beispiele automatisch.
+
+#### Französisch und Spanisch
+
+Auch für Fremdsprachen gibt es keinen bundesweit verbindlichen Satz. Grundlage sind die Korrekturzeichen, die Länder für Abiturklausuren festlegen: Nordrhein-Westfalen für [Französisch](https://www.standardsicherung.schulministerium.nrw.de/system/files/media/document/file/korrekturzeichen_franzoesisch.pdf) und [Spanisch](https://www.standardsicherung.schulministerium.nrw.de/system/files/media/document/file/korrekturzeichen_spanisch.pdf) (W, G, R, Z, ausdifferenziert in unter anderem Präp, Mod bzw. M, T, Sb, A), Brandenburg für [Französisch](https://bravors.brandenburg.de/sixcms/media.php/66/Anlage%205%20Franz%C3%B6sisch%20Abitur%202021_08102020.pdf) (G, V, WW, M, T, S, R, Z, A) und Berlin-Brandenburg für [Spanisch](https://bildungsserver.berlin-brandenburg.de/fileadmin/bbb/unterricht/faecher/sprachen/spanisch/pdf/Korrekturzeichen.pdf) (dieselbe Tabelle). Beide Sprachen teilen sich einen Katalog aus dem gemeinsamen Kern dieser Vorgaben, mit sprachspezifischen Beispielen und Beschreibungen:
+
+- **R, Z, G, W:** Die Hauptzeichen aller drei Quellen. In R fallen Akzente, Cédille und Tilde: Ein fehlender oder falscher Akzent ist ein Rechtschreibfehler (NRW, Brandenburg), außer er ändert die Bedeutung. Z umfasst im Spanischen fehlendes `¿` und `¡`.
+- **Sb, T, M, Präp:** Die häufigsten Unterzeichen (Satzbau, Tempus, Modus, Präposition). Modus (subjonctif, subjuntivo) steht in beiden Ländervorgaben, bei Anfängern ein verbreiteter Fehler.
+- **Nicht aufgenommen:** Die feinste Stufe der NRW-Tabelle (Genus, Akkord, Determinant, Pronomen, Konjunktion), der Auslassungsfehler V und die Zeichen für Inhalt und Stil. Das Verfahren (Abschnitt „Datenmodell“ und [Evaluation](../evaluations/2026-10-profile.md)) kann Wort- und Ausdrucksfehler (W und A) nicht trennen, deshalb gibt es nur W und kein A. Auslassungen sind bereits eine eigene Art von Markierung (`rs-missing`).
+- **Was automatisch gesetzt wird:** `deriveMarks` kennt aus dem Wortvergleich R, Z, G, W und Sb. T, M und Präp sind im Katalog, werden aber nicht abgeleitet (wie T, Bz und W im Deutschen). Ein falsches Tempus oder ein falscher Modus kommt als G oder R an, eine falsche Präposition als G.
+
+#### Sachfach
+
+Das Profil „Sachfach“ (`sachfach`) ist Deutsch mit nur R, Z und G, für Fächer, in denen nur die sprachliche Richtigkeit korrigiert wird (Geschichte, Biologie, Erdkunde und andere). Es hat keinen eigenen Katalog und keine eigene Sprache, es nimmt die deutschen Zeichen und lässt A, Sb, T, Bz und W weg. Der Name ist kurz und eindeutig und passt zu jedem Fach, in dem Deutsch nur die Unterrichtssprache ist. Marken anderer Arten gibt es dort nicht: `deriveMarks` verwirft sie, weil das Profil sie nicht erlaubt.
 
 ### HTML-Format
 
