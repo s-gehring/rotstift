@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AnyModelInfo, CorrectorInfo, ModelInfo } from '../src/models/registry.ts';
+import { candidateCorrectors } from './model-candidates.ts';
 import { evalDir, modelsDir } from './paths.ts';
 
 function readModels(file: string): AnyModelInfo[] {
@@ -18,6 +19,7 @@ function entries(): AnyModelInfo[] {
   return [
     ...readModels(join(evalDir, '..', 'src-tauri', 'models.json')),
     ...candidateTranscribers(),
+    ...candidateCorrectors(),
   ];
 }
 

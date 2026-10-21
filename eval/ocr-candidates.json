@@ -107,6 +107,78 @@
         "uncertainBelow": null
       },
       "prompt": "Transkribiere den handschriftlichen Text auf dem Bild buchstabengetreu. Korrigiere nichts: Rechtschreibung, Groß- und Kleinschreibung, Grammatik und Zeichensetzung bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar."
+    },
+    {
+      "id": "minicpm-v-4.7-1b-q4",
+      "role": "transcriber",
+      "displayName": "MiniCPM-V 4.7 1B (Q4_K_M)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 8,
+      "files": {
+        "model": {
+          "name": "MiniCPM-V-4_7-1B-Q4_K_M.gguf",
+          "url": "https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf/resolve/0ad5ef54b51a8cf42de80532d840b61b66519054/MiniCPM-V-4_7-1B-Q4_K_M.gguf",
+          "sha256": "f18f594747e5317ab490cff9c06339c9cfb89acbe2f02ebc48a4e167bc23576d",
+          "bytes": 672003680
+        },
+        "mmproj": {
+          "name": "mmproj-MiniCPM-V-4_7-1B-f16.gguf",
+          "url": "https://huggingface.co/openbmb/MiniCPM-V-4.7-1B-gguf/resolve/0ad5ef54b51a8cf42de80532d840b61b66519054/mmproj-model-f16.gguf",
+          "sha256": "fb9cc047a3cdad5317fd8433a4aeda2d22f00f02ca4bd93b34ad84165b25a900",
+          "bytes": 1110117984
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": null,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": true,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536,
+        "uncertainBelow": null
+      },
+      "prompt": "Transkribiere den handschriftlichen Text auf dem Bild buchstabengetreu. Korrigiere nichts: Rechtschreibung, Groß- und Kleinschreibung, Grammatik und Zeichensetzung bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar."
+    },
+    {
+      "id": "granite-vision-4.1-4b-q4",
+      "role": "transcriber",
+      "displayName": "Granite Vision 4.1 4B (Q4_K_M)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 8,
+      "files": {
+        "model": {
+          "name": "granite-vision-4.1-4b-Q4_K_M.gguf",
+          "url": "https://huggingface.co/ibm-granite/granite-vision-4.1-4b-GGUF/resolve/b1fa14294b0f5cac04c43076d1c4574091abf117/granite-vision-4.1-4b-Q4_K_M.gguf",
+          "sha256": "973a58c4cfc2b3f58dedc515a89f73c372fe0910da515ecefcebe966131f769f",
+          "bytes": 2099510240
+        },
+        "mmproj": {
+          "name": "mmproj-granite-vision-4.1-4b-f16.gguf",
+          "url": "https://huggingface.co/ibm-granite/granite-vision-4.1-4b-GGUF/resolve/b1fa14294b0f5cac04c43076d1c4574091abf117/mmproj-model-f16.gguf",
+          "sha256": "573dd2579f6043649299f0b2225000a5691d92f320aabe909fb4c6e75450cad2",
+          "bytes": 1162347936
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": null,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": true,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536,
+        "uncertainBelow": null
+      },
+      "prompt": "Transkribiere den handschriftlichen Text auf dem Bild buchstabengetreu. Korrigiere nichts: Rechtschreibung, Groß- und Kleinschreibung, Grammatik und Zeichensetzung bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar."
     }
   ]
 }

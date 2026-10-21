@@ -121,6 +121,30 @@ const TEXT_MODELS: readonly Corrector[] = [
     ),
     license: 'Apache-2.0',
   },
+  {
+    id: 'granite-4.2-3b',
+    label: 'Granite 4.2 3B (Q4_K_M)',
+    repo: 'ibm-granite/granite-4.2-3b-GGUF',
+    commit: 'c40945d71cd90f249a56985e8155551a9188dc30',
+    model: file(
+      'granite-4.2-3b-Q4_K_M.gguf',
+      'e0406663965846ae22a403456eb826ccce5f450840491f71952f18a7cb78e7d5',
+      2244011552,
+    ),
+    license: 'Apache-2.0',
+  },
+  {
+    id: 'qwen3.5-4b',
+    label: 'Qwen3.5 4B (Q4_K_M)',
+    repo: 'unsloth/Qwen3.5-4B-GGUF',
+    commit: 'e87f176479d0855a907a41277aca2f8ee7a09523',
+    model: file(
+      'Qwen3.5-4B-Q4_K_M.gguf',
+      '00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4',
+      2740937888,
+    ),
+    license: 'Apache-2.0',
+  },
 ];
 
 const VISION_COMMITS: Record<string, string> = {

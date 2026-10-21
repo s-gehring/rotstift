@@ -165,3 +165,18 @@ pnpm eval:content-form --list eval/results/content-form/features.json
 - **Unbelegt:** Randkommentare, die zu keinem Mangel passen. Auf den sauberen Arbeiten ist jeder Kommentar unpassend, auf den anderen ist ein Teil davon berechtigt und wird von Hand eingeordnet.
 - **Format gültig:** Nur `rs-comment` mit gültiger Zeile und `kind` sowie genau ein nicht leeres `rs-summary`, kein Text daneben, Antwort mit `finish_reason` `stop`. „kind optional“ lässt ein fehlendes `kind` zu.
 - **Zeit:** Wandzeit je Arbeit inklusive aller Aufrufe der Variante, Server wie in der App (`--reasoning off`, `--no-repack`, nur CPU, Kontext 4096).
+
+## Modellwahl je Schritt
+
+Misst Kandidaten für jeden Schritt der Kette mit den Evals oben, damit sie als Auswahl in den Einstellungen stehen können ([ADR 0008](../docs/adr/0008-modellwahl-je-schritt.md)).
+
+```bash
+node --experimental-transform-types eval/download-models.ts --models gemma-4-e4b-text,granite-4.2-3b,qwen3.5-4b,minicpm-v-4.7-1b-q4,granite-vision-4.1-4b-q4
+node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --threads 8 --out <Ergebnisse>/profiles-de-e4b.json
+pnpm eval:content-form --variant features --runs 3 --model gemma-4-e4b-q4 --out <Ergebnisse>/cf-e4b.json
+node --experimental-transform-types eval/ocr-run.ts --model minicpm-v-4.7-1b-q4 --images <Ordner-1536> --max-edge 1536 --out <Ergebnisse>/ocr-minicpm.json
+node --experimental-transform-types eval/model-load.ts --models glm-ocr-q8,gemma-4-e2b-q4,gemma-4-e4b-q4
+```
+
+- `model-candidates.ts` beschreibt Textmodelle, die (noch) nicht in der App stehen. Sie übernehmen Prompt und Parameter des Vorgabe-Korrektors aus `src-tauri/models.json` und tauschen nur die Datei, so wie ein eigenes Modell in der App. `profiles.ts` und `content-form.ts` finden sie unter ihrer `id`. Die Erkennungskandidaten stehen wie bisher in `ocr-candidates.json`, mit dem allgemeinen Transkriptionsauftrag.
+- `model-load.ts` startet jedes Modell mehrmals mit den Serverparametern der App und misst die Zeit bis `/health` antwortet (Median, Datei im Seitencache) und den RSS des Servers nach dem Laden. Das ist die Zeit, die ein Modellwechsel zwischen zwei Schritten mindestens kostet.
