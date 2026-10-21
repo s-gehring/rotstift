@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { DEUTSCH } from '../annotations/profile.ts';
+import type { Transcript } from '../annotations/transcript.ts';
 import type { ArbeitReview } from '../review/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import { defaultWeighting } from '../stats/weighting.ts';
 import {
   csvFileName,
   formatClipboardTable,
@@ -92,6 +95,7 @@ function review(
   pageCount: number,
   corrected: number,
   statistics: Statistics | null,
+  transcripts: readonly Transcript[] = [],
 ): ArbeitReview {
   return {
     id: name,
@@ -105,6 +109,25 @@ function review(
     complete: corrected === pageCount,
     preview: false,
     statistics,
+    transcripts,
+  };
+}
+
+function transcript(...marks: [type: string, original: string, correction: string][]): Transcript {
+  return {
+    lines: [
+      {
+        number: 1,
+        text: marks.map(([, original]) => original).join(' '),
+        marks: marks.map(([type, original, correction], index) => ({
+          kind: 'error',
+          type,
+          original,
+          correction,
+          offset: marks.slice(0, index).reduce((sum, [, word]) => sum + word.length + 1, 0),
+        })),
+      },
+    ],
   };
 }
 
@@ -116,9 +139,13 @@ function stats(words: number, errorsByType: Record<string, number>): Statistics 
 const corrections: CorrectionColumns = {
   types: ['R', 'Z', 'Gr'],
   arbeiten: [
-    review('Anna', 2, 2, stats(70, { R: 2, Gr: 1 })),
-    review('Ben', 1, 1, stats(30, { Z: 1 })),
+    review('Anna', 2, 2, stats(70, { R: 2, Gr: 1 }), [
+      transcript(['R', 'Rutche', 'Rutsche'], ['Gr', 'ein', 'einen'], ['R', 'Rutche', 'Rutsche']),
+    ]),
+    review('Ben', 1, 1, stats(30, { Z: 1 }), [transcript(['Z', 'dass', 'dass,'])]),
   ],
+  profile: DEUTSCH,
+  weighting: defaultWeighting(DEUTSCH),
 };
 
 describe('corrected table', () => {
@@ -126,32 +153,35 @@ describe('corrected table', () => {
 
   it('adds errors, the rate and one column per error type of the profile', () => {
     expect(formatCsv(klasse100, corrections)).toBe(
-      '\uFEFFName;Seiten;Wörter;Fehler;Fehler je 100 Wörter;R;Z;Gr;Hinweis\r\n' +
-        'Anna;2;70;3;4,3;2;0;1;\r\n' +
-        'Ben;1;30;1;3,3;0;1;0;\r\n' +
-        'Gesamt;3;100;4;4,0;2;1;1;\r\n',
+      '\uFEFFName;Seiten;Wörter;Fehler;Fehler je 100 Wörter;Gewichtete Fehler;Fehlerquotient;R;Z;Gr;Hinweis\r\n' +
+        'Anna;2;70;3;4,3;2;2,9;2;0;1;\r\n' +
+        'Ben;1;30;1;3,3;1;3,3;0;1;0;\r\n' +
+        'Gesamt;3;100;4;4,0;3;3,0;2;1;1;\r\n',
     );
   });
 
   it('copies the same columns separated by tabs', () => {
     expect(formatClipboardTable(klasse100, corrections).split('\n')[1]).toBe(
-      'Anna\t2\t70\t3\t4,3\t2\t0\t1\t',
+      'Anna\t2\t70\t3\t4,3\t2\t2,9\t2\t0\t1\t',
     );
   });
 
   it('leaves the error cells empty while an Arbeit is not fully corrected', () => {
     const partly: CorrectionColumns = {
+      ...corrections,
       types: ['R'],
       arbeiten: [review('Anna', 2, 1, stats(40, { R: 2 })), review('Ben', 1, 1, null)],
     };
     const csv = formatCsv(klasse100, partly);
-    expect(csv).toContain('Anna;2;70;;;;Unvollständig: 1 von 2 Seiten korrigiert\r\n');
-    expect(csv).toContain('Ben;1;30;0;0,0;0;\r\n');
-    expect(csv).toContain('Gesamt;3;100;;;;Unvollständig: 1 von 2 Arbeiten vollständig korrigiert');
+    expect(csv).toContain('Anna;2;70;;;;;;Unvollständig: 1 von 2 Seiten korrigiert\r\n');
+    expect(csv).toContain('Ben;1;30;0;0,0;0;0,0;0;\r\n');
+    expect(csv).toContain(
+      'Gesamt;3;100;;;;;;Unvollständig: 1 von 2 Arbeiten vollständig korrigiert',
+    );
   });
 
   it('protects error type codes in the header against formulas', () => {
-    const odd: CorrectionColumns = { types: ['=A'], arbeiten: corrections.arbeiten };
+    const odd: CorrectionColumns = { ...corrections, types: ['=A'] };
     expect(formatCsv(klasse100, odd)).toContain(";'=A;Hinweis");
   });
 

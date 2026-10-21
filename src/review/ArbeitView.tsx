@@ -14,7 +14,8 @@ import { buildArbeitModel, type ArbeitFigures, type PageModel } from './arbeit-m
 import { ArbeitPage } from './ArbeitPage.tsx';
 import { ArbeitSide, type PageHint, type PageMark } from './ArbeitSide.tsx';
 import { setDisplay, useDisplay, type Display } from './display.ts';
-import { errorsText } from './summary.ts';
+import { formatWeighted } from '../stats/weighting.ts';
+import { errorsText, formatRate } from './summary.ts';
 import './review.css';
 
 const DISPLAY_OPTIONS = [
@@ -39,6 +40,12 @@ function figuresText({ words, errors, partial }: ArbeitFigures): string {
   if (words !== null) parts.push(prefix + wordsText(words));
   if (errors !== null) parts.push(prefix + errorsText(errors));
   return parts.join(' · ');
+}
+
+function quotientTitle({ weighted, quotient, partial }: ArbeitFigures): string | undefined {
+  if (weighted === null || quotient === null) return undefined;
+  const prefix = partial ? 'mind. ' : '';
+  return `${prefix}${formatWeighted(weighted)} gewichtete Fehler · Fehlerquotient ${formatRate(quotient)}`;
 }
 
 function scrollToMark(mark: PageMark) {
@@ -205,7 +212,7 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
 }
 
 export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
-  const { importState, navigation, work, run } = useApp();
+  const { importState, navigation, work, run, weighting } = useApp();
   const { back, next, prev, position } = navigation;
   const display = useDisplay();
   const headingId = useId();
@@ -227,7 +234,12 @@ export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
 
   const arbeit = importState.arbeiten.find((candidate) => candidate.id === arbeitId);
   if (arbeit === undefined) return null;
-  const model = buildArbeitModel(arbeit, work.review.state, work.count.state.entries);
+  const model = buildArbeitModel(
+    arbeit,
+    work.review.state,
+    work.count.state.entries,
+    work.review.state.profile === null ? null : weighting.of(work.review.state.profile),
+  );
   const figures = figuresText(model.figures);
   const headerExports =
     !run.running &&
@@ -262,7 +274,11 @@ export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
           </span>
         )}
         <span className="detail-spacer" />
-        {figures !== '' && <span className="detail-figures">{figures}</span>}
+        {figures !== '' && (
+          <span className="detail-figures" title={quotientTitle(model.figures)}>
+            {figures}
+          </span>
+        )}
         {model.corrected && (
           <Segmented
             label="Darstellung"

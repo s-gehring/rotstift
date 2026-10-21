@@ -64,7 +64,7 @@ function action(
 }
 
 export function useExports(arbeitId?: string): MenuAction[] {
-  const { importState, work, toasts, run } = useApp();
+  const { importState, work, toasts, run, weighting } = useApp();
   const { arbeiten } = importState;
   const entries = work.count.state.entries;
   const review = work.review.state;
@@ -111,7 +111,14 @@ export function useExports(arbeitId?: string): MenuAction[] {
     (summary) => summary.complete && !summary.preview && summary.statistics !== null,
   );
   const corrections: CorrectionColumns | undefined =
-    profile === null ? undefined : { types: profile.allowedTypes, arbeiten: summaries };
+    profile === null
+      ? undefined
+      : {
+          types: profile.allowedTypes,
+          arbeiten: summaries,
+          profile,
+          weighting: weighting.of(profile),
+        };
   const blocked = firstHint(busy && EXPORT_HINT.busy, run.running && EXPORT_HINT.running);
   const fileBlocked = blocked ?? (canSaveFiles() ? null : EXPORT_HINT.desktop);
 

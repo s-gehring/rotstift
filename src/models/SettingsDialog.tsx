@@ -11,6 +11,7 @@ import { totalBytes, type AnyModelInfo } from './registry.ts';
 import { ROLE_NAME } from './role-text.ts';
 import type { ModelState } from './types.ts';
 import type { ModelSetup } from './use-model-setup.ts';
+import { WeightingSettings } from './WeightingSettings.tsx';
 
 const STATE_TEXT: Readonly<Record<ModelState, string>> = {
   ready: 'Bereit',
@@ -143,6 +144,7 @@ export function SettingsDialog() {
       ) : (
         <p className="settings-note">Modelle gibt es nur in der Desktop-App.</p>
       )}
+      <WeightingSettings />
       <p className="settings-about">
         Rotstift {packageInfo.version} · Alles bleibt auf diesem Rechner.
       </p>

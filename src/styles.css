@@ -510,6 +510,52 @@ thead th {
   display: none;
 }
 
+.weighting {
+  margin-top: var(--space-3);
+}
+
+.weighting summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.weighting-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.weighting-subject select {
+  width: 100%;
+}
+
+.weighting-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.weighting-kinds li {
+  display: grid;
+  grid-template-columns: 3.5ch 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.weighting-code {
+  font-weight: 600;
+}
+
+.weighting-repeats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .settings-about {
   margin: var(--space-4) 0 0;
   color: var(--color-text-muted);

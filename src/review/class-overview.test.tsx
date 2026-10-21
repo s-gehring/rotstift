@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { AppProvider } from '../app/app-context.tsx';
 import { testAppModel, testWork } from '../app/test-app.ts';
+import { defaultWeighting } from '../stats/weighting.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import { ClassOverviewDialog } from './ClassOverviewDialog.tsx';
 import { buildOverview } from './overview.ts';
@@ -30,6 +31,30 @@ async function reviewed() {
   await harness.flow.start([a, b, c], DEUTSCH);
   return { ...harness, arbeiten };
 }
+
+describe('buildOverview weighting', () => {
+  it('weighs errors per Arbeit and for the class', async () => {
+    const { arbeiten, flow, runner } = await reviewed();
+    const half = {
+      ...defaultWeighting(DEUTSCH),
+      weights: { ...defaultWeighting(DEUTSCH).weights, R: 0.5 },
+    };
+    const overview = buildOverview(arbeiten, flow.getState(), runner.getState().entries, [], half);
+    expect(overview.rows.map((row) => [row.weighted, row.quotient?.toFixed(1) ?? null])).toEqual([
+      [0.5, '7.1'],
+      [0, '0.0'],
+      [null, null],
+    ]);
+    expect(overview.total).toMatchObject({ weighted: 0.5 });
+    expect(overview.total?.quotient?.toFixed(1)).toBe('4.5');
+  });
+
+  it('has no weighted figures without a weighting', async () => {
+    const { arbeiten, flow, runner } = await reviewed();
+    const overview = buildOverview(arbeiten, flow.getState(), runner.getState().entries);
+    expect(overview.rows.every((row) => row.quotient === null)).toBe(true);
+  });
+});
 
 describe('buildOverview', () => {
   it('sums words and errors per Arbeit and tags incomplete ones briefly', async () => {
@@ -115,13 +140,16 @@ describe('ClassOverviewDialog', () => {
       [...row.children].map((cell) => cell.textContent),
     );
     expect(rows).toEqual([
-      ['Arbeit', 'Wörter', 'Fehler', 'je 100 Wörter', 'Häufigste Fehler'],
+      ['Arbeit', 'Wörter', 'Fehler', 'Fehlerquotient', 'Häufigste Fehler'],
       ['Aufsatz Ada1/2', '7', '1', '14,3', 'R 1'],
       ['Aufsatz Ben', '4', '0', '0,0', '–'],
       ['Aufsatz Cem0/1', '–', '–', '–', '–'],
       ['Klasse', '11', '1', '9,1', 'R 1'],
     ]);
     expect(container.querySelector('.overview-types')?.textContent).toBe('RRechtschreibung1');
+    expect(container.querySelector('tbody tr td:nth-child(4)')?.getAttribute('title')).toBe(
+      '1 gewichtete Fehler',
+    );
 
     const ben = [...container.querySelectorAll('button')].find(
       (candidate) => candidate.textContent === 'Aufsatz Ben',

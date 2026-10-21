@@ -4,6 +4,7 @@ import { useApp } from '../app/app-context.tsx';
 import { formatAverage, formatCount } from '../results/summary.ts';
 import { Dialog } from '../ui/Dialog.tsx';
 import { buildOverview, type Overview, type OverviewTag } from './overview.ts';
+import { formatWeighted } from '../stats/weighting.ts';
 import { formatRate, type TypeCount } from './summary.ts';
 import './review.css';
 
@@ -73,6 +74,21 @@ function TypeBars({
   );
 }
 
+function Quotient({
+  quotient,
+  weighted,
+}: {
+  readonly quotient: number | null;
+  readonly weighted: number | null;
+}) {
+  if (quotient === null || weighted === null) return <td className="num">–</td>;
+  return (
+    <td className="num" title={`${formatWeighted(weighted)} gewichtete Fehler`}>
+      {formatRate(quotient)}
+    </td>
+  );
+}
+
 function OverviewTable({
   overview,
   profile,
@@ -97,8 +113,8 @@ function OverviewTable({
               <th scope="col" className="num">
                 Fehler
               </th>
-              <th scope="col" className="num">
-                je 100 Wörter
+              <th scope="col" className="num" title="Gewichtete Fehler je 100 Wörter">
+                Fehlerquotient
               </th>
               <th scope="col">Häufigste Fehler</th>
             </>
@@ -118,7 +134,7 @@ function OverviewTable({
             {full && (
               <>
                 <td className="num">{count(row.errors)}</td>
-                <td className="num">{row.rate === null ? '–' : formatRate(row.rate)}</td>
+                <Quotient quotient={row.quotient} weighted={row.weighted} />
                 <td>
                   <TopTypes types={row.top} profile={profile} />
                 </td>
@@ -135,7 +151,7 @@ function OverviewTable({
             {full && (
               <>
                 <td className="num">{count(total.errors)}</td>
-                <td className="num">{total.rate === null ? '–' : formatRate(total.rate)}</td>
+                <Quotient quotient={total.quotient} weighted={total.weighted} />
                 <td>
                   <TopTypes types={overview.types.slice(0, 3)} profile={profile} />
                 </td>
@@ -155,7 +171,7 @@ function OverviewTable({
 }
 
 export function ClassOverviewDialog() {
-  const { navigation, work, importState } = useApp();
+  const { navigation, work, importState, weighting } = useApp();
   const review = work.review.state;
   const profile = review.profile;
   const overview = buildOverview(
@@ -163,6 +179,7 @@ export function ClassOverviewDialog() {
     review,
     work.count.state.entries,
     profile?.allowedTypes ?? [],
+    profile === null ? null : weighting.of(profile),
   );
   return (
     <Dialog
