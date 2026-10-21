@@ -1,3 +1,5 @@
+import { createLlmReviewer } from '../content-form/llm-reviewer.ts';
+import type { ContentResult } from '../content-form/review.ts';
 import type { Corrector, CorrectResult } from '../correction/corrector.ts';
 import { createLlmCorrector, type CorrectorConfig } from '../correction/llm-corrector.ts';
 import type { CorrectorInfo } from '../models/registry.ts';
@@ -57,6 +59,23 @@ export function createSidecarCorrector(
       });
       try {
         const result = await corrector.correct(lines, profile, signal, scope);
+        if (!result.ok && result.error.kind === 'unavailable') options.onUnavailable?.();
+        return result;
+      } finally {
+        for (const lease of leases) lease.release();
+      }
+    },
+
+    async review(input, signal): Promise<ContentResult> {
+      const leases: EngineLease[] = [];
+      const reviewer = createLlmReviewer({
+        client: watched,
+        prepare: async (prepareSignal) => {
+          leases.push(await engine.acquire(model, prepareSignal));
+        },
+      });
+      try {
+        const result = await reviewer.review(input, signal);
         if (!result.ok && result.error.kind === 'unavailable') options.onUnavailable?.();
         return result;
       } finally {

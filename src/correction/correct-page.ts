@@ -68,6 +68,13 @@ function invalid(detail: string): CorrectPageResult {
   return { ok: false, error: { kind: 'failed', message: INVALID_MESSAGE, detail } };
 }
 
+export function visibleText(lines: readonly string[]): string[] {
+  return lines.map((line) => {
+    const read = readStruck(normalizeLine(line));
+    return visibleLine(read.text, read.struck).text;
+  });
+}
+
 export async function correctPage(input: CorrectPageInput): Promise<CorrectPageResult> {
   const { corrector, bboxes } = input;
   const scope = input.scope ?? DEFAULT_SCOPE;
@@ -77,9 +84,10 @@ export async function correctPage(input: CorrectPageInput): Promise<CorrectPageR
   const lines = visible.map((line) => line.text);
   const signal = input.signal ?? new AbortController().signal;
 
-  const answer = lines.some((line) => line !== '')
-    ? await corrector.correct(lines, input.profile, signal, scope)
-    : { ok: true as const, correctedText: lines.join('\n') };
+  const answer =
+    profile.allowedTypes.length > 0 && lines.some((line) => line !== '')
+      ? await corrector.correct(lines, input.profile, signal, scope)
+      : { ok: true as const, correctedText: lines.join('\n') };
   if (!answer.ok) return answer;
 
   const derived = deriveMarksDetailed(lines, answer.correctedText, {

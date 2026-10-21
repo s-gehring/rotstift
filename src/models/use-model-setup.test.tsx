@@ -3,9 +3,14 @@ import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModelCallError, type ModelClient } from './client.ts';
-import { DEFAULT_MODEL_ID, recommendModel } from './registry.ts';
+import {
+  DEFAULT_MODEL_ID,
+  DEFAULT_REVIEWER_ID,
+  recommendModel,
+  type CorrectorInfo,
+} from './registry.ts';
 import type { ModelSetup } from './use-model-setup.ts';
-import { useModelSetup } from './use-model-setup.ts';
+import { useModelSetup, useReviewerModelSetup } from './use-model-setup.ts';
 import { errorOf } from './setup-state.ts';
 import type { DownloadEvent, ModelState, ModelStatus } from './types.ts';
 
@@ -37,6 +42,8 @@ function fakeClient(
     cancelDownload: () => Promise.resolve(false),
     selection: () => Promise.resolve(null),
     select: () => Promise.resolve(undefined),
+    reviewerSelection: () => Promise.resolve(null),
+    selectReviewer: () => Promise.resolve(undefined),
     remove: () => Promise.resolve(statusOf('missing')),
     importFiles: () => Promise.resolve(null),
     onDownload: () => Promise.resolve(() => undefined),
@@ -330,3 +337,58 @@ function NoBackend() {
   });
   return null;
 }
+
+let reviewerLatest: ModelSetup<CorrectorInfo> | null = null;
+
+function ReviewerProbe({ client }: { readonly client: ModelClient }) {
+  const setup = useReviewerModelSetup(client);
+  useEffect(() => {
+    reviewerLatest = setup;
+  });
+  return null;
+}
+
+const mountReviewer = async (client: ModelClient) => {
+  await act(async () => {
+    root.render(<ReviewerProbe client={client} />);
+    await Promise.resolve();
+  });
+};
+
+describe('useReviewerModelSetup', () => {
+  it('reads its choice from the reviewer selection and offers only text models', async () => {
+    const reviewerSelection = vi.fn<ModelClient['reviewerSelection']>(() =>
+      Promise.resolve(DEFAULT_REVIEWER_ID),
+    );
+    const selection = vi.fn<ModelClient['selection']>(() => Promise.resolve(null));
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      reviewerSelection,
+      selection,
+    });
+    await mountReviewer(client);
+    await vi.waitFor(() => expect(reviewerLatest?.state.loaded).toBe(true));
+    expect(reviewerLatest?.model.id).toBe(DEFAULT_REVIEWER_ID);
+    expect(reviewerLatest?.models.map((entry) => entry.role)).toEqual(['corrector']);
+    expect(reviewerSelection).toHaveBeenCalled();
+    expect(selection).not.toHaveBeenCalled();
+  });
+
+  it('reloads the reviewer selection after the model was deleted', async () => {
+    const reviewerSelection = vi.fn<ModelClient['reviewerSelection']>(() =>
+      Promise.resolve(DEFAULT_REVIEWER_ID),
+    );
+    const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
+      reviewerSelection,
+      remove: (modelId) => Promise.resolve({ ...statusOf('missing'), modelId }),
+    });
+    await mountReviewer(client);
+    await vi.waitFor(() => expect(reviewerLatest?.state.loaded).toBe(true));
+    const calls = reviewerSelection.mock.calls.length;
+    await act(async () => {
+      await reviewerLatest?.remove();
+    });
+    expect(reviewerSelection.mock.calls.length).toBeGreaterThan(calls);
+    expect(reviewerLatest?.model.id).toBe(DEFAULT_REVIEWER_ID);
+    expect(reviewerLatest?.status?.state).toBe('missing');
+  });
+});

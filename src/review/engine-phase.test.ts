@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { engineText } from './engine-phase.ts';
 
-const run = (phase: 'transcribing' | 'locating' | 'correcting') => ({
+const run = (phase: 'transcribing' | 'locating' | 'correcting' | 'reviewing') => ({
   phase,
   total: 2,
   finished: 0,
@@ -14,6 +14,26 @@ describe('engineText', () => {
     );
     expect(engineText(run('correcting'), { transcriber: 'idle', corrector: 'starting' })).toBe(
       'Korrekturmodell wird geladen …',
+    );
+  });
+
+  it('follows the reviewer while the content and form pass runs', () => {
+    expect(
+      engineText(run('reviewing'), {
+        transcriber: 'idle',
+        corrector: 'ready',
+        reviewer: 'starting',
+      }),
+    ).toBe('Modell für Inhalt und Form wird geladen …');
+    expect(
+      engineText(run('reviewing'), {
+        transcriber: 'idle',
+        corrector: 'starting',
+        reviewer: 'ready',
+      }),
+    ).toBeNull();
+    expect(engineText(run('reviewing'), { transcriber: 'idle', corrector: 'starting' })).toBe(
+      'Modell für Inhalt und Form wird geladen …',
     );
   });
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/app-context.tsx';
-import type { ModelRole } from '../app/types.ts';
+import type { Models, ModelRole } from '../app/types.ts';
 import { formatRemaining } from '../pipeline/progress.ts';
 import { Button } from '../ui/Button.tsx';
 import { Dialog } from '../ui/Dialog.tsx';
@@ -14,7 +14,38 @@ import type { ModelSetup } from './use-model-setup.ts';
 
 interface RoleSetup {
   readonly role: ModelRole;
+  readonly name: string;
   readonly setup: ModelSetup<AnyModelInfo>;
+}
+
+function setupOf(models: Models, role: ModelRole): ModelSetup<AnyModelInfo> {
+  switch (role) {
+    case 'transcriber':
+      return models.transcriber;
+    case 'corrector':
+      return models.corrector;
+    case 'reviewer':
+      return models.reviewer;
+    default: {
+      const unreachable: never = role;
+      return unreachable;
+    }
+  }
+}
+
+function distinctModels(models: Models, roles: readonly ModelRole[]): RoleSetup[] {
+  const entries: RoleSetup[] = [];
+  for (const role of roles) {
+    const setup = setupOf(models, role);
+    const index = entries.findIndex((entry) => entry.setup.model.id === setup.model.id);
+    const shared = entries[index];
+    if (shared === undefined) {
+      entries.push({ role, name: ROLE_NAME[role], setup });
+    } else {
+      entries[index] = { ...shared, name: `${shared.name} sowie ${ROLE_NAME[role]}` };
+    }
+  }
+  return entries;
 }
 
 const BUSY: ReadonlySet<ModelState> = new Set([
@@ -85,9 +116,9 @@ function OfflineImport({ entries }: { readonly entries: readonly RoleSetup[] }) 
     <details className="setup-offline">
       <summary>Aus Datei importieren …</summary>
       <p>Ohne Internet: Diese Dateien auf einem anderen Rechner laden und hier auswählen.</p>
-      {entries.map(({ role, setup }) => (
-        <section key={role} className="setup-offline-role" aria-label={ROLE_NAME[role]}>
-          <h3>{ROLE_NAME[role]}</h3>
+      {entries.map(({ role, name, setup }) => (
+        <section key={role} className="setup-offline-role" aria-label={name}>
+          <h3>{name}</h3>
           <ul>
             {modelFiles(setup.model).map((file) => (
               <li key={file.name}>
@@ -112,13 +143,13 @@ function OfflineImport({ entries }: { readonly entries: readonly RoleSetup[] }) 
 }
 
 function RoleErrors({ entry }: { readonly entry: RoleSetup }) {
-  const { setup, role } = entry;
+  const { setup, name } = entry;
   const state = stateOf(entry);
   if (setup.loadError !== null) {
     return (
       <p className="setup-error" role="alert">
         <span>
-          {ROLE_NAME[role]}: {describeDownloadError(setup.loadError)}
+          {name}: {describeDownloadError(setup.loadError)}
         </span>
         <Button variant="quiet" onClick={() => void setup.refresh()}>
           Erneut versuchen
@@ -129,7 +160,7 @@ function RoleErrors({ entry }: { readonly entry: RoleSetup }) {
   if (state === 'unverified') {
     return (
       <p className="setup-error" role="alert">
-        <span>{ROLE_NAME[role]}: Die vorhandenen Dateien ließen sich nicht prüfen.</span>
+        <span>{name}: Die vorhandenen Dateien ließen sich nicht prüfen.</span>
         <Button variant="quiet" onClick={() => void setup.verifyAgain()}>
           Erneut versuchen
         </Button>
@@ -140,7 +171,7 @@ function RoleErrors({ entry }: { readonly entry: RoleSetup }) {
   return (
     <p className="setup-error" role="alert">
       <span>
-        {ROLE_NAME[role]}: {describeDownloadError(setup.error)}
+        {name}: {describeDownloadError(setup.error)}
       </span>
       <Button
         variant="quiet"
@@ -158,10 +189,7 @@ function RoleErrors({ entry }: { readonly entry: RoleSetup }) {
 export function SetupDialog() {
   const { models } = useApp();
   const request = models.setup;
-  const entries: RoleSetup[] = request.roles.map((role) => ({
-    role,
-    setup: role === 'transcriber' ? models.transcriber : models.corrector,
-  }));
+  const entries = distinctModels(models, request.roles);
   const available = entries.every((entry) => entry.setup.available);
   const total = entries.reduce((sum, entry) => sum + toLoadBytes(entry), 0);
   const done = entries.reduce((sum, entry) => sum + doneBytes(entry), 0);
@@ -179,7 +207,10 @@ export function SetupDialog() {
     );
   });
   const neededBytes = startable.reduce((sum, entry) => sum + toLoadBytes(entry), 0);
-  const hardware = models.transcriber.state.hardware ?? models.corrector.state.hardware;
+  const hardware =
+    models.transcriber.state.hardware ??
+    models.corrector.state.hardware ??
+    models.reviewer.state.hardware;
   const lowMemory = entries.find(
     (entry) => hardware != null && isLowOnMemory(entry.setup.model, hardware.totalRamBytes),
   );
@@ -245,7 +276,7 @@ export function SetupDialog() {
           const label = state === null ? undefined : STATE_TEXT[state];
           return (
             <li key={entry.role} data-state={state ?? 'unknown'}>
-              <span className="setup-model-name">{ROLE_NAME[entry.role]}</span>
+              <span className="setup-model-name">{entry.name}</span>
               <span className="setup-model-size">
                 {state === 'ready' ? '' : formatSize(toLoadBytes(entry))}
               </span>

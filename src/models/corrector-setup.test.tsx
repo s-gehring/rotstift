@@ -4,17 +4,29 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SidecarCorrector, SidecarCorrectorOptions } from '../llm/sidecar-corrector.ts';
 import type { ModelClient } from './client.ts';
-import { useCorrectorSetup, type CorrectorSetup, type CreateCorrector } from './corrector-setup.ts';
-import { defaultCorrector, recommendModel, type CorrectorInfo } from './registry.ts';
+import {
+  useCorrectorSetup,
+  useReviewerSetup,
+  type CorrectorSetup,
+  type CreateCorrector,
+} from './corrector-setup.ts';
+import {
+  defaultCorrector,
+  defaultReviewer,
+  recommendModel,
+  type CorrectorInfo,
+} from './registry.ts';
 import { useModelSetup } from './use-model-setup.ts';
 import type { ModelState, ModelStatus } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const corrector = defaultCorrector();
+const reviewer = defaultReviewer();
 const transcriber = recommendModel();
 
-function fakeClient(states: Readonly<Record<string, ModelState>>) {
+function fakeClient(initial: Readonly<Record<string, ModelState>>) {
+  const states: Record<string, ModelState> = { ...initial };
   const status = vi.fn<ModelClient['status']>((modelId): Promise<ModelStatus> =>
     Promise.resolve({
       modelId,
@@ -27,6 +39,8 @@ function fakeClient(states: Readonly<Record<string, ModelState>>) {
     Promise.resolve({ modelId, state: 'ready', downloadedBytes: 1, totalBytes: 1 }),
   );
   const selection = vi.fn<ModelClient['selection']>(() => Promise.resolve(null));
+  const reviewerSelection = vi.fn<ModelClient['reviewerSelection']>(() => Promise.resolve(null));
+  const selectReviewer = vi.fn<ModelClient['selectReviewer']>(() => Promise.resolve(undefined));
   const client: ModelClient = {
     status,
     hardware: () => Promise.resolve({ totalRamBytes: 8 * 1024 ** 3, freeDiskBytes: 50e9 }),
@@ -35,12 +49,16 @@ function fakeClient(states: Readonly<Record<string, ModelState>>) {
     cancelDownload: () => Promise.resolve(false),
     selection,
     select: () => Promise.resolve(undefined),
-    remove: (modelId) =>
-      Promise.resolve({ modelId, state: 'missing', downloadedBytes: 0, totalBytes: 1 }),
+    reviewerSelection,
+    selectReviewer,
+    remove: (modelId) => {
+      states[modelId] = 'missing';
+      return Promise.resolve({ modelId, state: 'missing', downloadedBytes: 0, totalBytes: 1 });
+    },
     importFiles: () => Promise.resolve(null),
     onDownload: () => Promise.resolve(() => undefined),
   };
-  return { client, status, verify, selection };
+  return { client, status, verify, selection, reviewerSelection, selectReviewer };
 }
 
 function fakeCreate() {
@@ -162,3 +180,74 @@ describe('transcriber setup', () => {
     expect(verify).not.toHaveBeenCalled();
   });
 });
+
+describe('useReviewerSetup', () => {
+  it('builds a sidecar for the reviewer model once it is ready', async () => {
+    const { client, reviewerSelection, selection } = fakeClient({ [reviewer.id]: 'ready' });
+    const { create, created } = fakeCreate();
+    await act(async () => {
+      root.render(<ReviewerProbe client={client} create={create} />);
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(latest?.ready).toBe(true));
+    expect(created.map((entry) => entry.model.id)).toEqual([reviewer.id]);
+    expect(reviewerSelection).toHaveBeenCalled();
+    expect(selection).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing reviewer model without building a sidecar', async () => {
+    const { client } = fakeClient({});
+    const { create } = fakeCreate();
+    await act(async () => {
+      root.render(<ReviewerProbe client={client} create={create} />);
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(latest?.setup.status?.state).toBe('missing'));
+    expect(latest?.corrector).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the other role when the shared file is deleted from one of them', async () => {
+    const { client } = fakeClient({ [corrector.id]: 'ready' });
+    const { create } = fakeCreate();
+    let both: { corrector: CorrectorSetup; reviewer: CorrectorSetup } | null = null;
+    function Both() {
+      const first = useCorrectorSetup(client, create);
+      const second = useReviewerSetup(client, create);
+      useEffect(() => {
+        both = { corrector: first, reviewer: second };
+      });
+      return null;
+    }
+    await act(async () => {
+      root.render(<Both />);
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => {
+      expect(both?.corrector.ready).toBe(true);
+      expect(both?.reviewer.ready).toBe(true);
+    });
+
+    await act(async () => {
+      await both?.corrector.setup.remove();
+    });
+    await vi.waitFor(() => {
+      expect(both?.corrector.ready).toBe(false);
+      expect(both?.reviewer.ready).toBe(false);
+    });
+  });
+});
+
+function ReviewerProbe({
+  client,
+  create,
+}: {
+  readonly client: ModelClient | null;
+  readonly create: CreateCorrector;
+}) {
+  const setup = useReviewerSetup(client, create);
+  useEffect(() => {
+    latest = setup;
+  });
+  return null;
+}

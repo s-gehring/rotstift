@@ -65,7 +65,18 @@ export function parseSample(id: string, source: string): ReviewSample {
   };
 }
 
-export const TASK_MODES = ['keep', 'no-assignment', 'no-form', 'swap'] as const;
+export const TASK_MODES = ['keep', 'no-assignment', 'no-form', 'swap', 'unknown-form'] as const;
+
+export const UNKNOWN_FORMS: Readonly<Record<string, string>> = {
+  'Persönlicher Brief': 'Brief an einen Freund',
+  Inhaltsangabe: 'Textzusammenfassung',
+  Bericht: 'Zeitungsmeldung',
+  Bewerbungsschreiben: 'Bewerbungsbrief',
+  Chronik: 'Klosterchronik',
+  Beschreibung: 'Ortsbeschreibung',
+  'Lineare Erörterung': 'Argumentation',
+  Vorgangsbeschreibung: 'Kochrezept',
+};
 export type TaskMode = (typeof TASK_MODES)[number];
 
 export const MISMATCH: Defect = {
@@ -91,6 +102,9 @@ export function withTask(samples: readonly ReviewSample[], mode: TaskMode): Revi
   return samples.map((sample, index) => {
     if (mode === 'no-assignment') return { ...sample, assignment: '' };
     if (mode === 'no-form') return { ...sample, form: '' };
+    if (mode === 'unknown-form') {
+      return { ...sample, form: UNKNOWN_FORMS[sample.form] ?? 'Freie Textform' };
+    }
     if (mode === 'keep') return sample;
     const other = samples[(index + 1) % samples.length] ?? sample;
     return { ...sample, form: other.form, assignment: other.assignment, defects: [MISMATCH] };

@@ -6,12 +6,8 @@ import {
   sanitizeList,
   sanitizeSection,
 } from './content-form-prompt.ts';
-import {
-  FORM_FEATURES,
-  buildFeatureRequest,
-  featureSchema,
-  featuresFor,
-} from './content-form-features.ts';
+import { findTextForm } from '../src/content-form/catalog.ts';
+import { buildFeatureRequest, featuresFor } from './content-form-features.ts';
 import { MISSING_KIND, parseReview, scoreReview, serializeReview } from './content-form-review.ts';
 import { MISMATCH, parseSample, withTask } from './content-form-sample.ts';
 import { loadSamples } from './content-form.ts';
@@ -176,12 +172,9 @@ describe('scoreReview', () => {
 });
 
 describe('features', () => {
-  it('asks the form features first and every form of the samples has some', () => {
-    const unknown = loadSamples().filter((sample) => !FORM_FEATURES[sample.form.toLowerCase()]);
-    expect(unknown.map((sample) => sample.form)).toEqual([]);
-    const brief = featuresFor(
-      parseSample('probe', SOURCE.replace('Form: Brief', 'Form: Persönlicher Brief')),
-    );
+  it('asks the catalogue features of every sample form before the task questions', () => {
+    expect(loadSamples().filter((sample) => findTextForm(sample.form) === null)).toEqual([]);
+    const brief = featuresFor(parseSample('probe', SOURCE));
     expect(brief.map((feature) => feature.kind)).toEqual([
       'form',
       'form',
@@ -191,21 +184,19 @@ describe('features', () => {
     ]);
   });
 
-  it('limits the line to the text and asks task features for a comment', () => {
-    const [feature] = featuresFor(parseSample('probe', SOURCE));
-    expect(feature?.comment).toBeNull();
-    expect(feature && featureSchema(feature, 3)).toMatchObject({
-      properties: { zeile: { maximum: 3 }, kommentar: { maxLength: 60 } },
-      required: ['erfuellt', 'zeile', 'kommentar'],
-    });
+  it('replaces every sample form with a name outside the catalogue', () => {
+    const unknown = withTask(loadSamples(), 'unknown-form');
+    expect(unknown.filter((sample) => findTextForm(sample.form) !== null)).toEqual([]);
+    const [question] = featuresFor(unknown[0] ?? parseSample('probe', SOURCE));
+    expect(question?.question.startsWith('Entspricht der Text der Textform')).toBe(true);
   });
 
   it('keeps system prompt and text identical across questions so the prefix is cached', () => {
     const sample = parseSample('probe', SOURCE.replace('Form: Brief', 'Form: Bericht'));
-    const [first, second] = featuresFor(sample).map((feature) =>
-      buildFeatureRequest(sample, feature),
+    const [first, second] = featuresFor(sample).map(
+      (feature) => buildFeatureRequest(sample, feature).messages,
     );
     expect(first?.[0]).toEqual(second?.[0]);
-    expect(first?.[1]?.content.startsWith('1: Ich schreibe dir heute.')).toBe(true);
+    expect(first?.[1]?.content).toMatch(/^1: Ich schreibe dir heute\./u);
   });
 });

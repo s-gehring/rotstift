@@ -2,7 +2,11 @@ import { useMemo } from 'react';
 import { createSidecarCorrector, type SidecarCorrector } from '../llm/sidecar-corrector.ts';
 import type { ModelClient } from './client.ts';
 import type { CorrectorInfo } from './registry.ts';
-import { useCorrectorModelSetup, type ModelSetup } from './use-model-setup.ts';
+import {
+  useCorrectorModelSetup,
+  useReviewerModelSetup,
+  type ModelSetup,
+} from './use-model-setup.ts';
 
 export interface CorrectorSetup {
   readonly setup: ModelSetup<CorrectorInfo>;
@@ -13,11 +17,10 @@ export interface CorrectorSetup {
 
 export type CreateCorrector = typeof createSidecarCorrector;
 
-export function useCorrectorSetup(
-  client: ModelClient | null,
-  create: CreateCorrector = createSidecarCorrector,
+function useSidecarSetup(
+  setup: ModelSetup<CorrectorInfo>,
+  create: CreateCorrector,
 ): CorrectorSetup {
-  const setup = useCorrectorModelSetup(client);
   const { model, refresh } = setup;
   const ready = setup.available && setup.status?.state === 'ready';
   const corrector = useMemo(
@@ -32,4 +35,18 @@ export function useCorrectorSetup(
     [ready, model, refresh, create],
   );
   return { setup, model, ready, corrector };
+}
+
+export function useCorrectorSetup(
+  client: ModelClient | null,
+  create: CreateCorrector = createSidecarCorrector,
+): CorrectorSetup {
+  return useSidecarSetup(useCorrectorModelSetup(client), create);
+}
+
+export function useReviewerSetup(
+  client: ModelClient | null,
+  create: CreateCorrector = createSidecarCorrector,
+): CorrectorSetup {
+  return useSidecarSetup(useReviewerModelSetup(client), create);
 }

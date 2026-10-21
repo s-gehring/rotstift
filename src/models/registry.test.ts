@@ -7,8 +7,12 @@ import {
   DEFAULT_CORRECTOR_ID,
   MODELS,
   DEFAULT_MODEL_ID,
+  DEFAULT_REVIEWER_ID,
+  REVIEWERS,
   defaultCorrector,
+  defaultReviewer,
   findCorrector,
+  findReviewer,
   parseRegistry,
   choiceModels,
   findModel,
@@ -112,6 +116,17 @@ describe('registry', () => {
     expect(list(8 * GIB, stronger)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
     expect(list(null, model)).toEqual([DEFAULT_MODEL_ID]);
     expect(list(32 * GIB, model)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+  });
+
+  it('offers the text models as reviewers without a second registry entry', () => {
+    expect(REVIEWERS).toEqual(CORRECTORS);
+    expect(DEFAULT_REVIEWER_ID).toBe(DEFAULT_CORRECTOR_ID);
+    expect(defaultReviewer()).toBe(defaultCorrector());
+    expect(findReviewer(DEFAULT_REVIEWER_ID)).toBe(findCorrector(DEFAULT_CORRECTOR_ID));
+    expect(findReviewer(DEFAULT_MODEL_ID)).toBeUndefined();
+    expect(
+      ALL_MODELS.filter((entry) => entry.files.model.name === defaultReviewer().files.model.name),
+    ).toHaveLength(1);
   });
 
   it('lists Gemma 4 E2B as the corrector exactly as the evaluation recommends', () => {

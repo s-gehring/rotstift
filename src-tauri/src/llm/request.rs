@@ -28,8 +28,23 @@ pub struct ChatRequest {
     stop: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     logprobs: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<ResponseFormat>,
     #[serde(default, skip_deserializing)]
     stream: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+enum ResponseFormat {
+    JsonSchema { json_schema: JsonSchema },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct JsonSchema {
+    name: String,
+    schema: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -202,6 +217,27 @@ mod tests {
         let mut request = vision(PNG);
         request["logprobs"] = json!(5);
         assert!(rejection(request).contains("invalid type"));
+    }
+
+    #[test]
+    fn forwards_a_json_schema_and_nothing_else_as_response_format() {
+        let schema = json!({ "type": "object", "properties": { "ok": { "type": "boolean" } } });
+        let mut request = vision(PNG);
+        request["response_format"] = json!({ "type": "json_schema", "json_schema": { "name": "antwort", "schema": schema } });
+        let body = serde_json::to_value(ChatRequest::parse(request).unwrap()).unwrap();
+        assert_eq!(body["response_format"]["type"], "json_schema");
+        assert_eq!(body["response_format"]["json_schema"]["schema"], schema);
+        let body = serde_json::to_value(ChatRequest::parse(vision(PNG)).unwrap()).unwrap();
+        assert!(body.get("response_format").is_none());
+        for format in [
+            json!({ "type": "json_object" }),
+            json!({ "type": "json_schema", "json_schema": { "name": "a", "schema": "x" } }),
+            json!({ "type": "json_schema", "json_schema": { "name": "a", "schema": {}, "url": "x" } }),
+        ] {
+            let mut request = vision(PNG);
+            request["response_format"] = format.clone();
+            assert!(ChatRequest::parse(request).is_err(), "{format}");
+        }
     }
 
     #[test]
