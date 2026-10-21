@@ -62,7 +62,7 @@ function choose(select: HTMLSelectElement | null | undefined, value: string) {
 describe('the Fehlergewichtung settings', () => {
   it('is collapsed and lists the error kinds of the current subject', () => {
     expect(container.querySelector('details')?.open).toBe(false);
-    expect(container.querySelector('summary')?.textContent).toBe('Fehlergewichtung');
+    expect(container.querySelector('summary')?.textContent).toBe('Gewichtung und Noten');
     expect(subjectSelect()?.value).toBe(DEUTSCH.id);
     expect(container.querySelectorAll('.weighting-kinds li')).toHaveLength(
       DEUTSCH.allowedTypes.length,

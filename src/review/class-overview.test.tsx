@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { AppProvider } from '../app/app-context.tsx';
 import { testAppModel, testWork } from '../app/test-app.ts';
+import { defaultGrading, type Grading } from '../stats/grading.ts';
+import { fixedGrading } from '../stats/use-grading.ts';
 import { defaultWeighting } from '../stats/weighting.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import { ClassOverviewDialog } from './ClassOverviewDialog.tsx';
@@ -12,6 +14,12 @@ import { buildOverview } from './overview.ts';
 import { setupReview, waitFor } from './test-support.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+const GRADING: Grading = {
+  ...defaultGrading(),
+  enabled: true,
+  limits: { ...defaultGrading().limits, grades: [0, 5, 10, 15, 20] },
+};
 
 async function reviewed() {
   const harness = setupReview(['a', 'b', 'c', 'd']);
@@ -47,6 +55,19 @@ describe('buildOverview weighting', () => {
     ]);
     expect(overview.total).toMatchObject({ weighted: 0.5 });
     expect(overview.total?.quotient?.toFixed(1)).toBe('4.5');
+  });
+
+  it('grades complete Arbeiten only, and only when limits are set', async () => {
+    const { arbeiten, flow, runner } = await reviewed();
+    const state = flow.getState();
+    const entries = runner.getState().entries;
+    const weighting = defaultWeighting(DEUTSCH);
+    const off = buildOverview(arbeiten, state, entries, [], weighting, defaultGrading());
+    expect(off.scale).toBeNull();
+    expect(off.rows.every((row) => row.grade === null)).toBe(true);
+    const on = buildOverview(arbeiten, state, entries, [], weighting, GRADING);
+    expect(on.scale).toBe('grades');
+    expect(on.rows.map((row) => row.grade)).toEqual([null, '1', null]);
   });
 
   it('has no weighted figures without a weighting', async () => {
@@ -156,5 +177,36 @@ describe('ClassOverviewDialog', () => {
     );
     act(() => ben?.click());
     expect(openArbeit).toHaveBeenCalledWith('y');
+  });
+
+  it('adds a grade column when limits are set', async () => {
+    const { arbeiten, flow, runner } = await reviewed();
+    act(() =>
+      root.render(
+        <AppProvider
+          value={testAppModel({
+            importState: { arbeiten },
+            navigation: { overviewOpen: true },
+            grading: fixedGrading(GRADING),
+            work: testWork({
+              count: { runner, state: runner.getState() },
+              review: { flow, state: flow.getState() },
+            }),
+          })}
+        >
+          <ClassOverviewDialog />
+        </AppProvider>,
+      ),
+    );
+    const rows = [...container.querySelectorAll('.overview-table tr')].map((row) =>
+      [...row.children].map((cell) => cell.textContent),
+    );
+    expect(rows).toEqual([
+      ['Arbeit', 'Wörter', 'Fehler', 'Fehlerquotient', 'Note', 'Häufigste Fehler'],
+      ['Aufsatz Ada1/2', '7', '1', '14,3', '–', 'R 1'],
+      ['Aufsatz Ben', '4', '0', '0,0', '1', '–'],
+      ['Aufsatz Cem0/1', '–', '–', '–', '–', '–'],
+      ['Klasse', '11', '1', '9,1', '', 'R 1'],
+    ]);
   });
 });

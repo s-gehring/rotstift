@@ -3,6 +3,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import { computeStatistics } from '../stats/statistics.ts';
+import { defaultGrading, type Grading } from '../stats/grading.ts';
+import { defaultWeighting, formatWeighted, weightedStatistics } from '../stats/weighting.ts';
 import { buildClassPdf, buildCorrectedPdf, buildWordCountPdf } from './build-pdf.ts';
 import {
   bareScan,
@@ -24,6 +26,15 @@ vi.setConfig({ testTimeout: 30_000 });
 beforeAll(installCanvas);
 
 const options = { date: FIXED_DATE };
+const POINTS: Grading = {
+  ...defaultGrading(),
+  enabled: true,
+  scale: 'points',
+  limits: {
+    ...defaultGrading().limits,
+    points: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+  },
+};
 const PORTRAIT = [595.28, 841.89];
 const LANDSCAPE_A4 = [841.89, 595.28];
 
@@ -63,9 +74,13 @@ describe('buildCorrectedPdf', () => {
     expect(text).toContain('Profil Deutsch Datum');
     expect(text).toContain('Datum 20.10.2026');
     expect(text).toMatch(new RegExp(`Wörter ${statistics.words}\\b`));
-    expect(text).toMatch(new RegExp(`Fehler gesamt ${statistics.errors}\\b`));
-    const rate = statistics.errorsPer100Words.toFixed(1).replace('.', ',');
-    expect(text).toContain(`Fehler pro 100 Wörter ${rate}`);
+    const transcripts = arbeit.pages.flatMap((page) => page.transcript ?? []);
+    const weighted = weightedStatistics(statistics.words, transcripts, DEUTSCH, arbeit.weighting);
+    expect(weighted.weighted).toBeLessThan(statistics.errors);
+    const quotient = weighted.quotient.toFixed(1).replace('.', ',');
+    expect(text).toContain(
+      `Fehler ${statistics.errors} ${formatWeighted(weighted.weighted)} gewichtet Fehlerquotient ${quotient} Fehler nach Art`,
+    );
     expect(text).toContain('Rechtschreibung');
     expect(text).toContain('Zeichensetzung');
     for (const [code, count] of Object.entries(statistics.errorsByType)) {
@@ -86,18 +101,41 @@ describe('buildCorrectedPdf', () => {
     };
     const page = await markedPage(transcript);
     const statistics = computeStatistics(transcript);
-    const arbeit = { title: 'Doe, Jane', profile: ENGLISCH, pages: [page], statistics };
+    const arbeit = {
+      title: 'Doe, Jane',
+      profile: ENGLISCH,
+      pages: [page],
+      statistics,
+      weighting: defaultWeighting(ENGLISCH),
+    };
     const text = (await readPdf(await buildCorrectedPdf(arbeit, options))).texts[1] ?? '';
     expect(text).toContain('Englisch');
-    expect(text).toContain('Fehler pro 100 Wörter 25,0');
+    expect(text).toContain('Fehler 1 1 gewichtet Fehlerquotient 25,0');
     expect(text).not.toContain('Rechtschreibung');
+  });
+
+  it('shows the grade only when limits are set', async () => {
+    const arbeit = await correctedArbeit();
+    const graded = await readPdf(await buildCorrectedPdf({ ...arbeit, grading: POINTS }, options));
+    expect(graded.texts[3]).toMatch(/Fehlerquotient 13,0 Punkte 3 Fehler nach Art/u);
+    const off = await readPdf(
+      await buildCorrectedPdf({ ...arbeit, grading: defaultGrading() }, options),
+    );
+    expect(off.texts[3]).not.toContain('Punkte');
+    expect(off.texts[3]).not.toContain('Note');
   });
 
   it('says so when there are no errors', async () => {
     const transcript = plainTranscript('Eins zwei drei vier');
     const page = await markedPage(transcript);
     const statistics = computeStatistics(transcript);
-    const arbeit = { title: 'Fehlerfrei', profile: DEUTSCH, pages: [page], statistics };
+    const arbeit = {
+      title: 'Fehlerfrei',
+      profile: DEUTSCH,
+      pages: [page],
+      statistics,
+      weighting: defaultWeighting(DEUTSCH),
+    };
     const pdf = await readPdf(await buildCorrectedPdf(arbeit, options));
     expect(pdf.texts[1]).toContain('Keine Fehler markiert.');
   });
@@ -221,8 +259,9 @@ describe('buildClassPdf', () => {
     expect(cover).toContain('KLASSENÜBERSICHT');
     expect(cover).toContain('Klasse 7b');
     expect(cover).toContain(
-      `Müller, Jörg 3 ${corrected.statistics.words} ${corrected.statistics.errors}`,
+      `Müller, Jörg 3 ${corrected.statistics.words} ${corrected.statistics.errors} 13,0`,
     );
+    expect(cover).toContain('Fehlerquotient');
     expect(cover).toContain('Schmidt, Anna 3 – –');
     expect(cover).toContain('Unvollständig: 2 von 3 Seiten gezählt');
     expect(cover).toContain('Gesamt 6 – –');
@@ -239,8 +278,21 @@ describe('buildClassPdf', () => {
     ];
     const cover = (await readPdf(await buildClassPdf(arbeiten, cheap))).texts[0] ?? '';
     const { words, errors } = corrected.statistics;
-    expect(cover).toContain(`Gesamt 6 ${words * 2} ${errors * 2}`);
+    expect(cover).toContain(`Gesamt 6 ${words * 2} ${errors * 2} 13,0`);
     expect(cover).not.toContain('Unvollständig');
+  });
+
+  it('adds the grade per Arbeit to the cover when limits are set', async () => {
+    const corrected = { ...(await correctedArbeit('Müller, Jörg')), grading: POINTS };
+    const arbeiten: ClassArbeit[] = [
+      { kind: 'corrected', ...corrected },
+      { kind: 'corrected', ...corrected, title: 'Ben' },
+    ];
+    const cover = (await readPdf(await buildClassPdf(arbeiten, cheap))).texts[0] ?? '';
+    const { words, errors } = corrected.statistics;
+    expect(cover).toContain('Fehlerquotient Punkte');
+    expect(cover).toContain(`Ben 3 ${words} ${errors} 13,0 3`);
+    expect(cover).toMatch(new RegExp(`Gesamt 6 ${words * 2} ${errors * 2} 13,0 Erstellt`, 'u'));
   });
 
   it('shows a class total of complete word counts and a dash for the errors', async () => {

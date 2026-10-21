@@ -2,6 +2,7 @@ import { DEUTSCH, ENGLISCH, type CorrectionProfile } from '../annotations/profil
 import type { Transcript } from '../annotations/transcript.ts';
 import { FIXTURE_PAGE, roomyPage, tightPage } from '../overlay/fixtures.ts';
 import { computeStatistics } from '../stats/statistics.ts';
+import { defaultWeighting } from '../stats/weighting.ts';
 import type { ClassArbeit, CorrectedArbeit, ExportPage, WordCountArbeit } from './types.ts';
 import { syntheticScan } from './test-support.ts';
 
@@ -46,6 +47,7 @@ export async function correctedArbeit(
     profile,
     pages: [await markedPage(first), await markedPage(second), await bareScan()],
     statistics: computeStatistics({ lines: [...first.lines, ...second.lines] }),
+    weighting: defaultWeighting(profile),
   };
 }
 

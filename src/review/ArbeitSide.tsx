@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import { splitStruck, strokeStruck, unstrokeStruck } from '../annotations/struck.ts';
 import type { HintStatus } from '../correction/uncertain-reading.ts';
 import type { CommentStatus } from './review-flow.ts';
 import { formatCount, wordsText } from '../results/summary.ts';
@@ -301,7 +302,7 @@ function TextEditor({
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => area.current?.focus({ preventScroll: true }), []);
-  const text = page.text ?? '';
+  const text = strokeStruck(page.text ?? '');
   return (
     <div className="side-editor">
       <textarea
@@ -311,7 +312,7 @@ function TextEditor({
         readOnly={locked || !page.editable}
         rows={Math.min(Math.max(text.split('\n').length + 1, 6), 24)}
         spellCheck={false}
-        onChange={(event) => onEdit(event.target.value)}
+        onChange={(event) => onEdit(unstrokeStruck(event.target.value))}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
@@ -388,7 +389,13 @@ export function ArbeitSide({
             </>
           );
         } else if (!corrected && page.text !== null && page.text.trim() !== '') {
-          body = <p className="side-text">{page.text}</p>;
+          body = (
+            <p className="side-text">
+              {splitStruck(page.text).map((part, index) =>
+                part.struck ? <s key={index}>{part.text}</s> : part.text,
+              )}
+            </p>
+          );
         }
         return (
           <section key={id} className="side-page" aria-labelledby={headingId}>

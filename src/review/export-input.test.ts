@@ -4,8 +4,12 @@ import { DEUTSCH } from '../annotations/profile.ts';
 import type { PageImageEncoder } from '../export/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
+import { defaultGrading } from '../stats/grading.ts';
+import { defaultWeighting } from '../stats/weighting.ts';
 import { createReviewExport } from './export-input.ts';
 import { readingOf, setupReview } from './test-support.ts';
+
+const RATING = { weighting: defaultWeighting(DEUTSCH), grading: defaultGrading() };
 
 async function reviewed() {
   const harness = setupReview(['a', 'b', 'c']);
@@ -31,7 +35,7 @@ describe('createReviewExport', () => {
     const state = flow.getState();
     const entries = runner.getState().entries;
 
-    const arbeit = exporter.correctedArbeit(complete, state, entries, DEUTSCH);
+    const arbeit = exporter.correctedArbeit(complete, state, entries, DEUTSCH, RATING);
 
     expect(arbeit).toMatchObject({
       title: 'Aufsatz Ada',
@@ -62,7 +66,7 @@ describe('createReviewExport', () => {
     const exporter = createReviewExport();
     const entries = harness.runner.getState().entries;
     const exported = () =>
-      exporter.correctedArbeit(arbeit, harness.flow.getState(), entries, DEUTSCH);
+      exporter.correctedArbeit(arbeit, harness.flow.getState(), entries, DEUTSCH, RATING);
     const marks = () => exported()?.pages[0]?.transcript?.lines.flatMap((line) => line.marks);
 
     expect(exported()?.statistics).toMatchObject({ words: 7, errors: 0 });
@@ -89,15 +93,17 @@ describe('createReviewExport', () => {
     const exporter = createReviewExport();
     const entries = runner.getState().entries;
 
-    expect(exporter.correctedArbeit(other, flow.getState(), entries, DEUTSCH)).toBeNull();
+    expect(exporter.correctedArbeit(other, flow.getState(), entries, DEUTSCH, RATING)).toBeNull();
     expect(
       exporter
-        .classArbeiten([complete, other], flow.getState(), entries, DEUTSCH)
+        .classArbeiten([complete, other], flow.getState(), entries, DEUTSCH, RATING)
         .map((a) => [a.kind, a.title]),
     ).toEqual([['corrected', 'Aufsatz Ada']]);
 
     flow.setCorrector(corrector, true);
     await flow.start(pages, { ...DEUTSCH, id: 'vorschau' });
-    expect(exporter.correctedArbeit(complete, flow.getState(), entries, DEUTSCH)).toBeNull();
+    expect(
+      exporter.correctedArbeit(complete, flow.getState(), entries, DEUTSCH, RATING),
+    ).toBeNull();
   });
 });

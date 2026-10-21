@@ -10,6 +10,7 @@ import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { WordCount } from '../results/use-word-count.ts';
 import type { ReviewEngine } from '../review/engine-phase.ts';
 import type { Review } from '../review/use-review.ts';
+import type { GradingModel } from '../stats/use-grading.ts';
 import type { WeightingModel } from '../stats/use-weighting.ts';
 import type { Toasts } from '../ui/Toast.tsx';
 
@@ -115,6 +116,7 @@ export interface AppModel {
   readonly run: RunController;
   readonly subject: Subject;
   readonly weighting: WeightingModel;
+  readonly grading: GradingModel;
   readonly work: Work;
   readonly models: Models;
   readonly toasts: Toasts;

@@ -16,6 +16,7 @@ import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createRunner } from '../pipeline/runner.ts';
 import { IDLE_ENGINE } from '../review/engine-phase.ts';
 import { createReviewFlow } from '../review/review-flow.ts';
+import { fixedGrading, type GradingModel } from '../stats/use-grading.ts';
 import { fixedWeighting, type WeightingModel } from '../stats/use-weighting.ts';
 import type { Toasts } from '../ui/Toast.tsx';
 import { KLASSE } from './navigation.ts';
@@ -118,6 +119,7 @@ export interface TestAppParts {
   readonly run?: Partial<RunController>;
   readonly subject?: Partial<Subject>;
   readonly weighting?: WeightingModel;
+  readonly grading?: GradingModel;
   readonly work?: Work;
   readonly models?: Partial<Models>;
   readonly toasts?: Toasts;
@@ -179,6 +181,7 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       ...parts.subject,
     },
     weighting: parts.weighting ?? fixedWeighting(),
+    grading: parts.grading ?? fixedGrading(),
     work: parts.work ?? testWork(),
     models: {
       transcriber,
