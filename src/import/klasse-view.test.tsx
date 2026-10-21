@@ -211,6 +211,11 @@ describe('list of Arbeiten', () => {
     expect(openOverview).toHaveBeenCalledTimes(1);
   });
 
+  it('hides the overview link while a run is active', () => {
+    render({ withResults: true, run: { running: true } });
+    expect(container.textContent).not.toContain('Übersicht');
+  });
+
   it('shows words of a partly counted Arbeit as a lower bound', () => {
     render({ withResults: true });
     expect(container.querySelector('.arbeit-figures')?.textContent).toBe('mind. 3 Wörter');

@@ -223,12 +223,11 @@ export function KlasseView() {
     setAnnouncement(`${arbeit.name}: Seiten werden erneut verarbeitet.`);
   };
 
-  const hasResults = statuses.some((status) => status.hasResults);
   const classWords = sumFigures(statuses.map((status) => status.words));
   const classErrors = sumFigures(statuses.map((status) => status.errors));
   const summary = [arbeitCountText(arbeiten.length), pageCountText(pages.length)];
-  if (hasResults && classWords !== null) summary.push(figureText(classWords, 'Wort', 'Wörter'));
-  if (hasResults && classErrors !== null) summary.push(figureText(classErrors, 'Fehler', 'Fehler'));
+  if (classWords !== null) summary.push(figureText(classWords, 'Wort', 'Wörter'));
+  if (classErrors !== null) summary.push(figureText(classErrors, 'Fehler', 'Fehler'));
   if (busy) summary.push('Wird geladen …');
 
   return (
@@ -256,7 +255,7 @@ export function KlasseView() {
         <>
           <div className="klasse-head">
             <p className="klasse-summary">{summary.join(' · ')}</p>
-            {hasResults && (
+            {(classWords !== null || classErrors !== null) && !locked && (
               <Button variant="quiet" onClick={navigation.openOverview}>
                 Übersicht
               </Button>
