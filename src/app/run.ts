@@ -1,5 +1,7 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import { reviewsContent } from '../content-form/review.ts';
 import type { CorrectorStatus } from '../correction/provider.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { DownloadError } from '../models/types.ts';
@@ -46,10 +48,13 @@ export function saveRunKind(kind: RunKind, storage: KindStorage | null = default
   }
 }
 
-export const NEEDED_ROLES: Readonly<Record<RunKind, readonly ModelRole[]>> = {
-  count: ['transcriber'],
-  correct: ['transcriber', 'corrector'],
-};
+export function neededRoles(kind: RunKind, scope: CorrectionScope): readonly ModelRole[] {
+  if (kind === 'count') return ['transcriber'];
+  const roles: ModelRole[] = ['transcriber'];
+  if (scope.spelling || scope.grammar) roles.push('corrector');
+  if (reviewsContent(scope)) roles.push('reviewer');
+  return roles;
+}
 
 export type Readiness = 'ready' | 'checking' | 'missing' | 'unavailable';
 
@@ -71,8 +76,9 @@ export type StartDecision =
 export function startDecision(
   kind: RunKind,
   roles: Readonly<Record<ModelRole, Readiness>>,
+  scope: CorrectionScope = DEFAULT_SCOPE,
 ): StartDecision {
-  const needed = NEEDED_ROLES[kind];
+  const needed = neededRoles(kind, scope);
   if (needed.some((role) => roles[role] === 'unavailable')) return { action: 'unavailable' };
   const missing = needed.filter((role) => roles[role] === 'missing');
   if (missing.length > 0) return { action: 'setup', roles: missing };

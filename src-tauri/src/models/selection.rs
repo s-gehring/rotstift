@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::download::DownloadError;
 use super::manager;
-use super::registry::{DEFAULT_MODEL_ID, ModelEntry, Role};
+use super::registry::{DEFAULT_CORRECTOR_ID, DEFAULT_MODEL_ID, ModelEntry, Role};
 use crate::llm::runtime::RuntimeStatus;
 
 const SELECTION_FILE: &str = "selection.json";
@@ -13,6 +13,8 @@ const SELECTION_FILE: &str = "selection.json";
 #[serde(rename_all = "camelCase")]
 struct Selection {
     model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reviewer_id: Option<String>,
 }
 
 pub fn selection_path(models_dir: &Path) -> PathBuf {
@@ -22,24 +24,29 @@ pub fn selection_path(models_dir: &Path) -> PathBuf {
         .join(SELECTION_FILE)
 }
 
-pub fn load(path: &Path) -> Option<String> {
+fn read(path: &Path) -> Option<Selection> {
     let text = std::fs::read_to_string(path).ok()?;
-    let selection: Selection = serde_json::from_str(&text).ok()?;
-    let id = selection.model_id?;
-    manager::entry(&id)
+    serde_json::from_str(&text).ok()
+}
+
+fn chosen(id: Option<String>, role: Role) -> Option<String> {
+    manager::entry(&id?)
         .ok()
-        .filter(|entry| entry.role == Role::Transcriber)
+        .filter(|entry| entry.role == role)
         .map(|entry| entry.id.clone())
 }
 
-pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
-    if entry.role != Role::Transcriber {
-        return Err(DownloadError::UnknownModel(entry.id.clone()));
-    }
-    let text = serde_json::to_string(&Selection {
-        model_id: Some(entry.id.clone()),
-    })
-    .map_err(|error| DownloadError::Io(error.to_string()))?;
+pub fn load(path: &Path) -> Option<String> {
+    chosen(read(path)?.model_id, Role::Transcriber)
+}
+
+pub fn load_reviewer(path: &Path) -> Option<String> {
+    chosen(read(path)?.reviewer_id, Role::Corrector)
+}
+
+fn write(path: &Path, selection: &Selection) -> Result<(), DownloadError> {
+    let text =
+        serde_json::to_string(selection).map_err(|error| DownloadError::Io(error.to_string()))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -49,12 +56,52 @@ pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
     Ok(())
 }
 
-pub fn forget(path: &Path, deleted: &ModelEntry) -> Result<(), DownloadError> {
-    if load(path).as_deref() != Some(deleted.id.as_str()) || deleted.id == DEFAULT_MODEL_ID {
-        return Ok(());
+pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
+    if entry.role != Role::Transcriber {
+        return Err(DownloadError::UnknownModel(entry.id.clone()));
     }
-    let default = manager::entry(DEFAULT_MODEL_ID)?;
-    save(path, default)
+    let reviewer_id = read(path).and_then(|selection| selection.reviewer_id);
+    write(
+        path,
+        &Selection {
+            model_id: Some(entry.id.clone()),
+            reviewer_id,
+        },
+    )
+}
+
+pub fn save_reviewer(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
+    if entry.role != Role::Corrector {
+        return Err(DownloadError::UnknownModel(entry.id.clone()));
+    }
+    let model_id = read(path).and_then(|selection| selection.model_id);
+    write(
+        path,
+        &Selection {
+            model_id,
+            reviewer_id: Some(entry.id.clone()),
+        },
+    )
+}
+
+pub fn forget(path: &Path, deleted: &ModelEntry) -> Result<(), DownloadError> {
+    match deleted.role {
+        Role::Transcriber => {
+            if load(path).as_deref() != Some(deleted.id.as_str()) || deleted.id == DEFAULT_MODEL_ID
+            {
+                return Ok(());
+            }
+            save(path, manager::entry(DEFAULT_MODEL_ID)?)
+        }
+        Role::Corrector => {
+            if load_reviewer(path).as_deref() != Some(deleted.id.as_str())
+                || deleted.id == DEFAULT_CORRECTOR_ID
+            {
+                return Ok(());
+            }
+            save_reviewer(path, manager::entry(DEFAULT_CORRECTOR_ID)?)
+        }
+    }
 }
 
 pub fn serves_model(status: &RuntimeStatus, entry: &ModelEntry) -> bool {
@@ -157,6 +204,69 @@ mod tests {
         assert_eq!(load(&path), None);
         std::fs::write(&path, format!(r#"{{"modelId":"{}"}}"#, corrector.id)).unwrap();
         assert_eq!(load(&path), None);
+    }
+
+    fn corrector() -> &'static ModelEntry {
+        crate::models::manager::entry(DEFAULT_CORRECTOR_ID).unwrap()
+    }
+
+    #[test]
+    fn the_reviewer_choice_is_stored_apart_from_the_transcriber_choice() {
+        let dir = temp_dir("reviewer");
+        let path = selection_path(&dir.join("models"));
+        let (first, second) = models();
+        assert_eq!(load_reviewer(&path), None);
+
+        save_reviewer(&path, corrector()).unwrap();
+        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        assert_eq!(load(&path), None);
+
+        save(&path, second).unwrap();
+        assert_eq!(load(&path), Some(second.id.clone()));
+        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+
+        save_reviewer(&path, corrector()).unwrap();
+        assert_eq!(load(&path), Some(second.id.clone()));
+        save(&path, first).unwrap();
+        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+    }
+
+    #[test]
+    fn a_transcriber_is_never_the_chosen_reviewer() {
+        let dir = temp_dir("reviewer-transcriber");
+        let path = selection_path(&dir.join("models"));
+        let (first, _) = models();
+        assert_eq!(
+            save_reviewer(&path, first).unwrap_err(),
+            DownloadError::UnknownModel(first.id.clone())
+        );
+        assert_eq!(load_reviewer(&path), None);
+        std::fs::write(&path, format!(r#"{{"reviewerId":"{}"}}"#, first.id)).unwrap();
+        assert_eq!(load_reviewer(&path), None);
+    }
+
+    #[test]
+    fn a_selection_file_without_a_reviewer_still_loads() {
+        let dir = temp_dir("legacy");
+        let path = dir.join(SELECTION_FILE);
+        let (_, second) = models();
+        std::fs::write(&path, format!(r#"{{"modelId":"{}"}}"#, second.id)).unwrap();
+        assert_eq!(load(&path), Some(second.id.clone()));
+        assert_eq!(load_reviewer(&path), None);
+    }
+
+    #[test]
+    fn forgetting_a_transcriber_keeps_the_reviewer_choice() {
+        let dir = temp_dir("forget-keeps-reviewer");
+        let path = selection_path(&dir.join("models"));
+        let (_, second) = models();
+        save(&path, second).unwrap();
+        save_reviewer(&path, corrector()).unwrap();
+        forget(&path, second).unwrap();
+        assert_eq!(load(&path), Some(DEFAULT_MODEL_ID.to_owned()));
+        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        forget(&path, corrector()).unwrap();
+        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
     }
 
     #[test]

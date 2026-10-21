@@ -480,7 +480,7 @@ describe('an Arbeit whose words were only counted', () => {
 describe('content and form comments', () => {
   it('are listed in the column and can be dismissed and restored through the flow', async () => {
     const harness = setupReview(['a', 'b']);
-    harness.flow.setCorrector(
+    harness.flow.setReviewer(
       createFakeCorrector(
         (lines) => lines.join('\n'),
         () => ({
@@ -513,7 +513,7 @@ describe('content and form comments', () => {
 
   it('say there is nothing to note when a finished review found nothing', async () => {
     const harness = setupReview(['a']);
-    harness.flow.setCorrector(
+    harness.flow.setReviewer(
       createFakeCorrector(
         (lines) => lines.join('\n'),
         () => ({ ok: true, questions: 2, comments: [] }),

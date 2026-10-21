@@ -135,6 +135,8 @@ export interface ReviewDeps {
 export const CORRECTOR_MISSING =
   'Das Korrekturmodell fehlt. Bitte zuerst das Korrekturmodell einrichten.';
 
+export const REVIEWER_MISSING = 'Das Modell für Inhalt und Form fehlt. Bitte zuerst einrichten.';
+
 export const IMAGE_FAILED =
   'Das Seitenbild konnte nicht vorbereitet werden. Die Fehler stehen nur in der Liste.';
 
@@ -146,6 +148,14 @@ export const NOT_RERECOGNIZED = 'Die Seite wurde nach dem Drehen nicht neu erkan
 const UNREADABLE = 'Die Seite wurde nicht erkannt.';
 
 const UNEXPECTED = 'unerwarteter Fehler';
+
+const NO_MODEL_NEEDED: Corrector = {
+  correct: () =>
+    Promise.resolve({
+      ok: false,
+      error: { kind: 'unavailable', message: 'kein Korrekturmodell nötig' },
+    }),
+};
 
 const EMPTY: ReviewState = {
   pages: {},
@@ -326,6 +336,7 @@ export function createReviewFlow(deps: ReviewDeps) {
   let active: AbortController | null = null;
   let inflight: Promise<unknown> = Promise.resolve();
   let corrector: Corrector | null = null;
+  let reviewer: Corrector | null = null;
   let preview = false;
   let lastScope: CorrectionScope = DEFAULT_SCOPE;
   let lastWorks: readonly ReviewWork[] = [];
@@ -495,10 +506,11 @@ export function createReviewFlow(deps: ReviewDeps) {
     let finished = 0;
     const current = corrector;
     const isPreview = preview;
+    const needsModel = requestedCodes(profile, scope).length > 0;
     setRun({ phase: 'correcting', total: readable.length, finished });
     for (const { page, lines, reading } of readable) {
       if (signal.aborted) return;
-      if (current === null) {
+      if (current === null && needsModel) {
         patch(page.id, { status: 'failed', message: CORRECTOR_MISSING, detail: null });
       } else {
         patch(page.id, { status: 'correcting', message: null, detail: null });
@@ -508,7 +520,7 @@ export function createReviewFlow(deps: ReviewDeps) {
             lines,
             profile,
             scope,
-            corrector: current,
+            corrector: current ?? NO_MODEL_NEEDED,
             signal,
             ...(bboxes && { bboxes }),
           }),
@@ -622,7 +634,7 @@ export function createReviewFlow(deps: ReviewDeps) {
     const due = dueWorks(works, profile, scope);
     if (due.length === 0) return;
     let finished = 0;
-    const current = corrector;
+    const current = reviewer;
     setRun({ phase: 'reviewing', total: due.length, finished });
     for (const work of due) {
       if (signal.aborted) return;
@@ -632,7 +644,7 @@ export function createReviewFlow(deps: ReviewDeps) {
           key: reviewKey(work, state.pages, profile, scope),
           sources: work.pageIds.map((id) => state.pages[id]?.source ?? null),
           comments: [],
-          message: CORRECTOR_MISSING,
+          message: REVIEWER_MISSING,
         });
       } else if (!(await reviewWork(work, current, profile, scope, signal))) {
         return;
@@ -769,6 +781,10 @@ export function createReviewFlow(deps: ReviewDeps) {
     setCorrector: (next: Corrector | null, isPreview = false) => {
       corrector = next;
       preview = next !== null && isPreview;
+    },
+
+    setReviewer: (next: Corrector | null) => {
+      reviewer = next;
     },
 
     cancel: () => {

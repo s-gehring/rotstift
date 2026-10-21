@@ -6,6 +6,7 @@ import {
   IMAGE_FAILED,
   LAYOUT_FAILED,
   NOT_RERECOGNIZED,
+  REVIEWER_MISSING,
   type ContentReviewLog,
   type ReviewFlow,
   type ReviewWork,
@@ -521,6 +522,7 @@ function contentSetup(
     () => answer.current,
   );
   setup.flow.setCorrector(fake);
+  setup.flow.setReviewer(fake);
   const works: ReviewWork[] = [{ id: 'w', pageIds: [...ids] }];
   return { ...setup, answer, fake, works };
 }
@@ -819,7 +821,7 @@ describe('content review', () => {
       correct: (lines, profile, signal, scope) => fake.correct(lines, profile, signal, scope),
       review: () => Promise.reject(new Error('Speicher voll')),
     };
-    flow.setCorrector(throwing);
+    flow.setReviewer(throwing);
     await flow.start(pages, DEUTSCH, CONTENT, works);
 
     expect(flow.getState().works.w).toMatchObject({
@@ -831,19 +833,42 @@ describe('content review', () => {
 
   it('finishes a work without comments when the corrector cannot review', async () => {
     const { pages, fake, flow, works } = contentSetup();
-    flow.setCorrector({
+    flow.setReviewer({
       correct: (lines, profile, signal, scope) => fake.correct(lines, profile, signal, scope),
     });
     await flow.start(pages, DEUTSCH, CONTENT, works);
     expect(flow.getState().works.w).toMatchObject({ status: 'done', comments: [] });
   });
 
-  it('fails the review of a readable work when no corrector is set after the pages were read', async () => {
+  it('fails the review of a readable work when no reviewer is set after the pages were read', async () => {
     const { pages, flow, works } = contentSetup();
     await flow.start(pages, DEUTSCH, DEFAULT_SCOPE, works);
-    flow.setCorrector(null);
+    flow.setReviewer(null);
     await flow.start(pages, DEUTSCH, CONTENT, works);
-    expect(flow.getState().works.w).toMatchObject({ status: 'failed', message: CORRECTOR_MISSING });
+    expect(flow.getState().works.w).toMatchObject({ status: 'failed', message: REVIEWER_MISSING });
+  });
+
+  it('asks the reviewer and not the corrector for the review', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const other = createFakeCorrector(
+      (lines) => lines.join('\n'),
+      (): ContentResult => ({ ok: true, comments: [FORM_NAME], questions: 1 }),
+    );
+    flow.setReviewer(other);
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(fake.reviews).toHaveLength(0);
+    expect(other.reviews).toHaveLength(1);
+    expect(flow.getState().works.w?.comments).toEqual([{ ...FORM_NAME, status: 'open' }]);
+  });
+
+  it('does not need a reviewer when the scope has no content or form', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    flow.setReviewer(null);
+    await flow.start(pages, DEUTSCH, { ...DEFAULT_SCOPE }, works);
+    expect(flow.getState().pages.a?.status).toBe('done');
+    expect(flow.getState().works.w).toBeUndefined();
+    expect(fake.reviews).toHaveLength(0);
   });
 
   it('marks the work as cancelled when the run is cancelled during the review', async () => {
@@ -863,7 +888,7 @@ describe('content review', () => {
           );
         }),
     };
-    flow.setCorrector(gated);
+    flow.setReviewer(gated);
     const running = flow.start(pages, DEUTSCH, CONTENT, works);
     await waitFor(() => flow.getState().run?.phase === 'reviewing');
     await started.promise;
@@ -877,7 +902,7 @@ describe('content review', () => {
     expect(flow.getState().pages.a?.status).toBe('done');
     expect(flow.getState().pages.b?.status).toBe('done');
 
-    flow.setCorrector(fake);
+    flow.setReviewer(fake);
     await flow.start(pages, DEUTSCH, CONTENT, works);
     expect(flow.getState().works.w?.status).toBe('done');
     expect(fake.reviews).toHaveLength(1);
@@ -1042,7 +1067,7 @@ describe('content review', () => {
           );
         }),
     };
-    flow.setCorrector(gated);
+    flow.setReviewer(gated);
     const running = flow.start(pages, DEUTSCH, CONTENT, works);
     await waitFor(() => flow.getState().works.w?.status === 'reviewing');
     flow.cancel();
@@ -1061,5 +1086,28 @@ describe('content review', () => {
     expect(flow.getState().pages.a?.result?.statistics.errors).toBe(0);
     expect(fake.reviews).toHaveLength(1);
     expect(flow.getState().works.w?.status).toBe('done');
+  });
+
+  it('needs no corrector at all when spelling and grammar are switched off', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    flow.setCorrector(null);
+    const scope = { ...CONTENT, spelling: false, grammar: false };
+    await flow.start(pages, DEUTSCH, scope, works);
+
+    expect(flow.getState().pages.a).toMatchObject({ status: 'done', message: null });
+    expect(flow.getState().pages.b?.status).toBe('done');
+    expect(flow.getState().pages.a?.result?.statistics.errors).toBe(0);
+    expect(fake.reviews).toHaveLength(1);
+    expect(flow.getState().works.w?.status).toBe('done');
+  });
+
+  it('still fails the pages without a corrector as soon as spelling or grammar is on', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    flow.setCorrector(null);
+    await flow.start(pages, DEUTSCH, { ...CONTENT, spelling: false }, works);
+
+    expect(flow.getState().pages.a).toMatchObject({ status: 'failed', message: CORRECTOR_MISSING });
+    expect(flow.getState().works.w).toBeUndefined();
+    expect(fake.reviews).toHaveLength(0);
   });
 });

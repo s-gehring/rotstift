@@ -36,6 +36,8 @@ pub fn run() {
             models::commands::model_status,
             models::commands::model_selection,
             models::commands::model_select,
+            models::commands::model_reviewer_selection,
+            models::commands::model_select_reviewer,
             models::commands::hardware_info,
             models::commands::model_download_start,
             models::commands::model_download_cancel,

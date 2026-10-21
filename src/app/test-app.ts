@@ -1,7 +1,13 @@
 import { DEUTSCH, BUILT_IN_PROFILES } from '../annotations/profile.ts';
 import { DEFAULT_SCOPE } from '../correction/scope.ts';
 import { flattenPages } from '../import/arbeiten.ts';
-import { CORRECTORS, MODELS, recommendModel, type AnyModelInfo } from '../models/registry.ts';
+import {
+  CORRECTORS,
+  defaultReviewer,
+  MODELS,
+  recommendModel,
+  type AnyModelInfo,
+} from '../models/registry.ts';
 import { INITIAL_SETUP } from '../models/setup-state.ts';
 import type { ModelStatus } from '../models/types.ts';
 import type { ModelSetup } from '../models/use-model-setup.ts';
@@ -81,6 +87,7 @@ export function testWork(overrides: Partial<Work> = {}): Work {
     review: { flow, state: flow.getState() },
     transcriber: null,
     corrector: null,
+    reviewer: null,
     engine: IDLE_ENGINE,
     canRetryCount: false,
     canRetryReview: false,
@@ -113,6 +120,7 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
   };
   const transcriber = testModelSetup(recommendModel());
   const corrector = testModelSetup(recommendModel(CORRECTORS));
+  const reviewer = testModelSetup(defaultReviewer());
   return {
     importState,
     pages: importState.pages,
@@ -158,7 +166,8 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
     models: {
       transcriber,
       corrector,
-      switchLocked: { transcriber: false, corrector: false },
+      reviewer,
+      switchLocked: { transcriber: false, corrector: false, reviewer: false },
       setup: { open: false, roles: [], pendingRun: null, show: noop, close: noop },
       settings: { open: false, show: noop, close: noop },
       ...parts.models,

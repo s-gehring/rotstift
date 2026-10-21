@@ -144,6 +144,7 @@ export function setupReview(
     },
   });
   flow.setCorrector(corrector);
+  flow.setReviewer(corrector);
   return { pages, h, runner, flow, transcriber, corrector };
 }
 

@@ -8,6 +8,7 @@ import { isOutdated } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
 import { buildResults } from '../results/summary.ts';
 import type { CommentKind } from '../content-form/catalog.ts';
+import { coveringMark } from '../content-form/overlap.ts';
 import { summaryText } from '../content-form/review.ts';
 import type { PageComment } from '../overlay/layout.ts';
 import type { CommentStatus, ReviewImage, ReviewState, WorkReview } from './review-flow.ts';
@@ -43,6 +44,7 @@ export interface CommentEntry {
   readonly text: string;
   readonly page: number;
   readonly line: number;
+  readonly coveredBy: string | null;
 }
 
 export interface ContentReviewModel {
@@ -116,6 +118,11 @@ export function contentReview(arbeit: Arbeit, review: ReviewState): ContentRevie
   const comments = work.comments.flatMap((comment, index): CommentEntry[] => {
     const position = arbeit.pages.findIndex((page) => page.id === comment.pageId);
     if (position < 0) return [];
+    const transcript = review.pages[comment.pageId]?.result?.transcript;
+    const coveredBy =
+      transcript === undefined || review.profile === null
+        ? null
+        : coveringMark(comment, transcript, review.profile);
     return [
       {
         index,
@@ -124,6 +131,7 @@ export function contentReview(arbeit: Arbeit, review: ReviewState): ContentRevie
         text: comment.text,
         page: position + 1,
         line: comment.line,
+        coveredBy,
       },
     ];
   });
@@ -183,7 +191,12 @@ export function buildArbeitModel(
         errors: pageResult.statistics.errors,
         comments:
           content?.comments
-            .filter((comment) => comment.status === 'open' && comment.page === index + 1)
+            .filter(
+              (comment) =>
+                comment.status === 'open' &&
+                comment.coveredBy === null &&
+                comment.page === index + 1,
+            )
             .map(({ line, text }) => ({ line, text })) ?? [],
         summary: page.id === summaryPage ? (content?.summary ?? null) : null,
       };

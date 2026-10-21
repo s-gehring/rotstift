@@ -42,7 +42,7 @@ const NO_GREETING: ContentComment = {
 async function reviewed(comments: readonly ContentComment[], blankLast = false) {
   const setup = setupReview(['a', 'b']);
   const answer: ContentResult = { ok: true, comments, questions: 2 };
-  setup.flow.setCorrector(
+  setup.flow.setReviewer(
     createFakeCorrector(
       (lines) => lines.join('\n'),
       () => answer,
@@ -57,6 +57,39 @@ async function reviewed(comments: readonly ContentComment[], blankLast = false) 
 }
 
 describe('the content review in the Arbeit model', () => {
+  it('keeps a mark and drops the margin note it covers on the same line', async () => {
+    const tense: ContentComment = { pageId: 'a', line: 1, kind: 'form', text: 'Präsens verwenden' };
+    const { arbeit, flow, runner } = await reviewed([tense, NO_GREETING]);
+    const state = flow.getState();
+    const page = state.pages['a'];
+    const result = page?.result;
+    if (page === undefined || result == null) throw new Error('page a not corrected');
+    const [first, ...rest] = result.transcript.lines;
+    if (first === undefined) throw new Error('page a has no lines');
+    const verb = first.text.split(' ')[0] ?? '';
+    const marked = {
+      ...first,
+      marks: [
+        { kind: 'error' as const, type: 'T', original: verb, correction: `${verb}x`, offset: 0 },
+      ],
+    };
+    const covered = {
+      ...state,
+      pages: {
+        ...state.pages,
+        a: { ...page, result: { ...result, transcript: { lines: [marked, ...rest] } } },
+      },
+    };
+    const model = buildArbeitModel(arbeit, covered, runner.getState().entries);
+    expect(model.content?.comments.map((comment) => comment.coveredBy)).toEqual(['T', null]);
+    expect(model.pages.map((item) => item.correction?.comments)).toEqual([
+      [],
+      [{ line: 1, text: 'Anrede fehlt' }],
+    ]);
+    expect(model.content?.summary).toBe('Form: Präsens verwenden, Anrede fehlt.');
+    expect(model.pages[0]?.correction?.errors).toBe(result.statistics.errors);
+  });
+
   it('numbers the comments by page and line within the Arbeit', async () => {
     const { model } = await reviewed([MISSING_TASK, NO_GREETING]);
 
@@ -72,8 +105,17 @@ describe('the content review in the Arbeit model', () => {
           text: 'Aufgabe nicht erfüllt',
           page: 1,
           line: 2,
+          coveredBy: null,
         },
-        { index: 1, status: 'open', kind: 'form', text: 'Anrede fehlt', page: 2, line: 1 },
+        {
+          index: 1,
+          status: 'open',
+          kind: 'form',
+          text: 'Anrede fehlt',
+          page: 2,
+          line: 1,
+          coveredBy: null,
+        },
       ],
     });
     expect(model().pages.map((page) => page.correction?.comments)).toEqual([
@@ -157,7 +199,7 @@ describe('the content review in the Arbeit model', () => {
 
   it('carries the failure message of a review that could not run', async () => {
     const setup = setupReview(['a', 'b']);
-    setup.flow.setCorrector(
+    setup.flow.setReviewer(
       createFakeCorrector(
         (lines) => lines.join('\n'),
         (): ContentResult => ({
@@ -200,6 +242,7 @@ function entry(index: number, overrides: Partial<CommentEntry> = {}): CommentEnt
     text: 'Thema verfehlt',
     page: 1,
     line: 3,
+    coveredBy: null,
     ...overrides,
   };
 }

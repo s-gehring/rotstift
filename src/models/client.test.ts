@@ -22,12 +22,16 @@ describe('createModelClient', () => {
     await client.remove('m');
     await client.importFiles('m');
     await client.status('m');
+    await client.selectReviewer('m');
+    await client.reviewerSelection();
     expect(calls).toEqual([
       ['model_download_start', { modelId: 'm' }],
       ['model_download_cancel', { modelId: 'm' }],
       ['model_delete', { modelId: 'm' }],
       ['model_import', { modelId: 'm' }],
       ['model_status', { modelId: 'm' }],
+      ['model_select_reviewer', { modelId: 'm' }],
+      ['model_reviewer_selection', undefined],
     ]);
   });
 

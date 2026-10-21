@@ -73,7 +73,7 @@ export function createReviewExport(
       pages: arbeit.pages.map((page, index) =>
         exportPage(page, state, entries, {
           comments: comments
-            .filter((comment) => comment.page === index + 1)
+            .filter((comment) => comment.page === index + 1 && comment.coveredBy === null)
             .map(({ line, text }) => ({ line, text })),
           summary: page === last ? (review?.summary ?? null) : null,
         }),
@@ -82,7 +82,12 @@ export function createReviewExport(
       statistics: summary.statistics,
       ...(review?.status === 'done' && {
         content: {
-          comments: comments.map(({ page, line, text }) => ({ page, line, text })),
+          comments: comments.map(({ page, line, text, coveredBy }) => ({
+            page,
+            line,
+            text,
+            ...(coveredBy !== null && { coveredBy }),
+          })),
           summary: review.summary,
         },
       }),

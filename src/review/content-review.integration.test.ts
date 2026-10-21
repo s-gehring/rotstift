@@ -150,7 +150,9 @@ describe.skipIf(!available)('Inhalt und Form end to end with the real sidecar', 
         },
         logReview: (entry) => logs.push(entry),
       });
-      flow.setCorrector(createSidecarCorrector(corrector, { engine, client: sidecar }));
+      const sidecarCorrector = createSidecarCorrector(corrector, { engine, client: sidecar });
+      flow.setCorrector(sidecarCorrector);
+      flow.setReviewer(sidecarCorrector);
       const arbeit: Arbeit = { id: 'tante-petra', name: 'Brief an Tante Petra', pages: [page] };
 
       const started = performance.now();

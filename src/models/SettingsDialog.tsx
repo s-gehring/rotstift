@@ -35,11 +35,13 @@ function ModelSection({
   role,
   setup,
   locked,
+  sharedWith = null,
   onSetup,
 }: {
   readonly role: ModelRole;
   readonly setup: ModelSetup<AnyModelInfo>;
   readonly locked: boolean;
+  readonly sharedWith?: ModelRole | null;
   readonly onSetup: () => void;
 }) {
   const [confirming, setConfirming] = useState<AnyModelInfo | null>(null);
@@ -111,6 +113,11 @@ function ModelSection({
         </p>
       )}
       {setup.state.note !== null && <p className="settings-note">{setup.state.note}</p>}
+      {sharedWith !== null && (
+        <p className="settings-note">
+          Wird auch für {ROLE_NAME[sharedWith]} verwendet und nur einmal gespeichert.
+        </p>
+      )}
       {confirming !== null ? (
         <div className="confirm" role="alertdialog" aria-label={`${confirmName} löschen`}>
           <p>{confirmName} wirklich löschen?</p>
@@ -154,7 +161,8 @@ function ModelSection({
 
 export function SettingsDialog() {
   const { models } = useApp();
-  const { settings, transcriber, corrector, switchLocked, setup } = models;
+  const { settings, transcriber, corrector, reviewer, switchLocked, setup } = models;
+  const reviewerShared = reviewer.model.id === corrector.model.id;
   const available = transcriber.available;
   return (
     <Dialog open={settings.open} onClose={settings.close} title="Einstellungen" size="md">
@@ -170,7 +178,15 @@ export function SettingsDialog() {
             role="corrector"
             setup={corrector}
             locked={switchLocked.corrector}
+            sharedWith={reviewerShared ? 'reviewer' : null}
             onSetup={() => setup.show(['corrector'])}
+          />
+          <ModelSection
+            role="reviewer"
+            setup={reviewer}
+            locked={switchLocked.reviewer}
+            sharedWith={reviewerShared ? 'corrector' : null}
+            onSetup={() => setup.show(['reviewer'])}
           />
           <DiagnosticsLog />
         </>

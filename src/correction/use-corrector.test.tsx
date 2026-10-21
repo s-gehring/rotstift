@@ -7,8 +7,8 @@ import type { ModelClient } from '../models/client.ts';
 import type { CreateCorrector } from '../models/corrector-setup.ts';
 import { defaultCorrector } from '../models/registry.ts';
 import type { ModelState } from '../models/types.ts';
-import { CORRECTOR_MISSING_MESSAGE } from './provider.ts';
-import { useCorrector, type CorrectorChoice } from './use-corrector.ts';
+import { CORRECTOR_MISSING_MESSAGE, REVIEWER_MISSING_MESSAGE } from './provider.ts';
+import { useCorrector, useReviewer, type CorrectorChoice } from './use-corrector.ts';
 import { tick, waitFor } from '../review/test-support.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -25,6 +25,8 @@ function fakeClient(state: ModelState): ModelClient {
     cancelDownload: () => Promise.resolve(false),
     selection: () => Promise.resolve(null),
     select: () => Promise.resolve(undefined),
+    reviewerSelection: () => Promise.resolve(null),
+    selectReviewer: () => Promise.resolve(undefined),
     remove: (modelId) =>
       Promise.resolve({ modelId, state: 'missing', downloadedBytes: 0, totalBytes: 1 }),
     importFiles: () => Promise.resolve(null),
@@ -55,9 +57,23 @@ function Probe({
   return null;
 }
 
-async function render(client: ModelClient | null) {
+function ReviewerProbe({
+  client,
+  create,
+}: {
+  readonly client: ModelClient | null;
+  readonly create: CreateCorrector;
+}) {
+  const choice = useReviewer(client, create);
+  useEffect(() => {
+    latest = choice;
+  });
+  return null;
+}
+
+async function render(client: ModelClient | null, Component = Probe) {
   const create = vi.fn<CreateCorrector>(() => sidecar);
-  act(() => root.render(<Probe client={client} create={create} />));
+  act(() => root.render(<Component client={client} create={create} />));
   await act(async () => {
     await tick();
     await tick();
@@ -103,5 +119,25 @@ describe('useCorrector', () => {
     expect(latest?.status).toMatchObject({ state: 'ready', preview: true });
     expect(latest?.setup.setup.available).toBe(false);
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('useReviewer', () => {
+  it('asks for the model for content and form while it is missing', async () => {
+    const create = await render(fakeClient('missing'), ReviewerProbe);
+    expect(latest?.status).toEqual({ state: 'needs-model', message: REVIEWER_MISSING_MESSAGE });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('uses a sidecar for the shared model once it is ready', async () => {
+    const create = await render(fakeClient('ready'), ReviewerProbe);
+    expect(create).toHaveBeenCalledWith(model, expect.anything());
+    expect(latest?.status).toMatchObject({ state: 'ready', corrector: sidecar, preview: false });
+  });
+
+  it('falls back to the preview corrector in the browser', async () => {
+    await render(null, ReviewerProbe);
+    await act(() => waitFor(() => latest?.status !== null));
+    expect(latest?.status).toMatchObject({ state: 'ready', preview: true });
   });
 });

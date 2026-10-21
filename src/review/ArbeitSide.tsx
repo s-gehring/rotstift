@@ -253,6 +253,9 @@ function ContentSection({
                   S. {comment.page}, Z. {comment.line}
                 </span>{' '}
                 {comment.text}
+                {comment.coveredBy !== null && (
+                  <span className="side-comment-place"> · siehe {comment.coveredBy}</span>
+                )}
               </span>
               <span className="side-hint-actions">
                 {comment.status === 'open' ? (

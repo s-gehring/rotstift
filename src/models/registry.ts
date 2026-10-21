@@ -68,6 +68,7 @@ export type AnyModelInfo = ModelInfo | CorrectorInfo;
 
 export const DEFAULT_MODEL_ID = 'glm-ocr-q8';
 export const DEFAULT_CORRECTOR_ID = 'gemma-4-e2b-q4';
+export const DEFAULT_REVIEWER_ID = DEFAULT_CORRECTOR_ID;
 
 export function parseRegistry(json: unknown): readonly AnyModelInfo[] {
   const { models } = registrySchema.parse(json);
@@ -92,6 +93,8 @@ export const CORRECTORS: readonly CorrectorInfo[] = ALL_MODELS.filter(
   (model): model is CorrectorInfo => model.role === 'corrector',
 );
 
+export const REVIEWERS: readonly CorrectorInfo[] = CORRECTORS;
+
 export function findModel(id: string): ModelInfo | undefined {
   return MODELS.find((model) => model.id === id);
 }
@@ -104,6 +107,17 @@ export function defaultCorrector(): CorrectorInfo {
   const corrector = findCorrector(DEFAULT_CORRECTOR_ID);
   if (corrector === undefined) throw new Error('Die Modellliste enthält kein Korrekturmodell.');
   return corrector;
+}
+
+export function findReviewer(id: string): CorrectorInfo | undefined {
+  return REVIEWERS.find((model) => model.id === id);
+}
+
+export function defaultReviewer(): CorrectorInfo {
+  const reviewer = findReviewer(DEFAULT_REVIEWER_ID);
+  if (reviewer === undefined)
+    throw new Error('Die Modellliste enthält kein Modell für Inhalt und Form.');
+  return reviewer;
 }
 
 export function modelFiles(model: AnyModelInfo) {

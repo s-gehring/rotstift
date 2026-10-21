@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { PageEntry, RunState } from '../pipeline/runner.ts';
@@ -9,6 +10,7 @@ import { page } from '../review/test-support.ts';
 import {
   countFinishedText,
   loadRunKind,
+  neededRoles,
   openPageCount,
   readiness,
   reviewFinishedText,
@@ -19,7 +21,9 @@ import {
   startDecision,
   startRun,
   type KindStorage,
+  type Readiness,
 } from './run.ts';
+import type { ModelRole } from './types.ts';
 
 function entry(text: string, overrides: Partial<PageEntry> = {}): PageEntry {
   return {
@@ -97,37 +101,106 @@ describe('readiness', () => {
   });
 });
 
+const CONTENT_SCOPE: CorrectionScope = {
+  ...DEFAULT_SCOPE,
+  content: true,
+  assignment: 'Beschreibe deinen Tag.',
+};
+
+const FORM_ONLY: CorrectionScope = {
+  ...DEFAULT_SCOPE,
+  spelling: false,
+  grammar: false,
+  form: true,
+  formName: 'Persönlicher Brief',
+};
+
+const roles = (
+  transcriber: Readiness,
+  corrector: Readiness,
+  reviewer: Readiness = 'ready',
+): Record<ModelRole, Readiness> => ({ transcriber, corrector, reviewer });
+
+describe('neededRoles', () => {
+  it('needs the corrector only for spelling or grammar and the reviewer only for content or form', () => {
+    expect(neededRoles('count', CONTENT_SCOPE)).toEqual(['transcriber']);
+    expect(neededRoles('correct', DEFAULT_SCOPE)).toEqual(['transcriber', 'corrector']);
+    expect(neededRoles('correct', { ...DEFAULT_SCOPE, grammar: false })).toEqual([
+      'transcriber',
+      'corrector',
+    ]);
+    expect(neededRoles('correct', CONTENT_SCOPE)).toEqual(['transcriber', 'corrector', 'reviewer']);
+    expect(neededRoles('correct', FORM_ONLY)).toEqual(['transcriber', 'reviewer']);
+  });
+
+  it('does not need the reviewer while the assignment or the form is still missing', () => {
+    expect(neededRoles('correct', { ...CONTENT_SCOPE, assignment: '' })).toEqual([
+      'transcriber',
+      'corrector',
+    ]);
+    expect(neededRoles('correct', { ...FORM_ONLY, formName: '' })).toEqual(['transcriber']);
+  });
+});
+
 describe('startDecision', () => {
   it('starts when every needed model is ready', () => {
-    expect(startDecision('count', { transcriber: 'ready', corrector: 'missing' })).toEqual({
+    expect(startDecision('count', roles('ready', 'missing', 'missing'))).toEqual({
       action: 'launch',
     });
-    expect(startDecision('correct', { transcriber: 'ready', corrector: 'ready' })).toEqual({
+    expect(startDecision('correct', roles('ready', 'ready', 'missing'))).toEqual({
+      action: 'launch',
+    });
+    expect(startDecision('correct', roles('ready', 'ready'), CONTENT_SCOPE)).toEqual({
       action: 'launch',
     });
   });
 
   it('opens the setup for exactly the models the chosen kind is missing', () => {
-    expect(startDecision('correct', { transcriber: 'ready', corrector: 'missing' })).toEqual({
+    expect(startDecision('correct', roles('ready', 'missing'))).toEqual({
       action: 'setup',
       roles: ['corrector'],
     });
-    expect(startDecision('correct', { transcriber: 'missing', corrector: 'missing' })).toEqual({
+    expect(startDecision('correct', roles('missing', 'missing'))).toEqual({
       action: 'setup',
       roles: ['transcriber', 'corrector'],
     });
-    expect(startDecision('count', { transcriber: 'missing', corrector: 'missing' })).toEqual({
+    expect(startDecision('count', roles('missing', 'missing', 'missing'))).toEqual({
       action: 'setup',
       roles: ['transcriber'],
     });
   });
 
+  it('asks for the reviewer only when the scope reviews content or form', () => {
+    expect(startDecision('correct', roles('ready', 'ready', 'missing'), CONTENT_SCOPE)).toEqual({
+      action: 'setup',
+      roles: ['reviewer'],
+    });
+    expect(startDecision('correct', roles('ready', 'missing', 'missing'), CONTENT_SCOPE)).toEqual({
+      action: 'setup',
+      roles: ['corrector', 'reviewer'],
+    });
+    expect(startDecision('correct', roles('ready', 'missing', 'missing'), FORM_ONLY)).toEqual({
+      action: 'setup',
+      roles: ['reviewer'],
+    });
+    expect(startDecision('correct', roles('ready', 'missing', 'ready'), FORM_ONLY)).toEqual({
+      action: 'launch',
+    });
+  });
+
   it('waits while a model is still being checked and refuses outside the desktop app', () => {
-    expect(startDecision('count', { transcriber: 'checking', corrector: 'ready' })).toEqual({
+    expect(startDecision('count', roles('checking', 'ready'))).toEqual({ action: 'wait' });
+    expect(startDecision('correct', roles('ready', 'ready', 'checking'), CONTENT_SCOPE)).toEqual({
       action: 'wait',
     });
-    expect(startDecision('correct', { transcriber: 'ready', corrector: 'unavailable' })).toEqual({
+    expect(startDecision('correct', roles('ready', 'unavailable'))).toEqual({
       action: 'unavailable',
+    });
+    expect(startDecision('correct', roles('ready', 'ready', 'unavailable'), FORM_ONLY)).toEqual({
+      action: 'unavailable',
+    });
+    expect(startDecision('correct', roles('ready', 'unavailable', 'ready'), FORM_ONLY)).toEqual({
+      action: 'launch',
     });
   });
 });

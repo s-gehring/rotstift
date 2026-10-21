@@ -12,6 +12,7 @@ export function useReview(
   runner: Runner,
   pages: readonly ImportPage[],
   corrector: CorrectorStatus | null,
+  reviewer: CorrectorStatus | null,
   arbeiten: readonly Arbeit[] = [],
 ) {
   const [{ flow, locator }] = useState(() => {
@@ -35,6 +36,10 @@ export function useReview(
     if (corrector?.state === 'ready') flow.setCorrector(corrector.corrector, corrector.preview);
     else flow.setCorrector(null);
   }, [flow, corrector]);
+
+  useEffect(() => {
+    flow.setReviewer(reviewer?.state === 'ready' ? reviewer.corrector : null);
+  }, [flow, reviewer]);
 
   useEffect(() => {
     flow.prune(new Set(pages.map((page) => page.id)), new Set(arbeiten.map((arbeit) => arbeit.id)));

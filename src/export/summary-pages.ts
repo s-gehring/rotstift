@@ -109,7 +109,11 @@ function drawContent(sheet: Sheet, content: ContentReport): void {
       size: 10.5,
       color: COLORS.muted,
     });
-    sheet.text(comment.text, sheet.left + 80, sheet.y, { size: 11, maxWidth: sheet.width - 80 });
+    const text =
+      comment.coveredBy === undefined
+        ? comment.text
+        : `${comment.text} (siehe ${comment.coveredBy})`;
+    sheet.text(text, sheet.left + 80, sheet.y, { size: 11, maxWidth: sheet.width - 80 });
     sheet.y -= ROW;
   }
   if (content.summary !== null) {

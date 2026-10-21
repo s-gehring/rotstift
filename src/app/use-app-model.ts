@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILT_IN_PROFILES } from '../annotations/profile.ts';
 import { needsAssignment, needsFormName } from '../content-form/review.ts';
 import { useCorrectionScope } from '../correction/use-correction-scope.ts';
-import { useCorrector } from '../correction/use-corrector.ts';
+import { useCorrector, useReviewer } from '../correction/use-corrector.ts';
 import { useProfileChoice } from '../correction/use-profile-choice.ts';
 import { flattenPages } from '../import/arbeiten.ts';
 import { useImportPages } from '../import/use-import-pages.ts';
@@ -22,7 +22,7 @@ import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts'
 import {
   countFinishedText,
   loadRunKind,
-  NEEDED_ROLES,
+  neededRoles,
   openPageCount,
   readiness,
   reviewFinishedText,
@@ -116,9 +116,13 @@ export function useAppModel(): AppModel {
   const correctorPhase = useMonitorPhase(
     corrector?.state === 'ready' ? corrector.engine : undefined,
   );
+  const contentForm = useReviewer(modelClient);
+  const reviewer = contentForm.status;
+  const reviewerSetup = contentForm.setup.setup;
+  const reviewerPhase = useMonitorPhase(reviewer?.state === 'ready' ? reviewer.engine : undefined);
   const engine = useMemo(
-    () => ({ transcriber: transcriberPhase, corrector: correctorPhase }),
-    [transcriberPhase, correctorPhase],
+    () => ({ transcriber: transcriberPhase, corrector: correctorPhase, reviewer: reviewerPhase }),
+    [transcriberPhase, correctorPhase, reviewerPhase],
   );
   const { profile, select: selectProfile } = useProfileChoice();
   const { scope, setScope } = useCorrectionScope(importState.arbeiten.length > 0);
@@ -126,7 +130,7 @@ export function useAppModel(): AppModel {
   const clearMissing = useCallback(() => setMissing(null), []);
   const weighting = useWeighting();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
-  const review = useReview(count.runner, pages, corrector, importState.arbeiten);
+  const review = useReview(count.runner, pages, corrector, reviewer, importState.arbeiten);
   const navigation = useNavigation(importState.arbeiten);
 
   const reviewing = review.state.run !== null;
@@ -147,17 +151,22 @@ export function useAppModel(): AppModel {
   const roleReadiness: Readonly<Record<ModelRole, Readiness>> = {
     transcriber: readiness(transcriber, transcriberSetup.loadError),
     corrector: readiness(corrector, correctorSetup.loadError),
+    reviewer: readiness(reviewer, reviewerSetup.loadError),
   };
   const rolesWith = (wanted: RunKind, state: Readiness) =>
-    NEEDED_ROLES[wanted].filter((role) => roleReadiness[role] === state);
+    neededRoles(wanted, scope).filter((role) => roleReadiness[role] === state);
   const missingModels = {
     count: rolesWith('count', 'missing'),
     correct: rolesWith('correct', 'missing'),
   };
   const unavailableText = (wanted: RunKind) => {
     if (rolesWith(wanted, 'unavailable').length === 0) return null;
-    if (transcriber?.state === 'unavailable') return transcriber.message;
-    return corrector?.state === 'unavailable' ? corrector.message : null;
+    const statuses = { transcriber, corrector, reviewer };
+    for (const role of rolesWith(wanted, 'unavailable')) {
+      const status = statuses[role];
+      if (status?.state === 'unavailable') return status.message;
+    }
+    return null;
   };
 
   const openPages = {
@@ -179,7 +188,7 @@ export function useAppModel(): AppModel {
       setMissing(needsAssignment(scope) ? 'assignment' : 'formName');
       return;
     }
-    const decision = startDecision(wanted, roleReadiness);
+    const decision = startDecision(wanted, roleReadiness, scope);
     if (decision.action === 'unavailable') {
       const message = unavailableText(wanted);
       if (message !== null) toasts.show(message, { tone: 'error' });
@@ -202,7 +211,7 @@ export function useAppModel(): AppModel {
     setupState.open &&
     setupState.roles.every((role) => roleReadiness[role] === 'ready') &&
     (pendingRun === null ||
-      NEEDED_ROLES[pendingRun].every((role) => roleReadiness[role] === 'ready'));
+      neededRoles(pendingRun, scope).every((role) => roleReadiness[role] === 'ready'));
   const launchRef = useRef(launch);
   useEffect(() => {
     launchRef.current = launch;
@@ -291,16 +300,21 @@ export function useAppModel(): AppModel {
       review,
       transcriber,
       corrector,
+      reviewer,
       engine,
       canRetryCount: transcriber?.state === 'ready' && !reviewing,
-      canRetryReview: transcriber?.state === 'ready' && corrector?.state === 'ready',
+      canRetryReview: neededRoles('correct', scope).every(
+        (role) => roleReadiness[role] === 'ready',
+      ),
     },
     models: {
       transcriber: transcriberSetup,
       corrector: correctorSetup,
+      reviewer: reviewerSetup,
       switchLocked: {
         transcriber: isSwitchLocked(count.state, transcriberPhase) || reviewing,
         corrector: reviewing,
+        reviewer: reviewing,
       },
       setup: {
         ...setupState,

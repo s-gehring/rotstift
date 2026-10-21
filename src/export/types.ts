@@ -16,6 +16,7 @@ export interface ContentNote {
   readonly page: number;
   readonly line: number;
   readonly text: string;
+  readonly coveredBy?: string;
 }
 
 export interface ContentReport {

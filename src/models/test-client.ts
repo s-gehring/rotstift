@@ -66,6 +66,7 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     return Promise.resolve(true);
   });
   const select = vi.fn<ModelClient['select']>(() => Promise.resolve(undefined));
+  const selectReviewer = vi.fn<ModelClient['selectReviewer']>(() => Promise.resolve(undefined));
   const remove = vi.fn<ModelClient['remove']>((modelId) =>
     Promise.resolve(write(modelId, 'missing', 0)),
   );
@@ -82,6 +83,8 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     cancelDownload,
     selection: () => Promise.resolve(null),
     select,
+    reviewerSelection: () => Promise.resolve(null),
+    selectReviewer,
     remove,
     importFiles,
     onDownload: (handler) => {
@@ -100,6 +103,7 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     startDownload,
     cancelDownload,
     select,
+    selectReviewer,
     remove,
     importFiles,
     write,
