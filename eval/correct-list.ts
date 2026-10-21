@@ -1,7 +1,8 @@
 import { CATALOG, findErrorKind } from '../src/annotations/catalog.ts';
 import type { CorrectionProfile } from '../src/annotations/profile.ts';
 import type { Mark, Transcript } from '../src/annotations/transcript.ts';
-import type { ChatMessage } from './correct-prompts.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from '../src/correction/scope.ts';
+import { withAssignment, type ChatMessage } from './correct-prompts.ts';
 
 interface ListItem {
   n: number;
@@ -51,9 +52,13 @@ export function listSpecification(profile: CorrectionProfile): string {
   ].join('\n');
 }
 
-export function listMessages(profile: CorrectionProfile, input: Transcript): ChatMessage[] {
+export function listMessages(
+  profile: CorrectionProfile,
+  input: Transcript,
+  scope: CorrectionScope = DEFAULT_SCOPE,
+): ChatMessage[] {
   return [
-    { role: 'system', content: listSpecification(profile) },
+    { role: 'system', content: withAssignment(listSpecification(profile), scope) },
     {
       role: 'user',
       content: input.lines.map((line) => `${line.number}: ${line.text}`).join('\n'),

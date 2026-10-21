@@ -1,4 +1,5 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import type { CorrectionScope } from './scope.ts';
 
 export type CorrectError =
   | { readonly kind: 'unavailable'; readonly message: string }
@@ -14,6 +15,7 @@ export interface Corrector {
     lines: readonly string[],
     profile: CorrectionProfile,
     signal: AbortSignal,
+    scope?: CorrectionScope,
   ): Promise<CorrectResult>;
 }
 

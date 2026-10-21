@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import { CORRECTOR_MISSING, IMAGE_FAILED, LAYOUT_FAILED, NOT_RERECOGNIZED } from './review-flow.ts';
+import { DEFAULT_SCOPE } from '../correction/scope.ts';
+import { requestedTypes } from './summary.ts';
 import { deferred, readingOf, setupReview, tick, waitFor } from './test-support.ts';
 
 describe('createReviewFlow', () => {
@@ -229,6 +231,26 @@ describe('createReviewFlow', () => {
 
     expect(h.log).toEqual(['C:Ich war im Schwimbad.']);
     expect(flow.getState().pages.a?.status).toBe('done');
+  });
+
+  it('marks only the requested kinds and corrects again with the current scope', async () => {
+    const { pages, flow } = setupReview(['a', 'b']);
+    const grammarOnly = { ...DEFAULT_SCOPE, spelling: false };
+    await flow.start(pages, DEUTSCH, grammarOnly);
+    const types = () =>
+      flow.getState().pages.a?.result?.transcript.lines[0]?.marks.map((m) => m.type);
+    expect(types()).toEqual([]);
+    expect(flow.getState().pages.a?.result?.requested).toEqual(['G', 'A', 'Sb', 'T', 'Bz', 'W']);
+    const arbeiten = [{ id: 'x', name: 'Aufsatz', pages }];
+    expect(requestedTypes(arbeiten, flow.getState())).toEqual(['G', 'A', 'Sb', 'T', 'Bz', 'W']);
+
+    const [first] = pages;
+    if (first === undefined) throw new Error('missing page');
+    await flow.retry(first, { scope: { ...DEFAULT_SCOPE, grammar: false } });
+    expect(types()).toEqual(['R']);
+    expect(flow.getState().pages.b?.result?.requested).toEqual(['G', 'A', 'Sb', 'T', 'Bz', 'W']);
+    expect(requestedTypes(arbeiten, flow.getState())).toEqual(DEUTSCH.allowedTypes);
+    expect(requestedTypes(arbeiten.slice(0, 0), flow.getState())).toEqual(DEUTSCH.allowedTypes);
   });
 
   it('cancels during recognition without correcting anything', async () => {

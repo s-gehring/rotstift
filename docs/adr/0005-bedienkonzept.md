@@ -36,7 +36,7 @@ Das Fenster hat eine Kopfzeile und darunter genau eine von zwei Ansichten.
 | Neue Arbeiten dazu | wieder „Korrigieren“ bzw. „Wörter zählen“, läuft nur für das Fehlende                    |
 
 - **Korrigieren** erkennt den Text und korrigiert ihn. Die Wortzahl fällt dabei mit ab. **Nur Wörter zählen** erkennt nur und braucht kein Korrekturmodell. Die zuletzt gewählte Art bleibt die Hauptaktion.
-- **Fach** ist eine kleine Auswahl links neben dem Knopf (Deutsch, Englisch). Die Sprache folgt aus dem Fach und wird nicht gesondert gewählt. Welche Kürzel markiert werden, steht nicht in der Oberfläche.
+- **Fach** ist ein kleines Aufklappfeld links neben dem Knopf. Der Knopf zeigt das Fach, darin stehen Fach, Rechtschreibung, Grammatik und Aufgabenstellung ([0007](0007-korrekturumfang.md)). Die Sprache folgt aus dem Fach und wird nicht gesondert gewählt. Welche Kürzel markiert werden, steht nicht in der Oberfläche.
 - **Exportieren** bietet: Klassen-PDF, Tabelle (CSV), Tabelle kopieren. In der Arbeit-Ansicht zusätzlich und zuerst „Diese Arbeit als PDF“. Gespeichert wird immer über den Systemdialog mit vorgeschlagenem Namen. Erfolg zeigt eine kurze Meldung, die von selbst verschwindet.
 - Während eines Laufs sind Sortieren, Entfernen und Laden gesperrt. Die Menüpunkte sind dann ausgegraut, nicht ausgeblendet.
 

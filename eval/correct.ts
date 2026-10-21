@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { parseTranscript } from '../src/annotations/parse.ts';
 import type { ParseIssue } from '../src/annotations/parse.ts';
 import { DEUTSCH } from '../src/annotations/profile.ts';
+import { scopedProfile, type CorrectionScope } from '../src/correction/scope.ts';
 import { serializeTranscript } from '../src/annotations/serialize.ts';
 import type { Transcript } from '../src/annotations/transcript.ts';
 import { countWords } from '../src/stats/count-words.ts';
@@ -15,7 +16,12 @@ import { CORRECTORS } from './correct-models.ts';
 import type { Corrector } from './correct-models.ts';
 import { diffAnswer, diffMessages, diffRepairMessages } from './correct-diff.ts';
 import { listMessages, listRepairMessages, listSchema, listToTranscript } from './correct-list.ts';
-import { PROMPT_VARIANTS, buildMessages, repairMessages } from './correct-prompts.ts';
+import {
+  PROMPT_VARIANTS,
+  buildMessages,
+  repairMessages,
+  scopeFromArgs,
+} from './correct-prompts.ts';
 import type { ChatMessage, PromptVariant } from './correct-prompts.ts';
 import { correctorReport } from './correct-report.ts';
 import type { CorrectorRun, DocResult, Group } from './correct-report.ts';
@@ -52,6 +58,7 @@ interface Options {
   ubatchSize: number | undefined;
   serverArgs: string[];
   repair: boolean;
+  scope: CorrectionScope;
 }
 
 function plainWords(transcript: Transcript): number {
@@ -139,7 +146,10 @@ async function complete(server: Server, messages: readonly ChatMessage[], option
       ? {
           response_format: {
             type: 'json_schema',
-            json_schema: { name: 'errors', schema: listSchema(DEUTSCH) },
+            json_schema: {
+              name: 'errors',
+              schema: listSchema(scopedProfile(DEUTSCH, options.scope)),
+            },
           },
         }
       : {}),
@@ -156,16 +166,17 @@ interface Judgement {
 }
 
 function judge(doc: Doc, answer: string, options: Options): Judgement {
+  const profile = scopedProfile(DEUTSCH, options.scope);
   if (options.format === 'tags') {
-    const parsed = parseTranscript(answer, { profile: DEUTSCH, source: doc.input });
+    const parsed = parseTranscript(answer, { profile, source: doc.input });
     return parsed.ok
       ? { transcript: parsed.transcript, issues: [], items: undefined }
       : { transcript: undefined, issues: parsed.issues, items: undefined };
   }
   if (options.format === 'diff') {
-    const { transcript, issues } = diffAnswer(doc.input, answer);
+    const { transcript, issues } = diffAnswer(doc.input, answer, profile);
     const parsed = parseTranscript(serializeTranscript(transcript), {
-      profile: DEUTSCH,
+      profile,
       source: doc.input,
     });
     return {
@@ -176,7 +187,7 @@ function judge(doc: Doc, answer: string, options: Options): Judgement {
   }
   const list = listToTranscript(doc.input, answer);
   const parsed = parseTranscript(serializeTranscript(list.transcript), {
-    profile: DEUTSCH,
+    profile,
     source: doc.input,
   });
   const issues = [
@@ -188,9 +199,9 @@ function judge(doc: Doc, answer: string, options: Options): Judgement {
 
 async function correct(server: Server, doc: Doc, options: Options): Promise<DocResult> {
   const messages = {
-    tags: () => buildMessages(options.prompt, DEUTSCH, doc.input),
-    list: () => listMessages(DEUTSCH, doc.input),
-    diff: () => diffMessages(DEUTSCH, doc.input, options.prompt),
+    tags: () => buildMessages(options.prompt, DEUTSCH, doc.input, options.scope),
+    list: () => listMessages(scopedProfile(DEUTSCH, options.scope), doc.input, options.scope),
+    diff: () => diffMessages(DEUTSCH, doc.input, options.prompt, options.scope),
   }[options.format]();
   const first = await complete(server, messages, options);
   let answer = cleanTranscript(first.content);
@@ -332,6 +343,8 @@ async function main() {
       'ubatch-size': { type: 'string' },
       'server-args': { type: 'string', default: '' },
       'no-repair': { type: 'boolean', default: false },
+      scope: { type: 'string', default: 'all' },
+      assignment: { type: 'string', default: '' },
       out: { type: 'string' },
       rescore: { type: 'string' },
     },
@@ -351,6 +364,7 @@ async function main() {
     ubatchSize: values['ubatch-size'] ? Number(values['ubatch-size']) : undefined,
     serverArgs: values['server-args'].split(' ').filter((argument) => argument !== ''),
     repair: !values['no-repair'],
+    scope: scopeFromArgs(values.scope, values.assignment),
   };
   const width = Number(values['line-chars']);
   const groups = new Set(values.groups.split(','));

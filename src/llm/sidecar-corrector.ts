@@ -46,7 +46,7 @@ export function createSidecarCorrector(
   return {
     engine: engine.monitor(model.id),
 
-    async correct(lines, profile, signal): Promise<CorrectResult> {
+    async correct(lines, profile, signal, scope): Promise<CorrectResult> {
       const leases: EngineLease[] = [];
       const corrector = createLlmCorrector({
         client: watched,
@@ -56,7 +56,7 @@ export function createSidecarCorrector(
         },
       });
       try {
-        const result = await corrector.correct(lines, profile, signal);
+        const result = await corrector.correct(lines, profile, signal, scope);
         if (!result.ok && result.error.kind === 'unavailable') options.onUnavailable?.();
         return result;
       } finally {

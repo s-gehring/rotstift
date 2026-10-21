@@ -207,8 +207,66 @@ thead th {
   line-height: 1.4;
 }
 
-.subject-select select {
-  min-width: 96px;
+.subject-select-mark {
+  color: var(--color-text-muted);
+}
+
+.scope-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 280px;
+  box-sizing: border-box;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.scope-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.scope-field > span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.scope-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  background: var(--color-raised);
+  resize: vertical;
+}
+
+.scope-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.scope-kind {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.scope-kind input {
+  margin: 0;
 }
 
 .run-status {
