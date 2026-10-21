@@ -1,5 +1,7 @@
 import argparse
 import hashlib
+import json
+import math
 import random
 import re
 import urllib.request
@@ -27,6 +29,8 @@ RULING = (186, 200, 222)
 MARGIN_LINE = (225, 160, 160)
 INK = (28, 40, 115)
 MARKUP = re.compile(r"\{([^{}|]*)\|[^{}|]*\|[RZG]\}")
+STRUCK = re.compile(r"^~~(.+)~~$")
+STRIKE_STYLES = ("line", "double", "scribble")
 
 HERE = Path(__file__).resolve().parent
 CACHE = Path.home() / ".cache" / "rotstift" / "fonts"
@@ -49,6 +53,57 @@ def written_text(markup: str) -> str:
     return MARKUP.sub(lambda match: match.group(1), markup)
 
 
+def plain(word: str) -> str:
+    match = STRUCK.match(word)
+    return match.group(1) if match else word
+
+
+def misspell(word: str, rng: random.Random) -> str:
+    if len(word) < 4:
+        return word[:-1] or word
+    at = rng.randrange(1, len(word) - 1)
+    return word[:at] + word[at + 1:] if rng.random() < 0.5 else word[:at] + word[at + 1] + word[at] + word[at + 2:]
+
+
+def strike_words(text: str, count: int, rng: random.Random) -> str:
+    lines = [line.split() for line in text.split("\n")]
+    slots = [(row, col) for row, words in enumerate(lines) for col in range(len(words)) if row or col]
+    pool = [re.sub(r"\W", "", word) for words in lines for word in words]
+    pool = [word for word in pool if 2 <= len(word) <= 8]
+    for row, col in sorted(rng.sample(slots, min(count, len(slots))), reverse=True):
+        following = re.sub(r"\W", "", lines[row][col])
+        if len(following) >= 4 and rng.random() < 0.5:
+            struck = misspell(following, rng)
+        else:
+            struck = rng.choice(pool)
+        lines[row].insert(col, f"~~{struck}~~")
+    return "\n".join(" ".join(words) for words in lines)
+
+
+def draw_strike(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float], style: str,
+                rng: random.Random) -> tuple[float, float, float, float]:
+    left, top, right, bottom = box
+    middle = top + (bottom - top) * rng.uniform(0.45, 0.6)
+    fill = rng.randint(220, 255)
+    width = rng.choice((3, 4))
+    start, end = left - rng.uniform(2, 8), right + rng.uniform(2, 8)
+    if style == "scribble":
+        height = (bottom - top) * 0.3
+        step = rng.uniform(7, 11)
+        points, x, up = [], start, True
+        while x < end:
+            points.append((x, middle + (-height if up else height) + rng.uniform(-2, 2)))
+            x, up = x + step, not up
+        draw.line(points, fill=fill, width=width, joint="curve")
+        return (start, top, end, bottom)
+    tilt = rng.uniform(-4, 4)
+    offsets = (-0.12, 0.12) if style == "double" else (0.0,)
+    for offset in offsets:
+        y = middle + offset * (bottom - top)
+        draw.line([(start, y - tilt), (end, y + tilt)], fill=fill, width=width)
+    return (start, top, end, bottom)
+
+
 def layout(text: str, font: ImageFont.FreeTypeFont, width: int) -> list[list[str]]:
     lines: list[list[str]] = []
     space = font.getlength(" ")
@@ -57,18 +112,18 @@ def layout(text: str, font: ImageFont.FreeTypeFont, width: int) -> list[list[str
         current: list[str] = []
         used = 0.0
         for word in words:
-            needed = font.getlength(word) + (space * 1.3 if current else 0)
+            needed = font.getlength(plain(word)) + (space * 1.3 if current else 0)
             if current and used + needed > width:
                 lines.append(current)
                 current, used = [], 0.0
-                needed = font.getlength(word)
+                needed = font.getlength(plain(word))
             current.append(word)
             used += needed
         lines.append(current)
     return lines
 
 
-def render(text: str, font_name: str, seed: int) -> Image.Image:
+def render(text: str, font_name: str, seed: int) -> tuple[Image.Image, list[list[float]]]:
     rng = random.Random(seed)
     _, size, _ = FONTS[font_name]
     font_path = font_file(font_name)
@@ -89,6 +144,8 @@ def render(text: str, font_name: str, seed: int) -> Image.Image:
     ink = Image.new("L", PAGE, 0)
     ink_draw = ImageDraw.Draw(ink)
     space = font.getlength(" ")
+    strikes = seed
+    struck: list[tuple[float, float, float, float]] = []
     for index, words in enumerate(lines):
         baseline = TOP + index * LINE_HEIGHT - 6 + rng.uniform(-3, 3)
         x = MARGIN_LEFT + rng.uniform(-6, 10)
@@ -96,31 +153,54 @@ def render(text: str, font_name: str, seed: int) -> Image.Image:
         for word in words:
             word_font = font.font_variant(size=max(10, round(size * rng.uniform(0.94, 1.06))))
             y = baseline + drift * (x - MARGIN_LEFT) + rng.uniform(-2.5, 2.5)
-            ink_draw.text((x, y), word, font=word_font, fill=rng.randint(215, 255), anchor="ls")
-            x += word_font.getlength(word) + space * rng.uniform(1.0, 1.6)
+            shown = plain(word)
+            ink_draw.text((x, y), shown, font=word_font, fill=rng.randint(215, 255), anchor="ls")
+            if shown != word:
+                _, top, _, _ = ink_draw.textbbox((x, y), "x", font=word_font, anchor="ls")
+                box = (x, top, x + word_font.getlength(shown), y)
+                struck.append(draw_strike(ink_draw, box, STRIKE_STYLES[strikes % len(STRIKE_STYLES)], rng))
+                strikes += 1
+            x += word_font.getlength(shown) + space * rng.uniform(1.0, 1.6)
 
     ink = ink.filter(ImageFilter.GaussianBlur(0.7))
     page.paste(Image.new("RGB", PAGE, INK), mask=ink)
 
     noise = Image.effect_noise(PAGE, 10).convert("RGB")
     page = Image.blend(page, noise, 0.06)
-    page = page.rotate(rng.uniform(-0.8, 0.8), resample=Image.Resampling.BICUBIC, fillcolor=PAPER)
-    return page.filter(ImageFilter.GaussianBlur(0.4))
+    angle = rng.uniform(-0.8, 0.8)
+    page = page.rotate(angle, resample=Image.Resampling.BICUBIC, fillcolor=PAPER)
+    return page.filter(ImageFilter.GaussianBlur(0.4)), [rotated_box(box, angle) for box in struck]
+
+
+def rotated_box(box: tuple[float, float, float, float], angle: float) -> list[float]:
+    center_x, center_y = PAGE[0] / 2, PAGE[1] / 2
+    cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    corners = [(x, y) for x in (box[0], box[2]) for y in (box[1], box[3])]
+    xs = [center_x + (x - center_x) * cos + (y - center_y) * sin for x, y in corners]
+    ys = [center_y - (x - center_x) * sin + (y - center_y) * cos for x, y in corners]
+    return [round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=HERE / "rendered")
+    parser.add_argument("--strike", type=int, default=0)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     texts = sorted((HERE / "texts").glob("*.txt"))
     for text_index, text_path in enumerate(texts):
         text = written_text(text_path.read_text(encoding="utf-8").strip())
         for font_index, font_name in enumerate(FONTS):
-            image = render(text, font_name, seed=1000 * text_index + font_index)
+            seed = 1000 * text_index + font_index
+            page_text = strike_words(text, args.strike, random.Random(seed)) if args.strike else text
+            image, struck = render(page_text, font_name, seed=seed)
             target = args.out / f"{text_path.stem}--{font_name}.jpg"
             image.save(target, quality=85)
-            print(target.relative_to(HERE.parent.parent))
+            if args.strike:
+                target.with_suffix(".txt").write_text(page_text + "\n", encoding="utf-8")
+                boxes = {"width": PAGE[0], "height": PAGE[1], "boxes": struck}
+                target.with_suffix(".strikes.json").write_text(json.dumps(boxes) + "\n", encoding="utf-8")
+            print(target)
 
 
 if __name__ == "__main__":

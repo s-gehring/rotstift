@@ -1,3 +1,4 @@
+import { visibleText } from '../annotations/struck.ts';
 import { listErrors } from '../annotations/transcript.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import { countWords } from './count-words.ts';
@@ -27,7 +28,7 @@ function joinLines(lines: string[]): string {
 }
 
 export function computeStatistics(transcript: Transcript): Statistics {
-  const words = countWords(joinLines(transcript.lines.map((line) => line.text)));
+  const words = countWords(joinLines(transcript.lines.map(visibleText)));
   const counts = new Map<string, number>();
   const errors = listErrors(transcript);
   for (const error of errors) {

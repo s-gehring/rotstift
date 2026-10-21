@@ -106,4 +106,32 @@ describe('createLayoutLocator', () => {
     const result = await locator.locate(page.image, lines);
     expect(result.lines.filter((line) => line !== null)).toHaveLength(6);
   });
+
+  it('asks the worker for struck words and rejects an answer for the wrong task', async () => {
+    const worker = new FakeWorker();
+    worker.reply = (request) =>
+      request.task === 'struck'
+        ? { id: request.id, ok: true, struck: [[1], []] }
+        : { id: request.id, ok: true, result: RESULT };
+    const locator = createLayoutLocator(() => worker);
+    await expect(locator.struckWords(PIXELS, ['a b', 'c'])).resolves.toEqual([[1], []]);
+    expect(worker.requests[0]?.task).toBe('struck');
+    worker.reply = (request) => ({ id: request.id, ok: true, result: RESULT });
+    await expect(locator.struckWords(PIXELS, ['a'])).rejects.toThrow('wrong task');
+  });
+
+  it('finds struck words on the calling thread when workers are unavailable', async () => {
+    const lines = sampleLines(3, 6);
+    const page = renderPage({
+      width: 700,
+      height: 600,
+      pitch: 50,
+      seed: 4,
+      lines,
+      struck: [[], [1]],
+    });
+    const struck = await createLayoutLocator(null).struckWords(page.image, lines);
+    expect(struck[1]).toEqual([1]);
+    expect(struck.filter((_, index) => index !== 1).flat()).toEqual([]);
+  });
 });

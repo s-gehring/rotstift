@@ -17,7 +17,7 @@ Rotstift erkennt handschriftliche Texte, zählt ihre Wörter und korrigiert sie,
 - **Nur Wörter zählen:** Erkennt die Seiten ohne Korrektur und braucht kein Korrekturmodell. Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Arbeit. Leere Seiten zählen mit 0 Wörtern. Ist eine Arbeit nur teilweise gezählt, steht „mind.“ vor der Zahl.
 - **Exportieren:** PDF je Arbeit oder für die ganze Klasse, eine Tabelle als CSV, die deutsches Excel direkt öffnet (UTF-8 mit BOM, Semikolon), oder dieselbe Tabelle in die Zwischenablage. Den Speicherort wählt man im Systemdialog.
 
-Genauigkeit der Wortzahl: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag sie im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Durchgestrichenes behandelt Rotstift noch nicht gesondert.
+Genauigkeit der Wortzahl: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag sie im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Mit einem oder zwei Strichen durchgestrichene Wörter erkennt Rotstift an der Tinte, zählt sie nicht mit und korrigiert sie nicht. Im erkannten Text stehen sie als `~~Wort~~`, so lässt sich eine Streichung auch von Hand setzen oder entfernen. Etwa die Hälfte der gestrichenen Wörter wird so erkannt, Gekritzel und Überschreibungen meist nicht ([Messung](docs/evaluations/2026-10-durchgestrichen.md)).
 
 Genauigkeit der Korrektur: Auf selbst geschriebenen, getippten Schülertexten findet die Korrektur 86 % der Fehler, 97 % der Markierungen stimmen ([Messung](docs/evaluations/2026-10-fehlermarkierung.md)). Auf Handschrift kommen Lesefehler der Texterkennung hinzu. Auf fehlerfreien Seiten bleiben dank der Lesesicherheit rund 1 bis 2 rote Fehlalarme je 100 Wörter, dazu etwa 10 Stellen „unsicher gelesen“ ([Messung](docs/evaluations/2026-10-lesefehler.md)). Deshalb trägt jedes PDF den Hinweis, die automatische Korrektur zu prüfen.
 
@@ -26,7 +26,7 @@ Geschwindigkeit: Die Texterkennung braucht nur auf der CPU rund 12 Sekunden pro 
 Geplant:
 
 - Weniger Stellen „unsicher gelesen“ durch eine genauere Texterkennung, Schwelle auf echter Schülerhandschrift prüfen.
-- Durchgestrichenes erkennen und nicht mitzählen.
+- Durchgestrichenes zuverlässiger erkennen, auch Gekritzel und Überschreibungen.
 - Statistik nach Schwere der Fehler.
 - Signierte Installer für Windows und macOS, vorbereitet in [docs/signieren.md](docs/signieren.md).
 

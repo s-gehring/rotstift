@@ -1,10 +1,19 @@
+import { createLayoutLocator, type LayoutLocator } from '../layout/layout-client.ts';
 import { createLlmClient } from '../llm/client.ts';
 import { sharedEngine } from '../llm/engine.ts';
 import { createModelClient, type ModelClient } from '../models/client.ts';
 import type { ModelInfo } from '../models/registry.ts';
 import { createLlmTranscriber } from './llm-transcriber.ts';
 import type { TranscriberEnvironment } from './provider.ts';
+import { withStruckWords } from './struck-words.ts';
 import type { PageTranscriber } from './transcriber.ts';
+
+let struckLocator: LayoutLocator | null = null;
+
+function findStruckWords(png: Blob, lines: readonly string[]): Promise<number[][]> {
+  struckLocator ??= createLayoutLocator();
+  return struckLocator.struckWords(png, lines);
+}
 
 async function loadDemo(): Promise<PageTranscriber> {
   if (import.meta.env.DEV) {
@@ -28,11 +37,14 @@ export function browserEnvironment(): TranscriberEnvironment {
     isTauri: isTauri(),
     loadDemo,
     createModelTranscriber: (model: ModelInfo, onUnavailable?: () => void) =>
-      createLlmTranscriber({
-        client: createLlmClient(),
-        engine: sharedEngine(),
-        model,
-        ...(onUnavailable && { onUnavailable }),
-      }),
+      withStruckWords(
+        createLlmTranscriber({
+          client: createLlmClient(),
+          engine: sharedEngine(),
+          model,
+          ...(onUnavailable && { onUnavailable }),
+        }),
+        findStruckWords,
+      ),
   };
 }

@@ -133,3 +133,25 @@ describe('continuesHyphenation', () => {
     expect(continuesHyphenation('Wir sind -', 'gangen')).toBe(false);
   });
 });
+
+describe('computeStatistics with struck text', () => {
+  it('does not count struck words', () => {
+    const statistics = computeStatistics({
+      lines: [
+        {
+          number: 1,
+          text: 'Ich gehe ging nach Hause',
+          marks: [],
+          struck: [{ offset: 4, text: 'gehe' }],
+        },
+        {
+          number: 2,
+          text: 'ganz alleine',
+          marks: [],
+          struck: [{ offset: 0, text: 'ganz alleine' }],
+        },
+      ],
+    });
+    expect(statistics.words).toBe(4);
+  });
+});

@@ -3,7 +3,7 @@ import { findErrorKind } from './catalog.ts';
 import { clip } from './clip.ts';
 import type { CorrectionProfile } from './profile.ts';
 import { bboxSchema, transcriptSchema } from './transcript.ts';
-import type { Mark, Transcript, TranscriptLine } from './transcript.ts';
+import type { Mark, Struck, Transcript, TranscriptLine } from './transcript.ts';
 
 export interface ParseIssue {
   message: string;
@@ -67,6 +67,7 @@ interface LineState {
   number: number | undefined;
   text: string;
   marks: Mark[];
+  struck: Struck[];
 }
 
 class Collector {
@@ -146,7 +147,7 @@ function collectMarkText(collector: Collector, line: LineState, tag: string, nod
       text += child.textContent ?? '';
     } else if (isElement(child)) {
       const name = child.localName;
-      if (name === 'rs-error' || name === 'rs-missing') {
+      if (name === 'rs-error' || name === 'rs-missing' || name === 'rs-struck') {
         collector.report(
           line,
           `<${name}> darf nicht in <${tag}> verschachtelt sein. Markierungen dürfen sich nicht überlappen oder enthalten.`,
@@ -200,6 +201,29 @@ function parseError(collector: Collector, line: LineState, element: Element): vo
   }
 }
 
+function parseStruck(collector: Collector, line: LineState, element: Element): void {
+  for (const { name } of Array.from(element.attributes)) {
+    collector.report(
+      line,
+      `<rs-struck>: Unbekanntes Attribut „${clip(name)}“. Es sind keine Attribute erlaubt.`,
+    );
+  }
+  const raw = collectMarkText(collector, line, 'rs-struck', element).replaceAll(/\s+/g, ' ');
+  const text = raw.trim();
+  if (text === '') {
+    collector.report(line, 'Ein <rs-struck> ohne Text ist leer.');
+    return;
+  }
+  if (raw.startsWith(' ')) {
+    appendText(line, ' ');
+  }
+  line.struck.push({ offset: line.text.length, text });
+  line.text += text;
+  if (raw.endsWith(' ')) {
+    appendText(line, ' ');
+  }
+}
+
 function parseOmission(collector: Collector, line: LineState, element: Element): void {
   const attributes = collector.attributes(line, 'rs-missing', markAttributes, element, [
     'type',
@@ -242,6 +266,9 @@ function walkLine(collector: Collector, line: LineState, parent: Node): void {
         case 'rs-missing':
           parseOmission(collector, line, element);
           break;
+        case 'rs-struck':
+          parseStruck(collector, line, element);
+          break;
         case 'rs-line':
           collector.report(line, '<rs-line> darf nicht in einer anderen <rs-line> stehen.');
           walkLine(collector, line, element);
@@ -259,7 +286,7 @@ function parseLine(
   element: Element,
   position: number,
 ): TranscriptLine | undefined {
-  const line: LineState = { position, number: undefined, text: '', marks: [] };
+  const line: LineState = { position, number: undefined, text: '', marks: [], struck: [] };
   const rawNumber = element.getAttribute('n') ?? '';
   line.number = /^[1-9]\d*$/.test(rawNumber) ? Number(rawNumber) : undefined;
   const attributes = collector.attributes(line, 'rs-line', lineAttributes, element, ['n', 'bbox']);
@@ -280,6 +307,7 @@ function parseLine(
     ...(attributes.bbox ? { bbox: attributes.bbox } : {}),
     text: line.text,
     marks: line.marks,
+    ...(line.struck.length > 0 ? { struck: line.struck } : {}),
   };
 }
 
@@ -378,6 +406,11 @@ function applySource(collector: Collector, lines: TranscriptLine[], source: Tran
       line.bbox = sourceLine.bbox;
     } else {
       delete line.bbox;
+    }
+    if (sourceLine.struck !== undefined && sourceLine.struck.length > 0) {
+      line.struck = sourceLine.struck;
+    } else {
+      delete line.struck;
     }
   }
   for (const line of lines) {

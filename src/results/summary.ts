@@ -1,3 +1,4 @@
+import { readStruck } from '../annotations/struck.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { PageEntry, PageStatus } from '../pipeline/runner.ts';
 import { continuesHyphenation, computeStatistics } from '../stats/statistics.ts';
@@ -38,7 +39,9 @@ interface Candidate {
 
 export function countPageWords(text: string): number {
   return computeStatistics({
-    lines: text.split('\n').map((line, index) => ({ number: index + 1, text: line, marks: [] })),
+    lines: text
+      .split('\n')
+      .map((line, index) => ({ number: index + 1, ...readStruck(line), marks: [] })),
   }).words;
 }
 

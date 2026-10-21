@@ -44,6 +44,10 @@ describe('countPageWords', () => {
     expect(countPageWords('Wir gingen in den Wald ge-\ngangen und lachten.')).toBe(8);
     expect(countPageWords('')).toBe(0);
   });
+
+  it('leaves out struck words', () => {
+    expect(countPageWords('Wir ~~gehen~~ gingen\nin den ~~Wlad~~ Wald.')).toBe(5);
+  });
 });
 
 describe('buildResults', () => {
