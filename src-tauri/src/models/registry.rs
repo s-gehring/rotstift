@@ -99,8 +99,25 @@ impl ModelEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CustomTemplates {
+    pub transcriber: String,
+    pub corrector: String,
+}
+
+impl CustomTemplates {
+    pub fn for_role(&self, role: Role) -> &str {
+        match role {
+            Role::Transcriber => &self.transcriber,
+            Role::Corrector => &self.corrector,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Registry {
+    pub custom_templates: CustomTemplates,
     pub models: Vec<ModelEntry>,
 }
 
@@ -119,14 +136,14 @@ pub fn url_allowed(url: &Url) -> bool {
         && url.host_str().is_some_and(host_allowed)
 }
 
-fn is_hex(value: &str, length: usize) -> bool {
+pub(super) fn is_hex(value: &str, length: usize) -> bool {
     value.len() == length
         && value
             .bytes()
             .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-fn is_plain_gguf_name(name: &str) -> bool {
+pub(super) fn is_plain_gguf_name(name: &str) -> bool {
     name.ends_with(".gguf")
         && name.len() > ".gguf".len()
         && name
@@ -349,7 +366,21 @@ impl Registry {
                 return Err(format!("registry lacks the default model {default}"));
             }
         }
+        for role in [Role::Transcriber, Role::Corrector] {
+            let id = self.custom_templates.for_role(role);
+            if self.find(id).is_none_or(|entry| entry.role != role) {
+                return Err(format!("custom template {id} is not a {role:?} entry"));
+            }
+        }
         Ok(())
+    }
+
+    pub fn template(&self, role: Role) -> &ModelEntry {
+        let id = self.custom_templates.for_role(role);
+        self.models
+            .iter()
+            .find(|entry| entry.id == id)
+            .expect("validated template")
     }
 
     pub fn find(&self, id: &str) -> Option<&ModelEntry> {
@@ -405,7 +436,15 @@ mod tests {
     fn the_bundled_registry_lists_the_default_and_the_stronger_model() {
         let registry = registry().unwrap();
         let ids: Vec<&str> = registry.models.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, ["glm-ocr-q8", "qwen3-vl-4b-q4", "gemma-4-e2b-q4"]);
+        assert_eq!(
+            ids,
+            [
+                "glm-ocr-q8",
+                "qwen3-vl-4b-q4",
+                "gemma-4-e2b-q4",
+                "gemma-4-e4b-q4"
+            ]
+        );
         let stronger = registry.find("qwen3-vl-4b-q4").unwrap();
         assert_eq!(stronger.recommended_ram_gb, 16);
         assert_eq!(stronger.server.context_size, 4096);

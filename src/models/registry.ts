@@ -2,7 +2,6 @@ import { z } from 'zod';
 import registryJson from '../../src-tauri/models.json';
 
 const GIB = 1024 ** 3;
-const LOW_RAM_TOLERANCE = 0.9;
 
 const fileSchema = z.strictObject({
   name: z.string().min(1),
@@ -58,9 +57,33 @@ const correctorSchema = z.strictObject({
   prompt: z.string().includes('{text}'),
 });
 
+const roleSchema = z.enum(['transcriber', 'corrector']);
+
 const registrySchema = z.strictObject({
+  customTemplates: z.strictObject({ transcriber: z.string(), corrector: z.string() }),
   models: z.array(z.discriminatedUnion('role', [transcriberSchema, correctorSchema])).min(1),
 });
+
+const customFileSchema = z.strictObject({
+  name: z.string().regex(/^[A-Za-z0-9_-][A-Za-z0-9._-]*\.gguf$/u),
+  url: z.string(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+  bytes: z.number().int().positive(),
+});
+
+export const customModelSchema = z.strictObject({
+  id: z.string().regex(/^custom-[0-9a-f]{12}$/u),
+  role: roleSchema,
+  source: z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('huggingFace'), repo: z.string(), revision: z.string() }),
+    z.strictObject({ kind: z.literal('file') }),
+  ]),
+  files: z.strictObject({ model: customFileSchema, mmproj: customFileSchema.nullable() }),
+});
+
+export type FileRole = z.infer<typeof roleSchema>;
+export type CustomModel = z.infer<typeof customModelSchema>;
+export type CustomSource = CustomModel['source'];
 
 export type ModelInfo = z.infer<typeof transcriberSchema>;
 export type CorrectorInfo = z.infer<typeof correctorSchema>;
@@ -70,20 +93,28 @@ export const DEFAULT_MODEL_ID = 'glm-ocr-q8';
 export const DEFAULT_CORRECTOR_ID = 'gemma-4-e2b-q4';
 export const DEFAULT_REVIEWER_ID = DEFAULT_CORRECTOR_ID;
 
-export function parseRegistry(json: unknown): readonly AnyModelInfo[] {
-  const { models } = registrySchema.parse(json);
-  for (const [id, role] of [
-    [DEFAULT_MODEL_ID, 'transcriber'],
-    [DEFAULT_CORRECTOR_ID, 'corrector'],
+function parseRegistryFile(json: unknown) {
+  const { models, customTemplates } = registrySchema.parse(json);
+  for (const [id, role, kind] of [
+    [DEFAULT_MODEL_ID, 'transcriber', 'Standardmodell'],
+    [DEFAULT_CORRECTOR_ID, 'corrector', 'Standardmodell'],
+    [customTemplates.transcriber, 'transcriber', 'Vorlage'],
+    [customTemplates.corrector, 'corrector', 'Vorlage'],
   ] as const) {
     if (!models.some((model) => model.id === id && model.role === role)) {
-      throw new Error(`Die Modellliste enthält das Standardmodell ${id} nicht.`);
+      throw new Error(`Die Modellliste enthält ${kind} ${id} nicht.`);
     }
   }
-  return models;
+  return { models, customTemplates };
 }
 
-export const ALL_MODELS: readonly AnyModelInfo[] = parseRegistry(registryJson);
+export function parseRegistry(json: unknown): readonly AnyModelInfo[] {
+  return parseRegistryFile(json).models;
+}
+
+const REGISTRY = parseRegistryFile(registryJson);
+
+export const ALL_MODELS: readonly AnyModelInfo[] = REGISTRY.models;
 
 export const MODELS: readonly ModelInfo[] = ALL_MODELS.filter(
   (model): model is ModelInfo => model.role === 'transcriber',
@@ -120,6 +151,61 @@ export function defaultReviewer(): CorrectorInfo {
   return reviewer;
 }
 
+export type Sourced<T extends AnyModelInfo> = T & { readonly source?: CustomSource };
+
+function template(role: FileRole): AnyModelInfo {
+  const found = ALL_MODELS.find((model) => model.id === REGISTRY.customTemplates[role]);
+  if (found === undefined) throw new Error(`Die Modellliste enthält keine Vorlage für ${role}.`);
+  return found;
+}
+
+export function customEntry(custom: CustomModel): Sourced<AnyModelInfo> {
+  const base = template(custom.role);
+  const common = {
+    id: custom.id,
+    displayName: custom.files.model.name,
+    license: '',
+    source: custom.source,
+  };
+  if (base.role === 'transcriber') {
+    if (custom.files.mmproj === null) throw new Error(`${custom.id} hat keine Bilddatei.`);
+    return {
+      ...base,
+      ...common,
+      files: { model: custom.files.model, mmproj: custom.files.mmproj },
+      server: { ...base.server, cpuRepack: false },
+      request: { ...base.request, uncertainBelow: null },
+    };
+  }
+  return {
+    ...base,
+    ...common,
+    files: { model: custom.files.model },
+    server: { ...base.server, cpuRepack: false },
+  };
+}
+
+export function customSource(model: Sourced<AnyModelInfo>): CustomSource | null {
+  return model.source ?? null;
+}
+
+const GB = 1e9;
+const REPACK_MIN_RAM = 12 * GIB;
+const RESERVED_RAM = 3.5 * GIB;
+
+export function estimateRamBytes(model: AnyModelInfo, totalRamBytes: number | null): number {
+  const overhead = model.role === 'transcriber' ? 1.4 * GB : 0.65 * GB;
+  const repacks =
+    model.server.cpuRepack || (totalRamBytes !== null && totalRamBytes >= REPACK_MIN_RAM);
+  return totalBytes(model) * 1.05 + overhead + (repacks ? 0.47 * model.files.model.bytes : 0);
+}
+
+export function exceedsMemory(model: AnyModelInfo, totalRamBytes: number | null): boolean {
+  return (
+    totalRamBytes !== null && estimateRamBytes(model, totalRamBytes) > totalRamBytes - RESERVED_RAM
+  );
+}
+
 export function modelFiles(model: AnyModelInfo) {
   return model.role === 'transcriber'
     ? [model.files.model, model.files.mmproj]
@@ -128,14 +214,6 @@ export function modelFiles(model: AnyModelInfo) {
 
 export function totalBytes(model: AnyModelInfo): number {
   return modelFiles(model).reduce((sum, file) => sum + file.bytes, 0);
-}
-
-export function recommendedRamBytes(model: AnyModelInfo): number {
-  return model.recommendedRamGb * GIB;
-}
-
-export function isLowOnMemory(model: AnyModelInfo, totalRamBytes: number): boolean {
-  return totalRamBytes < recommendedRamBytes(model) * LOW_RAM_TOLERANCE;
 }
 
 const DEFAULT_IDS: ReadonlySet<string> = new Set([DEFAULT_MODEL_ID, DEFAULT_CORRECTOR_ID]);
@@ -154,45 +232,6 @@ export function recommendModel(models: readonly AnyModelInfo[] = MODELS): AnyMod
     );
   if (chosen === undefined) throw new Error('Die Modellliste ist leer.');
   return chosen;
-}
-
-export function offeredModels(totalRamBytes: number | null): readonly ModelInfo[];
-export function offeredModels<T extends AnyModelInfo>(
-  totalRamBytes: number | null,
-  models: readonly T[],
-): readonly T[];
-export function offeredModels(
-  totalRamBytes: number | null,
-  models: readonly AnyModelInfo[] = MODELS,
-): readonly AnyModelInfo[] {
-  const fallback = recommendModel(models);
-  return models.filter(
-    (model) =>
-      model.id === fallback.id || (totalRamBytes !== null && !isLowOnMemory(model, totalRamBytes)),
-  );
-}
-
-export function choiceModels<T extends AnyModelInfo>(
-  totalRamBytes: number | null,
-  active: T,
-  models: readonly T[],
-): readonly T[];
-export function choiceModels(totalRamBytes: number | null, active: ModelInfo): readonly ModelInfo[];
-export function choiceModels(
-  totalRamBytes: number | null,
-  active: AnyModelInfo,
-  models: readonly AnyModelInfo[] = MODELS,
-): readonly AnyModelInfo[] {
-  const offered = offeredModels(totalRamBytes, models);
-  return models.filter((model) => model.id === active.id || offered.includes(model));
-}
-
-const MODEL_NOTES: Readonly<Record<string, string>> = {
-  'qwen3-vl-4b-q4': 'Zählt genauer, braucht doppelt so lange. Nur zum Wörterzählen.',
-};
-
-export function modelNote(model: AnyModelInfo): string | null {
-  return MODEL_NOTES[model.id] ?? null;
 }
 
 export interface ModelSource {

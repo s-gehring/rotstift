@@ -21,10 +21,12 @@ pub fn run() {
         .setup(|app| {
             diagnostics::init(app.handle());
             llm::commands::stop_orphaned_sidecars(app.handle());
+            models::commands::init_custom_models(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             llm::commands::llm_start_model,
+            llm::commands::llm_probe_model,
             llm::commands::llm_stop,
             llm::commands::llm_status,
             llm::commands::llm_chat,
@@ -36,6 +38,8 @@ pub fn run() {
             models::commands::model_status,
             models::commands::model_selection,
             models::commands::model_select,
+            models::commands::model_corrector_selection,
+            models::commands::model_select_corrector,
             models::commands::model_reviewer_selection,
             models::commands::model_select_reviewer,
             models::commands::hardware_info,
@@ -44,6 +48,10 @@ pub fn run() {
             models::commands::model_delete,
             models::commands::model_import,
             models::commands::model_verify,
+            models::commands::model_custom_list,
+            models::commands::model_custom_resolve,
+            models::commands::model_custom_add_link,
+            models::commands::model_custom_import,
             save::save_file,
         ])
         .build(tauri::generate_context!())

@@ -27,6 +27,13 @@ function fakeClient(state: ModelState): ModelClient {
     select: () => Promise.resolve(undefined),
     reviewerSelection: () => Promise.resolve(null),
     selectReviewer: () => Promise.resolve(undefined),
+    correctorSelection: () => Promise.resolve(null),
+    selectCorrector: () => Promise.resolve(undefined),
+    customModels: () => Promise.resolve([]),
+    resolveLink: () => Promise.reject(new Error('offline')),
+    addLink: () => Promise.reject(new Error('offline')),
+    importCustom: () => Promise.resolve(null),
+    probe: () => Promise.resolve(null),
     remove: (modelId) =>
       Promise.resolve({ modelId, state: 'missing', downloadedBytes: 0, totalBytes: 1 }),
     importFiles: () => Promise.resolve(null),

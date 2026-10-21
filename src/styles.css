@@ -514,9 +514,14 @@ thead th {
 }
 
 .settings-model-size,
+.settings-model-need,
 .settings-model-state,
 .settings-model-note {
   color: var(--color-text-muted);
+}
+
+.settings-model-need[data-warn] {
+  color: var(--color-red-text);
 }
 
 .settings-model-note {
@@ -532,6 +537,48 @@ thead th {
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
+}
+
+.custom-model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.custom-model-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.custom-model-link input {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.custom-model-files {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.custom-model-files label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.custom-model-files select {
+  max-width: 100%;
+}
+
+.custom-model .settings-actions,
+.custom-model .settings-note {
+  margin-top: 0;
 }
 
 .settings-section .confirm {

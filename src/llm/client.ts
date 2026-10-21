@@ -30,7 +30,7 @@ export class LlmCallError extends Error {
   }
 }
 
-function isLlmError(value: unknown): value is LlmError {
+export function isLlmError(value: unknown): value is LlmError {
   return typeof value === 'object' && value !== null && 'kind' in value;
 }
 

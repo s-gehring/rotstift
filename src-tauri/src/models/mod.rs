@@ -1,5 +1,8 @@
 pub mod commands;
+pub(crate) mod custom;
 mod download;
+mod gguf;
+mod hf;
 mod import;
 mod manager;
 pub mod registry;

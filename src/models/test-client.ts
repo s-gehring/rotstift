@@ -1,12 +1,13 @@
 import { vi } from 'vitest';
 import type { ModelClient } from './client.ts';
-import { ALL_MODELS, totalBytes } from './registry.ts';
+import { ALL_MODELS, customEntry, totalBytes, type CustomModel } from './registry.ts';
 import type { DownloadEvent, HardwareInfo, ModelState, ModelStatus } from './types.ts';
 
 export interface FakeClientOptions {
   readonly states?: Readonly<Record<string, ModelState>>;
   readonly present?: Readonly<Record<string, number>>;
   readonly hardware?: HardwareInfo | null;
+  readonly custom?: readonly CustomModel[];
 }
 
 export function fakeModelClient(options: FakeClientOptions = {}) {
@@ -25,6 +26,18 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
       ];
     }),
   );
+  const customs: CustomModel[] = [...(options.custom ?? [])];
+  const track = (custom: CustomModel) => {
+    const total = totalBytes(customEntry(custom));
+    const state = options.states?.[custom.id] ?? 'missing';
+    statuses.set(custom.id, {
+      modelId: custom.id,
+      state,
+      downloadedBytes: state === 'ready' ? total : 0,
+      totalBytes: total,
+    });
+  };
+  customs.forEach(track);
   const handlers = new Set<(event: DownloadEvent) => void>();
   const control: { statusError: Error | null } = { statusError: null };
 
@@ -65,12 +78,33 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     dispatch({ modelId, state: 'cancelled' });
     return Promise.resolve(true);
   });
-  const select = vi.fn<ModelClient['select']>(() => Promise.resolve(undefined));
-  const selectReviewer = vi.fn<ModelClient['selectReviewer']>(() => Promise.resolve(undefined));
+  const chosen: Record<'transcriber' | 'corrector' | 'reviewer', string | null> = {
+    transcriber: null,
+    corrector: null,
+    reviewer: null,
+  };
+  const choose = (slot: keyof typeof chosen) => (modelId: string) => {
+    chosen[slot] = modelId;
+    return Promise.resolve(undefined);
+  };
+  const select = vi.fn<ModelClient['select']>(choose('transcriber'));
+  const selectReviewer = vi.fn<ModelClient['selectReviewer']>(choose('reviewer'));
   const remove = vi.fn<ModelClient['remove']>((modelId) =>
     Promise.resolve(write(modelId, 'missing', 0)),
   );
   const importFiles = vi.fn<ModelClient['importFiles']>(() => Promise.resolve(null));
+  const selectCorrector = vi.fn<ModelClient['selectCorrector']>(choose('corrector'));
+  const resolveLink = vi.fn<ModelClient['resolveLink']>(() => Promise.reject(new Error('no link')));
+  const addCustom = (custom: CustomModel) => {
+    if (!customs.some((entry) => entry.id === custom.id)) {
+      customs.push(custom);
+      track(custom);
+    }
+    return custom.id;
+  };
+  const addLink = vi.fn<ModelClient['addLink']>(() => Promise.reject(new Error('no link')));
+  const importCustom = vi.fn<ModelClient['importCustom']>(() => Promise.resolve(null));
+  const probe = vi.fn<ModelClient['probe']>(() => Promise.resolve(null));
 
   const client: ModelClient = {
     status,
@@ -81,12 +115,19 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     verify,
     startDownload,
     cancelDownload,
-    selection: () => Promise.resolve(null),
+    selection: () => Promise.resolve(chosen.transcriber),
     select,
-    reviewerSelection: () => Promise.resolve(null),
+    correctorSelection: () => Promise.resolve(chosen.corrector),
+    selectCorrector,
+    reviewerSelection: () => Promise.resolve(chosen.reviewer),
     selectReviewer,
     remove,
     importFiles,
+    customModels: () => Promise.resolve([...customs]),
+    resolveLink,
+    addLink,
+    importCustom,
+    probe,
     onDownload: (handler) => {
       handlers.add(handler);
       return Promise.resolve(() => {
@@ -104,8 +145,14 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     cancelDownload,
     select,
     selectReviewer,
+    selectCorrector,
     remove,
     importFiles,
+    resolveLink,
+    addLink,
+    importCustom,
+    addCustom,
+    probe,
     write,
     dispatch,
   };

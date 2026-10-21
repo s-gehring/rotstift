@@ -7,7 +7,13 @@ import { Dialog } from '../ui/Dialog.tsx';
 import { Icon } from '../ui/icons.tsx';
 import { ProgressBar } from '../ui/ProgressBar.tsx';
 import { describeDownloadError, formatMemory, formatSize, remainingMs } from './format.ts';
-import { isLowOnMemory, modelFiles, totalBytes, type AnyModelInfo } from './registry.ts';
+import {
+  estimateRamBytes,
+  exceedsMemory,
+  modelFiles,
+  totalBytes,
+  type AnyModelInfo,
+} from './registry.ts';
 import { ROLE_NAME } from './role-text.ts';
 import type { ModelState } from './types.ts';
 import type { ModelSetup } from './use-model-setup.ts';
@@ -211,9 +217,18 @@ export function SetupDialog() {
     models.transcriber.state.hardware ??
     models.corrector.state.hardware ??
     models.reviewer.state.hardware;
-  const lowMemory = entries.find(
-    (entry) => hardware != null && isLowOnMemory(entry.setup.model, hardware.totalRamBytes),
-  );
+  const totalRam = hardware?.totalRamBytes ?? null;
+  const lowMemory = entries
+    .map((entry) => entry.setup.model)
+    .filter((model) => exceedsMemory(model, totalRam))
+    .reduce<AnyModelInfo | undefined>(
+      (largest, model) =>
+        largest === undefined ||
+        estimateRamBytes(model, totalRam) > estimateRamBytes(largest, totalRam)
+          ? model
+          : largest,
+      undefined,
+    );
   const freeDisk = hardware?.freeDiskBytes ?? null;
   const lowDisk = freeDisk !== null && startable.length > 0 && freeDisk < neededBytes;
   const open = request.open && available;
@@ -308,10 +323,10 @@ export function SetupDialog() {
         </div>
       )}
 
-      {lowMemory !== undefined && hardware != null && (
+      {lowMemory !== undefined && totalRam !== null && (
         <p className="setup-warning">
-          Dieser Rechner hat {formatMemory(hardware.totalRamBytes)} Arbeitsspeicher, empfohlen sind{' '}
-          {lowMemory.setup.model.recommendedRamGb} GB.
+          {lowMemory.displayName} braucht etwa {formatSize(estimateRamBytes(lowMemory, totalRam))},
+          dieser Rechner hat {formatMemory(totalRam)} Arbeitsspeicher.
         </p>
       )}
       {lowDisk && (

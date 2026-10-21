@@ -113,7 +113,7 @@ describe('setupReducer', () => {
     expect(activeModel(switched).id).toBe(DEFAULT_MODEL_ID);
   });
 
-  it('falls back to the default for unknown choices and machines that are too small', () => {
+  it('falls back to the default for unknown choices but keeps a choice on a small machine', () => {
     const unknown = setupReducer(INITIAL_SETUP, {
       type: 'loaded',
       statuses: [],
@@ -127,7 +127,7 @@ describe('setupReducer', () => {
       hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: null },
       selectedId: STRONGER,
     });
-    expect(activeModel(small).id).toBe(DEFAULT_MODEL_ID);
+    expect(activeModel(small).id).toBe(STRONGER);
   });
 
   it('keeps the choice when a later refresh does not report one', () => {

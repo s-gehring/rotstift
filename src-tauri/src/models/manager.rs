@@ -6,6 +6,7 @@ use serde::Serialize;
 use tokio::fs;
 use tokio::sync::watch;
 
+use super::custom;
 use super::download::{
     DownloadError, Downloader, Progress, import_path, part_path, remove_stale_parts,
 };
@@ -110,6 +111,7 @@ pub fn entry(model_id: &str) -> Result<&'static ModelEntry, DownloadError> {
     registry()
         .map_err(DownloadError::Io)?
         .find(model_id)
+        .or_else(|| custom::find(model_id))
         .ok_or_else(|| DownloadError::UnknownModel(model_id.into()))
 }
 
@@ -406,10 +408,11 @@ impl ModelManager {
         dir: &Path,
         entry: &'static ModelEntry,
         before_delete: impl FnOnce(),
+        shared: impl Fn(&ModelFile) -> bool,
     ) -> Result<(), DownloadError> {
         let _reservation = self.reserve(entry, JobKind::Delete)?;
         before_delete();
-        for file in entry.file_list() {
+        for file in entry.file_list().into_iter().filter(|file| !shared(file)) {
             for path in [
                 dir.join(&file.name),
                 marker_path(dir, file),

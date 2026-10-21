@@ -11,6 +11,7 @@ import {
   type CreateCorrector,
 } from './corrector-setup.ts';
 import {
+  CORRECTORS,
   defaultCorrector,
   defaultReviewer,
   recommendModel,
@@ -51,6 +52,13 @@ function fakeClient(initial: Readonly<Record<string, ModelState>>) {
     select: () => Promise.resolve(undefined),
     reviewerSelection,
     selectReviewer,
+    correctorSelection: () => Promise.resolve(null),
+    selectCorrector: () => Promise.resolve(undefined),
+    customModels: () => Promise.resolve([]),
+    resolveLink: () => Promise.reject(new Error('offline')),
+    addLink: () => Promise.reject(new Error('offline')),
+    importCustom: () => Promise.resolve(null),
+    probe: () => Promise.resolve(null),
     remove: (modelId) => {
       states[modelId] = 'missing';
       return Promise.resolve({ modelId, state: 'missing', downloadedBytes: 0, totalBytes: 1 });
@@ -122,7 +130,9 @@ describe('useCorrectorSetup', () => {
     expect(latest?.corrector).toBeNull();
     expect(create).not.toHaveBeenCalled();
     expect(selection).not.toHaveBeenCalled();
-    expect(new Set(status.mock.calls.map(([modelId]) => modelId))).toEqual(new Set([corrector.id]));
+    expect(new Set(status.mock.calls.map(([modelId]) => modelId))).toEqual(
+      new Set(CORRECTORS.map((entry) => entry.id)),
+    );
   });
 
   it('builds the sidecar corrector once the model is ready and refreshes when it vanishes', async () => {
