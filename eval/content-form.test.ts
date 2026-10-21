@@ -13,7 +13,7 @@ import {
   featuresFor,
 } from './content-form-features.ts';
 import { MISSING_KIND, parseReview, scoreReview, serializeReview } from './content-form-review.ts';
-import { parseSample } from './content-form-sample.ts';
+import { MISMATCH, parseSample, withTask } from './content-form-sample.ts';
 import { loadSamples } from './content-form.ts';
 
 const SOURCE = `Fach: Deutsch
@@ -50,6 +50,27 @@ describe('parseSample', () => {
     });
     expect(outside.map((sample) => sample.id)).toEqual([]);
     expect(samples.filter((sample) => sample.defects.length === 0)).toHaveLength(2);
+  });
+});
+
+describe('withTask', () => {
+  const samples = [
+    parseSample('a', SOURCE),
+    parseSample('b', SOURCE.replace('Form: Brief', 'Form: Bericht')),
+  ];
+
+  it('drops the assignment or the form', () => {
+    expect(withTask(samples, 'no-assignment').map((sample) => sample.assignment)).toEqual(['', '']);
+    expect(withTask(samples, 'no-form').map((sample) => sample.form)).toEqual(['', '']);
+    expect(withTask(samples, 'keep')).toEqual(samples);
+  });
+
+  it('gives every text the task of the next one and expects only the mismatch', () => {
+    const swapped = withTask(samples, 'swap');
+    expect(swapped.map((sample) => sample.form)).toEqual(['Bericht', 'Brief']);
+    expect(
+      swapped.every((sample) => sample.defects.length === 1 && sample.defects[0] === MISMATCH),
+    ).toBe(true);
   });
 });
 

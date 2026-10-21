@@ -18,9 +18,9 @@ import {
 } from './content-form-features.ts';
 import { parseReview, serializeReview } from './content-form-review.ts';
 import type { ReviewComment } from './content-form-review.ts';
-import { listing, summaryTable } from './content-form-report.ts';
+import { defectTable, listing, summaryTable } from './content-form-report.ts';
 import type { ReviewDoc, ReviewRun } from './content-form-report.ts';
-import { parseSample } from './content-form-sample.ts';
+import { TASK_MODES, parseSample, withTask } from './content-form-sample.ts';
 import type { ReviewSample } from './content-form-sample.ts';
 import { corrector, localFile } from './ocr-registry.ts';
 import { samplesDir } from './paths.ts';
@@ -121,6 +121,9 @@ async function runReview(
   const threads = Number(string('threads', '8'));
   const temperature = Number(string('temperature', String(model.request.temperature)));
   const runCount = Number(string('runs', '3'));
+  const task = TASK_MODES.find((mode) => mode === string('task', 'keep'));
+  if (!task) throw new Error(`--task (${TASK_MODES.join(', ')})`);
+  const tasked = withTask(samples, task);
   const server = await launchServer({
     model: modelFile,
     contextSize: model.server.contextSize,
@@ -134,7 +137,7 @@ async function runReview(
     for (let run = 0; run < runCount; run += 1) {
       const seed = run + 1;
       const docs: ReviewDoc[] = [];
-      for (const sample of samples) {
+      for (const sample of tasked) {
         const started = performance.now();
         if (variant === 'features') {
           const result = await featureReview(server.port, sample, temperature, seed);
@@ -190,11 +193,12 @@ async function runReview(
   return {
     label: string(
       'label',
-      `${basename(modelFile, '.gguf')} ${variant}${values['verify'] ? '+Prüfung' : ''} T=${temperature}`,
+      `${basename(modelFile, '.gguf')} ${variant}${values['verify'] ? '+Prüfung' : ''} T=${temperature}${task === 'keep' ? '' : ` ${task}`}`,
     ),
     model: basename(modelFile),
     variant,
     temperature,
+    task,
     threads,
     machine: `${hostname()} (${cpus()[0]?.model.trim() ?? 'CPU'})`,
     peakRssBytes,
@@ -217,16 +221,20 @@ async function main() {
       out: { type: 'string' },
       list: { type: 'boolean', default: false },
       verify: { type: 'boolean', default: false },
+      task: { type: 'string' },
+      defects: { type: 'boolean', default: false },
     },
   });
   const samples = loadSamples(values.samples);
   if (positionals.length > 0) {
     const results: ReviewRun[] = positionals.map((file) => JSON.parse(readFileSync(file, 'utf8')));
     console.log(summaryTable(samples, results));
+    if (values.defects) console.log(`\n${defectTable(samples, results)}`);
     if (values.list) {
       for (const result of results) {
         result.runs.forEach((run, index) => {
-          console.log(`\n# ${result.label} #${index + 1}\n${listing(samples, run.docs)}`);
+          const tasked = withTask(samples, result.task ?? 'keep');
+          console.log(`\n# ${result.label} #${index + 1}\n${listing(tasked, run.docs)}`);
         });
       }
     }

@@ -1,6 +1,7 @@
 import { MISSING_KIND, parseReview, scoreReview, wordCount } from './content-form-review.ts';
 import type { ReviewComment } from './content-form-review.ts';
-import type { ReviewSample } from './content-form-sample.ts';
+import { withTask } from './content-form-sample.ts';
+import type { ReviewSample, TaskMode } from './content-form-sample.ts';
 
 export interface ReviewDoc {
   readonly id: string;
@@ -20,6 +21,7 @@ export interface ReviewRun {
   readonly model: string;
   readonly variant: string;
   readonly temperature: number;
+  readonly task?: TaskMode;
   readonly threads: number;
   readonly machine: string;
   readonly peakRssBytes: number;
@@ -107,7 +109,7 @@ export function summaryTable(
 ): string {
   const rows = results.flatMap((result) =>
     result.runs.map((run, index) => {
-      const f = figures(samples, run.docs);
+      const f = figures(withTask(samples, result.task ?? 'keep'), run.docs);
       return [
         `${result.label} #${index + 1}`,
         `${percent(f.byComment, f.defects)} (${f.byComment}/${f.defects})`,
@@ -141,6 +143,34 @@ export function summaryTable(
 
 const describe = (comment: ReviewComment, sample: ReviewSample) =>
   `  ${comment.line} ${comment.kind}: ${comment.text}   ⟵ ${sample.lines[comment.line - 1] ?? ''}`;
+
+export function defectTable(
+  samples: readonly ReviewSample[],
+  results: readonly ReviewRun[],
+): string {
+  const rows = new Map<string, string[]>();
+  results.forEach((result, column) => {
+    const tasked = withTask(samples, result.task ?? 'keep');
+    for (const sample of tasked) {
+      sample.defects.forEach((defect, index) => {
+        const hits = result.runs.filter((run) => {
+          const doc = run.docs.find((entry) => entry.id === sample.id);
+          if (!doc) return false;
+          const score = scoreReview(sample, parseReview(doc.output, sample.lines.length));
+          return score.defects[index]?.byComment === true;
+        }).length;
+        const key = `${sample.id}: ${defect.label}`;
+        const row = rows.get(key) ?? results.map(() => '–');
+        row[column] = `${hits}/${result.runs.length}`;
+        rows.set(key, row);
+      });
+    }
+  });
+  const header = ['Mangel', ...results.map((result) => result.label)];
+  return [header, header.map(() => '---'), ...[...rows].map(([key, row]) => [key, ...row])]
+    .map((row) => `| ${row.join(' | ')} |`)
+    .join('\n');
+}
 
 export function listing(samples: readonly ReviewSample[], docs: readonly ReviewDoc[]): string {
   return docs

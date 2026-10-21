@@ -64,3 +64,35 @@ export function parseSample(id: string, source: string): ReviewSample {
     defects,
   };
 }
+
+export const TASK_MODES = ['keep', 'no-assignment', 'no-form', 'swap'] as const;
+export type TaskMode = (typeof TASK_MODES)[number];
+
+export const MISMATCH: Defect = {
+  kind: 'content',
+  label: 'Passt nicht zur Aufgabe',
+  keywords: [
+    'thema',
+    'aufgabe',
+    'verfehlt',
+    'vorgabe',
+    'nicht erfüllt',
+    'passt nicht',
+    'behandelt nicht',
+    'beschreibt nicht',
+    'beschreibt keine',
+    'ist keine',
+    'keine chronik',
+  ],
+  line: null,
+};
+
+export function withTask(samples: readonly ReviewSample[], mode: TaskMode): ReviewSample[] {
+  return samples.map((sample, index) => {
+    if (mode === 'no-assignment') return { ...sample, assignment: '' };
+    if (mode === 'no-form') return { ...sample, form: '' };
+    if (mode === 'keep') return sample;
+    const other = samples[(index + 1) % samples.length] ?? sample;
+    return { ...sample, form: other.form, assignment: other.assignment, defects: [MISMATCH] };
+  });
+}
