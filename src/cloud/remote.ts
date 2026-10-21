@@ -4,7 +4,7 @@ import type { LlmEngine } from '../llm/engine.ts';
 import { MAX_IMAGE_EDGE } from '../llm/image.ts';
 import { template, type CorrectorInfo, type ModelInfo } from '../models/registry.ts';
 import type { EngineMonitor } from '../pipeline/transcriber.ts';
-import type { CloudStep } from './client.ts';
+import type { CloudStep, CloudView } from './client.ts';
 import { findTemplate } from './templates.ts';
 
 export function cloudLlmClient(step: ModelRole, invoke?: Invoke): LlmClient {
@@ -54,6 +54,13 @@ export function remoteCorrector(step: CloudStep, role: 'corrector' | 'reviewer')
 export function cloudUsable(step: CloudStep | undefined): step is CloudStep {
   if (step === undefined || !step.confirmed) return false;
   return step.key !== null || findTemplate(step.template)?.key === 'optional';
+}
+
+export const PRIVACY_NOTE = 'Alles bleibt auf diesem Rechner.';
+export const CLOUD_PRIVACY_NOTE = 'Cloud-Modelle senden Daten an Drittanbieter.';
+
+export function privacyNote(steps: CloudView['steps']): string {
+  return Object.values(steps).some((step) => !step.loopback) ? CLOUD_PRIVACY_NOTE : PRIVACY_NOTE;
 }
 
 export function cloudBlockedMessage(step: CloudStep): string {

@@ -1,6 +1,6 @@
 # Rotstift
 
-Cross-platform desktop app (Tauri 2, React, TypeScript) that corrects student work offline: It transcribes handwritten scans or PDFs with a local model, annotates the text with standardized correction marks and draws them in thin red "fineliner" handwriting onto the original pages, plus statistics. Privacy is the core constraint: Student data never leaves the machine, no telemetry, no network calls except model downloads. It must run on an 8 GB laptop without GPU.
+Cross-platform desktop app (Tauri 2, React, TypeScript) that corrects student work, offline by default: It transcribes handwritten scans or PDFs with a local model, annotates the text with standardized correction marks and draws them in thin red "fineliner" handwriting onto the original pages, plus statistics. Privacy is the core constraint: No telemetry, and student data never leaves the machine unless the user switches a step to a cloud model or an own server ([ADR 0009](docs/adr/0009-cloud-modelle.md)). Otherwise there are no network calls except model downloads, and cloud calls only go through Rust. It must run on an 8 GB laptop without GPU.
 
 ## Commands
 

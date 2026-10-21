@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useApp } from '../app/app-context.tsx';
+import { privacyNote } from '../cloud/remote.ts';
 import { Button } from '../ui/Button.tsx';
 import { Icon } from '../ui/icons.tsx';
 import { Menu } from '../ui/Menu.tsx';
@@ -34,7 +35,7 @@ function sumFigures(figures: readonly (Figure | null)[]): Figure | null {
 }
 
 export function KlasseView() {
-  const { importState, run, work, navigation, toasts } = useApp();
+  const { importState, run, work, navigation, toasts, models } = useApp();
   const { arbeiten, pages, dispatch, addFiles, busy, undo } = importState;
   const { show } = toasts;
   const locked = run.running;
@@ -248,7 +249,7 @@ export function KlasseView() {
           <p className="klasse-drop-title">Arbeiten hierher ziehen</p>
           <Button onClick={openPicker}>Dateien auswählen</Button>
           <p className="klasse-drop-note" role={busy ? 'status' : undefined}>
-            {busy ? 'Wird geladen …' : 'PDF oder Bilder. Alles bleibt auf diesem Rechner.'}
+            {busy ? 'Wird geladen …' : `PDF oder Bilder. ${privacyNote(models.cloud.steps)}`}
           </p>
         </div>
       ) : (

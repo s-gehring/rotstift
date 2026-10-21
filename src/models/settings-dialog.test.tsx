@@ -424,10 +424,36 @@ describe('SettingsDialog with live model state', () => {
     expect(section('corrector').textContent).toContain('Eigener Server');
     expect(section('corrector').querySelector('.cloud-model-key')).toBeNull();
     expect(container.textContent).toContain('Alles bleibt auf diesem Rechner.');
+    expect(section('corrector').textContent).not.toContain('nur bis zum Beenden');
 
     await click(radios(section('corrector'))[2]);
     expect(clear).toHaveBeenCalledExactlyOnceWith('corrector');
     await vi.waitFor(() => expect(fake.selectCorrector).toHaveBeenCalledExactlyOnceWith(E4B_ID));
+  });
+
+  it('says where the key of a cloud step lives and asks for a missing one', async () => {
+    const step = {
+      template: 'mistral',
+      label: 'Mistral AI',
+      baseUrl: 'https://api.mistral.ai/v1',
+      host: 'api.mistral.ai',
+      model: 'mistral-small-latest',
+      loopback: false,
+      confirmed: true,
+    } as const;
+    const cloud = testCloud({
+      available: true,
+      steps: {
+        transcriber: { ...step, key: 'session' },
+        corrector: { ...step, key: null },
+      },
+    });
+    await mountLive({ cloud }, { hardware: BIG });
+    expect(section('transcriber').textContent).toContain('Schlüssel gilt nur bis zum Beenden.');
+    expect(section('transcriber').querySelector('.cloud-model-key')).toBeNull();
+    expect(section('corrector').querySelector('.cloud-model-key')).not.toBeNull();
+    expect(section('corrector').textContent).toContain('Mistral AI · api.mistral.ai');
+    expect(container.textContent).toContain('Cloud-Modelle senden Daten an Drittanbieter.');
   });
 
   it('offers a cloud model per step only in the desktop app', async () => {

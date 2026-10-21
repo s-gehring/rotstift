@@ -3,8 +3,8 @@ import { act, useEffect, useMemo, useReducer } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProvider } from '../app/app-context.tsx';
-import { testAppModel, testToasts, testWork } from '../app/test-app.ts';
-import type { ImportPages, RunController } from '../app/types.ts';
+import { testAppModel, testCloud, testToasts, testWork } from '../app/test-app.ts';
+import type { ImportPages, Models, RunController } from '../app/types.ts';
 import type { ToastOptions } from '../ui/Toast.tsx';
 import { flattenPages, type Arbeit } from './arbeiten.ts';
 import { INITIAL_IMPORT_STATE, importReducer, type ImportState } from './import-state.ts';
@@ -50,10 +50,12 @@ function Harness({
   initial = start,
   run = {},
   withResults = false,
+  models,
 }: {
   readonly initial?: ImportState;
   readonly run?: Partial<RunController>;
   readonly withResults?: boolean;
+  readonly models?: Partial<Models>;
 }) {
   const [state, dispatch] = useReducer(importReducer, initial);
   useEffect(() => {
@@ -88,6 +90,7 @@ function Harness({
   const model = testAppModel({
     importState,
     run,
+    models,
     work,
     toasts: testToasts({
       show: (text, options) => toastCalls.push({ text, options }),
@@ -172,6 +175,31 @@ describe('empty Klasse', () => {
     render({ initial: INITIAL_IMPORT_STATE });
     expect(container.textContent).toBe(
       'Arbeiten hierher ziehenDateien auswählenPDF oder Bilder. Alles bleibt auf diesem Rechner.',
+    );
+  });
+
+  it('says when cloud models send data to third parties', () => {
+    render({
+      initial: INITIAL_IMPORT_STATE,
+      models: {
+        cloud: testCloud({
+          steps: {
+            transcriber: {
+              template: 'mistral',
+              label: 'Mistral AI',
+              baseUrl: 'https://api.mistral.ai/v1',
+              host: 'api.mistral.ai',
+              model: 'pixtral-12b',
+              loopback: false,
+              confirmed: true,
+              key: 'system',
+            },
+          },
+        }),
+      },
+    });
+    expect(container.querySelector('.klasse-drop-note')?.textContent).toBe(
+      'PDF oder Bilder. Cloud-Modelle senden Daten an Drittanbieter.',
     );
   });
 

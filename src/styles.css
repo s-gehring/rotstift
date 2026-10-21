@@ -717,6 +717,7 @@ thead th {
 
 .cloud-model input,
 .cloud-model select {
+  box-sizing: border-box;
   width: min(24rem, 100%);
 }
 

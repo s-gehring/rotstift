@@ -3,6 +3,7 @@ import packageInfo from '../../package.json';
 import { useApp } from '../app/app-context.tsx';
 import type { ModelRole } from '../app/types.ts';
 import { CloudKeyForm, CloudModelForm } from '../cloud/CloudModelForm.tsx';
+import { privacyNote } from '../cloud/remote.ts';
 import { findTemplate } from '../cloud/templates.ts';
 import type { CloudModel } from '../cloud/use-cloud.ts';
 import { Button } from '../ui/Button.tsx';
@@ -203,6 +204,9 @@ function CloudRow({
             <span className="settings-model-note">
               {step.label === step.host ? step.host : `${step.label} · ${step.host}`}
             </span>
+            {step.key === 'session' && (
+              <span className="settings-model-note">Schlüssel gilt nur bis zum Beenden.</span>
+            )}
           </span>
         </label>
         <Button variant="quiet" disabled={locked} onClick={() => void cloud.clear(role)}>
@@ -388,7 +392,6 @@ function ModelSection({
 export function SettingsDialog() {
   const { models } = useApp();
   const { settings, transcriber, corrector, reviewer, cloud, switchLocked, setup } = models;
-  const anyCloud = Object.values(cloud.steps).some((step) => !step.loopback);
   const reviewerShared =
     reviewer.model.id === corrector.model.id &&
     cloud.steps.corrector === undefined &&
@@ -428,10 +431,7 @@ export function SettingsDialog() {
       )}
       <WeightingSettings />
       <p className="settings-about">
-        Rotstift {packageInfo.version} ·{' '}
-        {anyCloud
-          ? 'Cloud-Modelle senden Daten an Drittanbieter.'
-          : 'Alles bleibt auf diesem Rechner.'}
+        Rotstift {packageInfo.version} · {privacyNote(cloud.steps)}
       </p>
     </Dialog>
   );
