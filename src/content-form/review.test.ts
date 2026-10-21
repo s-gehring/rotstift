@@ -1,16 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
-import { findTextForm } from './catalog.ts';
+import { TEXT_FORMS, findTextForm } from './catalog.ts';
 import {
   MAX_FORM_NAME_LENGTH,
   cleanFormName,
+  NO_FORM,
   contentQuestions,
+  formRequest,
   needsAssignment,
   needsFormName,
   numberWorkLines,
   questionRequest,
+  QUOTE_MAX_LENGTH,
+  quoteLine,
   readAnswer,
+  readFormAnswer,
   reviewContent,
   reviewsContent,
   summaryText,
@@ -41,7 +46,7 @@ const input = (overrides: Partial<CorrectionScope>): ContentInput => ({
 
 const signal = () => new AbortController().signal;
 
-const answer = (value: { erfuellt: boolean; zeile: number; kommentar?: string }) =>
+const answer = (value: { erfuellt: boolean; zitat: string; kommentar?: string }) =>
   JSON.stringify(value);
 
 function askWith(...answers: string[]) {
@@ -117,6 +122,37 @@ describe('contentQuestions', () => {
   });
 });
 
+describe('formRequest', () => {
+  it('offers every catalogue form and none as an enum without the student text', () => {
+    const request = formRequest(
+      scope({ form: true, formName: 'Argumentation', assignment: 'Erörtere.' }),
+    );
+    expect(request.schema).toEqual({
+      type: 'object',
+      properties: { textform: { enum: [...TEXT_FORMS.map((form) => form.name), NO_FORM] } },
+      required: ['textform'],
+      additionalProperties: false,
+    });
+    const text = JSON.stringify(request.messages);
+    expect(text).toContain('Verlangte Textform: Argumentation');
+    expect(text).toContain('<aufgabe>\\nErörtere.\\n</aufgabe>');
+    expect(text).not.toContain('Erste Zeile');
+  });
+});
+
+describe('readFormAnswer', () => {
+  it('returns the chosen catalogue form', () => {
+    expect(readFormAnswer('{"textform":"Lineare Erörterung"}')?.name).toBe('Lineare Erörterung');
+  });
+
+  it.each([`{"textform":"${NO_FORM}"}`, '{"textform":"Gedicht"}', 'kaputt', '{}'])(
+    'returns null for %s',
+    (raw) => {
+      expect(readFormAnswer(raw)).toBeNull();
+    },
+  );
+});
+
 describe('numberWorkLines', () => {
   it('numbers across pages and skips blank lines', () => {
     expect(numberWorkLines(lines)).toBe('1: Erste Zeile\n3: Dritte Zeile\n4: Vierte Zeile');
@@ -131,12 +167,14 @@ describe('questionRequest', () => {
   const generic: ContentQuestion = { kind: 'content', question: 'Frage?', comment: null };
   const fixed: ContentQuestion = { kind: 'form', question: 'Frage?', comment: 'Fest' };
 
-  it('limits zeile to the number of lines', () => {
-    const { schema } = questionRequest(input({}), fixed);
+  it('asks for a short quote instead of a line number', () => {
+    const { schema, messages } = questionRequest(input({}), fixed);
     expect(schema).toMatchObject({
-      properties: { zeile: { minimum: 1, maximum: 4 } },
+      properties: { zitat: { type: 'string', maxLength: QUOTE_MAX_LENGTH } },
       additionalProperties: false,
     });
+    expect(schema).not.toHaveProperty('properties.zeile');
+    expect(messages[1]?.content).toContain('zitat sind die ersten Wörter der Stelle');
   });
 
   it('asks for a comment only when the question has no fixed one', () => {
@@ -144,15 +182,10 @@ describe('questionRequest', () => {
     const without = questionRequest(input({}), fixed).schema;
     expect(withComment).toMatchObject({
       properties: { kommentar: { type: 'string' } },
-      required: ['erfuellt', 'zeile', 'kommentar'],
+      required: ['erfuellt', 'zitat', 'kommentar'],
     });
-    expect(without).toMatchObject({ required: ['erfuellt', 'zeile'] });
+    expect(without).toMatchObject({ required: ['erfuellt', 'zitat'] });
     expect(without).not.toHaveProperty('properties.kommentar');
-  });
-
-  it('allows at least line 1 for empty input', () => {
-    const { schema } = questionRequest({ ...input({}), lines: [] }, fixed);
-    expect(schema).toMatchObject({ properties: { zeile: { maximum: 1 } } });
   });
 
   it('puts the assignment inside aufgabe in the system message', () => {
@@ -202,61 +235,136 @@ describe('readAnswer', () => {
   const fixed: ContentQuestion = { kind: 'form', question: 'F?', comment: 'Fest' };
 
   it('returns null for invalid JSON or a wrong shape', () => {
-    expect(readAnswer('nope', generic, 4)).toBeNull();
-    expect(readAnswer('', generic, 4)).toBeNull();
-    expect(readAnswer('{"erfuellt":"ja","zeile":1}', generic, 4)).toBeNull();
-    expect(readAnswer('{"erfuellt":true,"zeile":1.5}', generic, 4)).toBeNull();
-  });
-
-  it('clamps the line into the valid range', () => {
-    expect(
-      readAnswer(answer({ erfuellt: false, zeile: 99, kommentar: 'x' }), generic, 4)?.line,
-    ).toBe(4);
-    expect(
-      readAnswer(answer({ erfuellt: false, zeile: -3, kommentar: 'x' }), generic, 4)?.line,
-    ).toBe(1);
-    expect(readAnswer(answer({ erfuellt: false, zeile: 5 }), generic, 0)?.line).toBe(1);
+    expect(readAnswer('nope', generic)).toBeNull();
+    expect(readAnswer('', generic)).toBeNull();
+    expect(readAnswer('{"erfuellt":"ja","zitat":"x"}', generic)).toBeNull();
+    expect(readAnswer('{"erfuellt":true}', generic)).toBeNull();
   });
 
   it('uses the fixed comment of the question', () => {
-    expect(readAnswer(answer({ erfuellt: false, zeile: 1, kommentar: 'egal' }), fixed, 4)).toEqual({
-      met: false,
-      line: 1,
-      text: 'Fest',
-    });
+    expect(
+      readAnswer(answer({ erfuellt: false, zitat: 'Hallo', kommentar: 'egal' }), fixed),
+    ).toEqual({ met: false, quote: 'Hallo', text: 'Fest' });
   });
 
   it('uses the tidied model comment and falls back to a default', () => {
     expect(
-      readAnswer(answer({ erfuellt: false, zeile: 2, kommentar: ' Thema  fehlt ' }), generic, 4)
+      readAnswer(answer({ erfuellt: false, zitat: 'x', kommentar: ' Thema  fehlt ' }), generic)
         ?.text,
     ).toBe('Thema fehlt');
-    expect(readAnswer(answer({ erfuellt: false, zeile: 2, kommentar: '' }), generic, 4)?.text).toBe(
+    expect(readAnswer(answer({ erfuellt: false, zitat: 'x', kommentar: '' }), generic)?.text).toBe(
       'Aufgabe nicht erfüllt',
     );
+  });
+});
+
+const page = (...texts: string[]): WorkLine[] =>
+  texts.map((text, index) => ({ pageId: 'p', line: index + 1, text }));
+
+describe('quoteLine', () => {
+  it('finds the line where the quoted words start, ignoring case and punctuation', () => {
+    const letter = page('Hallo Leute, ich bin', 'Mira und ich frage, ob ihr noch', 'Plätze habt.');
+    expect(quoteLine(letter, 'ob Ihr noch Plätze')).toBe(1);
+    expect(quoteLine(letter, '„Hallo Leute“')).toBe(0);
+  });
+
+  it('strips a line number the model copied', () => {
+    expect(quoteLine(page('Erste Zeile', 'Zweite Zeile'), '2: Zweite Zeile')).toBe(1);
+  });
+
+  it('tolerates a wrong first word', () => {
+    expect(quoteLine(page('Es war einmal', 'ein Fuchs im Wald'), 'Der Fuchs im Wald')).toBe(1);
+  });
+
+  it('returns null when fewer than two words match', () => {
+    const two = page('Erste Zeile', 'Zweite Zeile');
+    expect(quoteLine(two, 'Bewerbungsschreiben')).toBeNull();
+    expect(quoteLine(two, 'Zeile drei vier')).toBeNull();
+    expect(quoteLine(two, '')).toBeNull();
+  });
+
+  it('accepts a single quoted word that occurs', () => {
+    expect(quoteLine(page('Hallo', 'Ciao'), 'Ciao')).toBe(1);
   });
 });
 
 describe('reviewContent', () => {
   const contentScope = { content: true, assignment: 'Schreibe.' };
 
-  it('maps a blank line to the nearest non-blank line, preferring the following one', async () => {
+  it('places a comment at the quoted line across pages', async () => {
     const result = await reviewContent(
       input({ form: true, formName: 'Gedicht' }),
-      askWith(answer({ erfuellt: false, zeile: 2, kommentar: 'Reim fehlt' })),
+      askWith(answer({ erfuellt: false, zitat: 'Vierte Zeile', kommentar: 'Reim fehlt' })),
       signal(),
     );
     expect(result).toEqual({
       ok: true,
-      comments: [{ pageId: 'p2', line: 1, kind: 'form', text: 'Reim fehlt' }],
+      comments: [{ pageId: 'p2', line: 2, kind: 'form', text: 'Reim fehlt' }],
       questions: 1,
     });
+  });
+
+  it('falls back to the first written line when the quote is not in the text', async () => {
+    const result = await reviewContent(
+      input({ form: true, formName: 'Gedicht' }),
+      askWith(answer({ erfuellt: false, zitat: 'Reim und Strophe', kommentar: 'Reim fehlt' })),
+      signal(),
+    );
+    expect(result.ok && result.comments.map((comment) => comment.line)).toEqual([1]);
+  });
+
+  it('asks the catalogue features of the form the model picks for an unknown name', async () => {
+    const ask = askWith(
+      '{"textform":"Persönlicher Brief"}',
+      answer({ erfuellt: false, zitat: 'Erste Zeile' }),
+      answer({ erfuellt: true, zitat: 'Erste Zeile' }),
+    );
+    const result = await reviewContent(input({ form: true, formName: 'Grußkarte' }), ask, signal());
+    expect(ask).toHaveBeenCalledTimes(4);
+    expect(result).toEqual({
+      ok: true,
+      comments: [{ pageId: 'p1', line: 1, kind: 'form', text: 'Ort und Datum fehlen' }],
+      questions: 3,
+      checkedAs: 'Persönlicher Brief',
+    });
+  });
+
+  it('names the catalogue form in the prompt of a mapped name', async () => {
+    const ask = askWith(answer({ erfuellt: true, zitat: 'Erste Zeile' }));
+    await reviewContent(input({ form: true, formName: 'Brief an Oma' }), ask, signal());
+    const [request] = ask.mock.calls[0] ?? [];
+    expect(request?.messages[0]?.content).toContain('Verlangte Textform: Persönlicher Brief.');
+  });
+
+  it('maps a known pattern without asking the model and names the form it checked', async () => {
+    const ask = askWith(answer({ erfuellt: true, zitat: 'Erste Zeile' }));
+    const result = await reviewContent(
+      input({ form: true, formName: 'Brief an Oma' }),
+      ask,
+      signal(),
+    );
+    expect(ask).toHaveBeenCalledTimes(3);
+    expect(result).toEqual({
+      ok: true,
+      comments: [],
+      questions: 3,
+      checkedAs: 'Persönlicher Brief',
+    });
+  });
+
+  it('names no form when the given name is the catalogue name', async () => {
+    const result = await reviewContent(
+      input({ form: true, formName: 'persönlicher brief' }),
+      askWith(answer({ erfuellt: true, zitat: 'Erste Zeile' })),
+      signal(),
+    );
+    expect(result).toEqual({ ok: true, comments: [], questions: 3 });
   });
 
   it('reports nothing for met questions', async () => {
     const result = await reviewContent(
       input(contentScope),
-      askWith(answer({ erfuellt: true, zeile: 1 })),
+      askWith(answer({ erfuellt: true, zitat: 'Erste Zeile' })),
       signal(),
     );
     expect(result).toEqual({ ok: true, comments: [], questions: 2 });
@@ -265,7 +373,7 @@ describe('reviewContent', () => {
   it('drops comments with the same text', async () => {
     const result = await reviewContent(
       input({ form: true, formName: 'Brief' }),
-      askWith(answer({ erfuellt: false, zeile: 1 })),
+      askWith(answer({ erfuellt: false, zitat: 'Erste Zeile' })),
       signal(),
     );
     expect(result.ok && result.comments.map((comment) => comment.text)).toEqual([
@@ -275,7 +383,7 @@ describe('reviewContent', () => {
     ]);
     const same = await reviewContent(
       input(contentScope),
-      askWith(answer({ erfuellt: false, zeile: 1, kommentar: 'Thema verfehlt' })),
+      askWith(answer({ erfuellt: false, zitat: 'Erste Zeile', kommentar: 'Thema verfehlt' })),
       signal(),
     );
     expect(same.ok && same.comments).toHaveLength(1);
@@ -285,8 +393,8 @@ describe('reviewContent', () => {
     const result = await reviewContent(
       input(contentScope),
       askWith(
-        answer({ erfuellt: false, zeile: 1, kommentar: 'Thema verfehlt' }),
-        answer({ erfuellt: false, zeile: 3, kommentar: 'Vorgabe fehlt' }),
+        answer({ erfuellt: false, zitat: 'Erste Zeile', kommentar: 'Thema verfehlt' }),
+        answer({ erfuellt: false, zitat: 'Dritte Zeile', kommentar: 'Vorgabe fehlt' }),
       ),
       signal(),
     );
@@ -298,7 +406,10 @@ describe('reviewContent', () => {
   it('skips invalid answers but fails when none is valid', async () => {
     const partial = await reviewContent(
       input(contentScope),
-      askWith('kaputt', answer({ erfuellt: false, zeile: 3, kommentar: 'Vorgabe fehlt' })),
+      askWith(
+        'kaputt',
+        answer({ erfuellt: false, zitat: 'Dritte Zeile', kommentar: 'Vorgabe fehlt' }),
+      ),
       signal(),
     );
     expect(partial.ok && partial.comments).toHaveLength(1);
@@ -320,7 +431,7 @@ describe('reviewContent', () => {
     const blank = { ...input(contentScope), lines: [{ pageId: 'p1', line: 1, text: ' ' }] };
     const result = await reviewContent(
       blank,
-      askWith(answer({ erfuellt: false, zeile: 1, kommentar: 'x' })),
+      askWith(answer({ erfuellt: false, zitat: 'Erste Zeile', kommentar: 'x' })),
       signal(),
     );
     expect(result).toEqual({ ok: true, comments: [], questions: 2 });

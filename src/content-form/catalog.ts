@@ -28,10 +28,6 @@ const EINLEITUNG = feature(
   'Gibt es eine Einleitung, die zur Fragestellung hinführt?',
   'Einleitung fehlt',
 );
-const BELEG = feature(
-  'Ist jedes Argument begründet und mit einem Beispiel belegt?',
-  'Argument ohne Beleg',
-);
 const SACHLICH = feature(
   'Ist der Text sachlich, ohne persönliche Wertungen?',
   'Wertung, bitte sachlich',
@@ -156,7 +152,6 @@ export const TEXT_FORMS: readonly TextForm[] = [
     aliases: ['Erörterung', 'Steigernde Erörterung'],
     features: [
       EINLEITUNG,
-      BELEG,
       feature('Werden auch Gegenargumente genannt und abgewogen?', 'Gegenargumente fehlen'),
       FAZIT,
     ],
@@ -168,7 +163,6 @@ export const TEXT_FORMS: readonly TextForm[] = [
       EINLEITUNG,
       feature('Gibt es Argumente dafür?', 'Pro-Argumente fehlen'),
       feature('Gibt es Argumente dagegen?', 'Contra-Argumente fehlen'),
-      BELEG,
       feature(
         'Wägt der Schluss beide Seiten ab und nennt eine Meinung?',
         'Abwägung im Schluss fehlt',
@@ -186,11 +180,18 @@ export const TEXT_FORMS: readonly TextForm[] = [
       'Ensayo',
       'Ensayo argumentativo',
     ],
-    features: [EINLEITUNG, BELEG, FAZIT],
+    features: [EINLEITUNG, FAZIT],
   },
   {
     name: 'Bericht',
-    aliases: ['Zeitungsbericht', 'Unfallbericht', 'Nachricht', 'Zeitungsartikel', 'News report'],
+    aliases: [
+      'Zeitungsbericht',
+      'Unfallbericht',
+      'Nachricht',
+      'Meldung',
+      'Zeitungsartikel',
+      'News report',
+    ],
     features: [
       SACHLICH,
       feature('Steht der Text im Präteritum?', 'Präteritum verwenden'),
@@ -316,7 +317,7 @@ export const TEXT_FORMS: readonly TextForm[] = [
   },
   {
     name: 'Beschreibung',
-    aliases: ['Wegbeschreibung', 'Gegenstandsbeschreibung', 'Tierbeschreibung'],
+    aliases: ['Wegbeschreibung', 'Gegenstandsbeschreibung', 'Tierbeschreibung', 'Steckbrief'],
     features: [
       SACHLICH_PRAESENS,
       feature(
@@ -399,6 +400,48 @@ const BY_NAME = new Map(
 
 export function findTextForm(name: string): TextForm | null {
   return BY_NAME.get(normalizeFormName(name)) ?? null;
+}
+
+const MIN_COMPOUND_PART = 5;
+const MIN_COMPOUND_REST = 4;
+
+const nameWords = (name: string) =>
+  name
+    .split(/[^\p{L}\p{N}]+/u)
+    .map(normalizeFormName)
+    .filter(Boolean);
+
+const NAME_WORDS = TEXT_FORMS.flatMap((form) =>
+  [form.name, ...form.aliases].map((name) => ({ form, words: nameWords(name) })),
+);
+
+function wordMatch(word: string, part: string): boolean {
+  if (word === part) return true;
+  if (part.length < MIN_COMPOUND_PART) return false;
+  if (word.endsWith(part)) return word.length - part.length >= 2;
+  return (
+    word.startsWith(part) &&
+    word.slice(part.length).replace(/^e?s/u, '').length >= MIN_COMPOUND_REST
+  );
+}
+
+function sequenceMatch(words: readonly string[], parts: readonly string[]): boolean {
+  if (parts.length === 1) return words.some((word) => wordMatch(word, parts[0] ?? ''));
+  return words.some((_, start) => parts.every((part, offset) => words[start + offset] === part));
+}
+
+export function matchTextForm(name: string): TextForm | null {
+  const exact = findTextForm(name);
+  if (exact !== null) return exact;
+  const words = nameWords(name);
+  let best: { form: TextForm; length: number } | null = null;
+  for (const entry of NAME_WORDS) {
+    const length = entry.words.join('').length;
+    if (length > (best?.length ?? 0) && sequenceMatch(words, entry.words)) {
+      best = { form: entry.form, length };
+    }
+  }
+  return best?.form ?? null;
 }
 
 export const FORM_SUGGESTIONS: readonly string[] = TEXT_FORMS.flatMap((form) => [
