@@ -2,16 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from './Button.tsx';
 import { classNames } from './class-names.ts';
 import { IconButton } from './IconButton.tsx';
+import { ProgressBar } from './ProgressBar.tsx';
 
 export interface ToastAction {
   readonly label: string;
   readonly onAction: () => void;
 }
 
+export interface ToastProgress {
+  readonly value: number | null;
+  readonly max: number;
+}
+
 export interface ToastOptions {
   readonly action?: ToastAction;
   readonly tone?: 'info' | 'error';
   readonly durationMs?: number;
+  readonly key?: string;
+  readonly progress?: ToastProgress;
 }
 
 export interface ToastMessage {
@@ -20,6 +28,8 @@ export interface ToastMessage {
   readonly action: ToastAction | null;
   readonly tone: 'info' | 'error';
   readonly durationMs: number;
+  readonly key?: string;
+  readonly progress?: ToastProgress;
 }
 
 export interface Toasts {
@@ -36,15 +46,19 @@ export function useToast(): Toasts {
   const counter = useRef(0);
   const show = useCallback((text: string, options: ToastOptions = {}) => {
     counter.current += 1;
-    setCurrent({
-      id: counter.current,
+    const fresh = counter.current;
+    const { key, progress } = options;
+    setCurrent((previous) => ({
+      id: key !== undefined && previous?.key === key ? previous.id : fresh,
       text,
       action: options.action ?? null,
       tone: options.tone ?? 'info',
       durationMs:
         options.durationMs ??
         (options.action === undefined ? TOAST_DURATION_MS : TOAST_ACTION_DURATION_MS),
-    });
+      ...(key !== undefined && { key }),
+      ...(progress !== undefined && { progress }),
+    }));
   }, []);
   const dismiss = useCallback(() => setCurrent(null), []);
   return useMemo(() => ({ current, show, dismiss }), [current, show, dismiss]);
@@ -58,11 +72,12 @@ function ToastCard({
   readonly onDismiss: () => void;
 }) {
   const [paused, setPaused] = useState(false);
+  const sticky = toast.progress !== undefined;
   useEffect(() => {
-    if (paused) return undefined;
+    if (paused || sticky) return undefined;
     const timer = window.setTimeout(onDismiss, toast.durationMs);
     return () => window.clearTimeout(timer);
-  }, [paused, toast, onDismiss]);
+  }, [paused, sticky, toast, onDismiss]);
   const { action } = toast;
   return (
     <div
@@ -73,6 +88,14 @@ function ToastCard({
       onBlur={() => setPaused(false)}
     >
       <span className="toast-text">{toast.text}</span>
+      {toast.progress !== undefined && (
+        <ProgressBar
+          label={toast.text}
+          value={toast.progress.value}
+          max={toast.progress.max}
+          className="toast-progress"
+        />
+      )}
       {action !== null && (
         <Button
           variant="quiet"

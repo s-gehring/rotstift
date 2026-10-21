@@ -484,14 +484,16 @@ export function createReviewFlow(deps: ReviewDeps) {
       });
     },
 
-    retry: (page: ImportPage): Promise<void> => {
+    retry: (page: ImportPage, options: { readonly recognize?: boolean } = {}): Promise<void> => {
       const profile = state.profile;
       if (active !== null || profile === null || state.pages[page.id] === undefined) {
         return Promise.resolve();
       }
       return process([page], profile, () => {
         const entry = transcription.getState().entries[page.id];
-        if (entry === undefined || needsRecognition(entry, page)) transcription.enqueue(page.id);
+        if (options.recognize === true || entry === undefined || needsRecognition(entry, page)) {
+          transcription.enqueue(page.id);
+        }
       });
     },
 

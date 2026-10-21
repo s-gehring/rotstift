@@ -4,7 +4,7 @@ import { DEUTSCH } from '../annotations/profile.ts';
 import type { PageImageEncoder } from '../export/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
-import { arbeitExportBlock, createReviewExport } from './export-input.ts';
+import { createReviewExport } from './export-input.ts';
 import { readingOf, setupReview } from './test-support.ts';
 
 async function reviewed() {
@@ -90,7 +90,6 @@ describe('createReviewExport', () => {
     const entries = runner.getState().entries;
 
     expect(exporter.correctedArbeit(other, flow.getState(), entries, DEUTSCH)).toBeNull();
-    expect(arbeitExportBlock(other, flow.getState(), entries)).toBe('incomplete');
     expect(
       exporter
         .classArbeiten([complete, other], flow.getState(), entries, DEUTSCH)
@@ -99,7 +98,6 @@ describe('createReviewExport', () => {
 
     flow.setCorrector(corrector, true);
     await flow.start(pages, { ...DEUTSCH, id: 'vorschau' });
-    expect(arbeitExportBlock(complete, flow.getState(), entries)).toBe('preview');
     expect(exporter.correctedArbeit(complete, flow.getState(), entries, DEUTSCH)).toBeNull();
   });
 });

@@ -53,7 +53,7 @@ export async function loadFile(file: File): Promise<LoadResult> {
   if (kind === undefined) {
     return {
       ok: false,
-      message: `„${file.name}“ wird nicht unterstützt. Erlaubt sind PNG, JPEG, WebP und PDF.`,
+      message: `„${file.name}“ wird nicht unterstützt.`,
     };
   }
   try {

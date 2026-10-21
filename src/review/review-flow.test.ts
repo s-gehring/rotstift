@@ -203,6 +203,34 @@ describe('createReviewFlow', () => {
     expect(flow.getState().pages.b?.status).toBe('done');
   });
 
+  it('recognises a corrected page again on request and corrects the new text', async () => {
+    const { pages, h, flow, runner } = setupReview(['a', 'b']);
+    await flow.start(pages, DEUTSCH);
+    h.transcripts.b = { ok: true, lines: ['Wir gingen nach Hause.'] };
+    h.log.length = 0;
+
+    const [, second] = pages;
+    if (second === undefined) throw new Error('missing page');
+    await flow.retry(second, { recognize: true });
+
+    expect(h.log).toEqual(['T:b', 'L:b', 'C:Wir gingen nach Hause.']);
+    expect(runner.getState().entries.b?.text).toBe('Wir gingen nach Hause.');
+    expect(flow.getState().pages.b?.status).toBe('done');
+  });
+
+  it('corrects a page again without recognising it again', async () => {
+    const { pages, h, flow } = setupReview(['a']);
+    await flow.start(pages, DEUTSCH);
+    h.log.length = 0;
+
+    const [first] = pages;
+    if (first === undefined) throw new Error('missing page');
+    await flow.retry(first);
+
+    expect(h.log).toEqual(['C:Ich war im Schwimbad.']);
+    expect(flow.getState().pages.a?.status).toBe('done');
+  });
+
   it('cancels during recognition without correcting anything', async () => {
     const { pages, h, flow } = setupReview();
     const gate = deferred();

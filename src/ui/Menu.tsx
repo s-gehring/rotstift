@@ -19,6 +19,7 @@ export interface MenuAction {
   readonly disabled?: boolean;
   readonly icon?: IconName;
   readonly danger?: boolean;
+  readonly hint?: string;
 }
 
 export interface MenuSubmenu {
@@ -212,6 +213,7 @@ function MenuList({
               role="menuitem"
               tabIndex={-1}
               aria-disabled={entry.disabled === true || undefined}
+              title={sub ? undefined : entry.hint}
               aria-haspopup={sub ? 'menu' : undefined}
               aria-expanded={sub ? expanded : undefined}
               className={classNames(
@@ -328,6 +330,7 @@ export interface MenuProps {
   readonly disabled?: boolean;
   readonly variant?: ButtonVariant;
   readonly icon?: IconName;
+  readonly tooltip?: 'bottom' | 'none';
   readonly children?: ReactNode;
   readonly className?: string;
 }
@@ -339,6 +342,7 @@ export function Menu({
   disabled = false,
   variant = 'secondary',
   icon = 'more',
+  tooltip = 'bottom',
   children,
   className,
 }: MenuProps) {
@@ -350,7 +354,7 @@ export function Menu({
           label={label}
           icon={icon}
           disabled={disabled}
-          tooltip={popup.open ? 'none' : 'bottom'}
+          tooltip={popup.open ? 'none' : tooltip}
           {...popup.triggerProps}
         />
       ) : (
