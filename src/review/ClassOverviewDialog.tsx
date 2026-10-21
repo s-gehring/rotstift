@@ -4,6 +4,7 @@ import { useApp } from '../app/app-context.tsx';
 import { formatAverage, formatCount } from '../results/summary.ts';
 import { Dialog } from '../ui/Dialog.tsx';
 import { buildOverview, type Overview, type OverviewTag } from './overview.ts';
+import { gradeColumn } from '../stats/grading.ts';
 import { formatWeighted } from '../stats/weighting.ts';
 import { formatRate, type TypeCount } from './summary.ts';
 import './review.css';
@@ -116,6 +117,11 @@ function OverviewTable({
               <th scope="col" className="num" title="Gewichtete Fehler je 100 Wörter">
                 Fehlerquotient
               </th>
+              {overview.scale !== null && (
+                <th scope="col" className="num">
+                  {gradeColumn(overview.scale)}
+                </th>
+              )}
               <th scope="col">Häufigste Fehler</th>
             </>
           )}
@@ -135,6 +141,7 @@ function OverviewTable({
               <>
                 <td className="num">{count(row.errors)}</td>
                 <Quotient quotient={row.quotient} weighted={row.weighted} />
+                {overview.scale !== null && <td className="num">{row.grade ?? '–'}</td>}
                 <td>
                   <TopTypes types={row.top} profile={profile} />
                 </td>
@@ -152,6 +159,7 @@ function OverviewTable({
               <>
                 <td className="num">{count(total.errors)}</td>
                 <Quotient quotient={total.quotient} weighted={total.weighted} />
+                {overview.scale !== null && <td className="num" />}
                 <td>
                   <TopTypes types={overview.types.slice(0, 3)} profile={profile} />
                 </td>
@@ -171,7 +179,7 @@ function OverviewTable({
 }
 
 export function ClassOverviewDialog() {
-  const { navigation, work, importState, weighting } = useApp();
+  const { navigation, work, importState, weighting, grading } = useApp();
   const review = work.review.state;
   const profile = review.profile;
   const overview = buildOverview(
@@ -180,6 +188,7 @@ export function ClassOverviewDialog() {
     work.count.state.entries,
     profile?.allowedTypes ?? [],
     profile === null ? null : weighting.of(profile),
+    profile === null ? null : grading.of(profile),
   );
   return (
     <Dialog

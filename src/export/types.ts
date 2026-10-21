@@ -1,7 +1,9 @@
 import type { PageComment } from '../overlay/layout.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
+import type { Grading } from '../stats/grading.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import type { Weighting } from '../stats/weighting.ts';
 
 export interface ExportPage {
   readonly image: Blob;
@@ -29,6 +31,8 @@ export interface CorrectedArbeit {
   readonly pages: readonly ExportPage[];
   readonly profile: CorrectionProfile;
   readonly statistics: Statistics;
+  readonly weighting: Weighting;
+  readonly grading?: Grading;
   readonly content?: ContentReport;
 }
 

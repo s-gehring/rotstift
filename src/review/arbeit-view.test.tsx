@@ -10,6 +10,8 @@ import { DEFAULT_SCOPE } from '../correction/scope.ts';
 import type { Navigation, RunController } from '../app/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { Runner } from '../pipeline/runner.ts';
+import { defaultGrading, type Grading } from '../stats/grading.ts';
+import { fixedGrading } from '../stats/use-grading.ts';
 import { ArbeitView } from './ArbeitView.tsx';
 import { setDisplay } from './display.ts';
 import type { ReviewFlow } from './review-flow.ts';
@@ -38,9 +40,10 @@ interface LiveProps {
   readonly arbeiten: readonly Arbeit[];
   readonly navigation?: Partial<Navigation>;
   readonly run?: Partial<RunController>;
+  readonly grading?: Grading;
 }
 
-function Live({ flow, runner, arbeiten, navigation, run }: LiveProps) {
+function Live({ flow, runner, arbeiten, navigation, run, grading }: LiveProps) {
   const state = useSyncExternalStore(flow.subscribe, flow.getState);
   const runState = useSyncExternalStore(runner.subscribe, runner.getState);
   const model = testAppModel({
@@ -57,6 +60,7 @@ function Live({ flow, runner, arbeiten, navigation, run }: LiveProps) {
       canRetryReview: true,
     }),
     ...(run !== undefined && { run }),
+    ...(grading !== undefined && { grading: fixedGrading(grading) }),
   });
   return (
     <AppProvider value={model}>
@@ -169,6 +173,16 @@ describe('the head of an Arbeit', () => {
     expect(query('.detail-figures')?.title).toBe('1 gewichtete Fehler · Fehlerquotient 10,0');
     expect(button('Vorherige Arbeit').disabled).toBe(true);
     expect(button('Nächste Arbeit').disabled).toBe(false);
+  });
+
+  it('adds the grade once limits are set', async () => {
+    const grading: Grading = {
+      ...defaultGrading(),
+      enabled: true,
+      limits: { ...defaultGrading().limits, grades: [5, 10, null, null, null] },
+    };
+    await corrected({ grading });
+    expect(query('.detail-figures')?.textContent).toBe('10 Wörter · 1 Fehler · Note 2');
   });
 
   it('offers its own export menu only while the header does not', async () => {
@@ -410,6 +424,19 @@ describe('editing the text of a page', () => {
     expect(query('.side-page-figure')?.textContent).toBe('offen');
     expect(all('.annotated-page')).toHaveLength(1);
     expect(flow.getState().pages.a?.source).toBe('Ich war im Schwimbad.\nEs war schön.');
+  });
+
+  it('shows struck words with a stroke instead of tildes and keeps them struck', async () => {
+    const { runner } = await corrected();
+    choose(1, 'Text bearbeiten');
+    const area = editor();
+    if (area === null) throw new Error('no editor');
+    enter(area, 'Ich war ~~im~~ Schwimbad.');
+    expect(area.value).toBe('Ich war i\u0336m\u0336 Schwimbad.');
+    expect(area.value).not.toContain('~~');
+    expect(query('.side-words')?.textContent).toBe('3 Wörter');
+    enter(area, `${area.value} Ende.`);
+    expect(runner.getState().entries.a?.text).toBe('Ich war ~~im~~ Schwimbad. Ende.');
   });
 
   it('asks before recognising an edited page again and corrects it afterwards', async () => {

@@ -9,9 +9,16 @@ import type {
 import type { Arbeit } from '../import/arbeiten.ts';
 import { rotatedSize, type ImportPage } from '../import/pages.ts';
 import { renderPageToPng } from '../import/render-page.ts';
+import type { Grading } from '../stats/grading.ts';
+import type { Weighting } from '../stats/weighting.ts';
 import { contentReview } from './arbeit-model.ts';
 import type { ReviewState } from './review-flow.ts';
 import { pageCondition, summarizeArbeit, type Entries } from './summary.ts';
+
+export interface Rating {
+  readonly weighting: Weighting;
+  readonly grading: Grading;
+}
 
 export const PDF_FOOTER = 'Vorschau: automatisch erstellte Korrektur, bitte prüfen';
 
@@ -57,6 +64,7 @@ export function createReviewExport(
     state: ReviewState,
     entries: Entries,
     profile: CorrectionProfile,
+    { weighting, grading }: Rating,
   ): CorrectedArbeit | null => {
     const summary = summarizeArbeit(arbeit, state, entries);
     if (!summary.complete || summary.preview || summary.statistics === null) return null;
@@ -80,6 +88,8 @@ export function createReviewExport(
       ),
       profile,
       statistics: summary.statistics,
+      weighting,
+      grading,
       ...(review?.status === 'done' && {
         content: {
           comments: comments.map(({ page, line, text, coveredBy }) => ({
@@ -99,9 +109,10 @@ export function createReviewExport(
     state: ReviewState,
     entries: Entries,
     profile: CorrectionProfile,
+    rating: Rating,
   ): ClassArbeit[] =>
     arbeiten.flatMap((arbeit) => {
-      const corrected = correctedArbeit(arbeit, state, entries, profile);
+      const corrected = correctedArbeit(arbeit, state, entries, profile, rating);
       return corrected === null ? [] : [{ kind: 'corrected' as const, ...corrected }];
     });
 

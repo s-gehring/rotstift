@@ -12,6 +12,7 @@ import {
   weighClass,
   type ArbeitReview,
 } from '../review/summary.ts';
+import { activeLimits, gradeColumn, gradeFor, type Grading } from '../stats/grading.ts';
 import type { Statistics } from '../stats/statistics.ts';
 import { formatWeighted, type WeightedStatistics, type Weighting } from '../stats/weighting.ts';
 import { classTotals, isComplete, type ArbeitResult } from './summary.ts';
@@ -21,6 +22,7 @@ export interface CorrectionColumns {
   readonly arbeiten: readonly ArbeitReview[];
   readonly profile: CorrectionProfile;
   readonly weighting: Weighting;
+  readonly grading?: Grading;
 }
 
 const BOM = '﻿';
@@ -41,6 +43,11 @@ function tsvField(value: string): string {
   return neutralizeFormula(value).replace(/[\t\r\n]+/gu, ' ');
 }
 
+function grading(corrections: CorrectionColumns | undefined): Grading | null {
+  const chosen = corrections?.grading;
+  return chosen === undefined || activeLimits(chosen) === null ? null : chosen;
+}
+
 function header(corrections: CorrectionColumns | undefined): string[] {
   const errors =
     corrections === undefined
@@ -50,22 +57,35 @@ function header(corrections: CorrectionColumns | undefined): string[] {
           'Fehler je 100 Wörter',
           'Gewichtete Fehler',
           'Fehlerquotient',
+          ...gradeHeader(corrections),
           ...corrections.types,
         ];
   return ['Name', 'Seiten', 'Wörter', ...errors, 'Hinweis'];
 }
 
+function gradeHeader(corrections: CorrectionColumns): string[] {
+  const active = grading(corrections);
+  return active === null ? [] : [gradeColumn(active.scale)];
+}
+
 function errorCells(
   statistics: Statistics | null,
   weighted: WeightedStatistics | null,
-  types: readonly string[],
+  corrections: CorrectionColumns,
+  graded: boolean,
 ): string[] {
-  if (statistics === null || weighted === null) return ['', '', '', '', ...types.map(() => '')];
+  const active = grading(corrections);
+  const { types } = corrections;
+  if (statistics === null || weighted === null) {
+    return ['', '', '', '', ...(active === null ? [] : ['']), ...types.map(() => '')];
+  }
+  const grade = active === null ? [] : [graded ? (gradeFor(weighted, active) ?? '') : ''];
   return [
     String(statistics.errors),
     formatRate(statistics.errorsPer100Words),
     formatWeighted(weighted.weighted),
     formatRate(weighted.quotient),
+    ...grade,
     ...types.map((type) => String(statistics.errorsByType[type] ?? 0)),
   ];
 }
@@ -86,7 +106,8 @@ function cells(result: ArbeitResult, corrections: CorrectionColumns | undefined)
       corrected
         ? (weighArbeit(review, corrections.profile, corrections.weighting) ?? NO_WEIGHTED)
         : null,
-      corrections.types,
+      corrections,
+      true,
     ),
     corrected
       ? countNote
@@ -117,7 +138,8 @@ function totalCells(
       allCorrected
         ? (weighClass(corrected, corrections.profile, corrections.weighting) ?? NO_WEIGHTED)
         : null,
-      corrections.types,
+      corrections,
+      false,
     ),
     allCorrected ? countNote : uncorrectedArbeitenNote(corrected.length, results.length),
   ];

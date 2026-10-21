@@ -1,6 +1,12 @@
 import { PDFDocument, rgb, type PDFImage } from 'pdf-lib';
 import { listErrors } from '../annotations/transcript.ts';
+import { activeLimits, gradeFor } from '../stats/grading.ts';
 import { computeStatistics } from '../stats/statistics.ts';
+import {
+  combineWeighted,
+  weightedStatistics,
+  type WeightedStatistics,
+} from '../stats/weighting.ts';
 import { incompleteArbeitenNote, incompletePagesNote } from './notes.ts';
 import { encodePageImage } from './page-image.ts';
 import { A4, COLORS, embedFonts, type Fonts } from './sheet.ts';
@@ -10,6 +16,7 @@ import {
   drawStatisticsPage,
   drawWordCountPage,
   type CoverEntry,
+  type Grade,
 } from './summary-pages.ts';
 import type {
   ClassArbeit,
@@ -176,14 +183,28 @@ function requireConsistentStatistics(arbeit: CorrectedArbeit): void {
   }
 }
 
+function weigh(arbeit: CorrectedArbeit): WeightedStatistics {
+  const transcripts = arbeit.pages.flatMap((page) => (page.transcript ? [page.transcript] : []));
+  return weightedStatistics(arbeit.statistics.words, transcripts, arbeit.profile, arbeit.weighting);
+}
+
+function grade(arbeit: CorrectedArbeit, weighted: WeightedStatistics): Grade | null {
+  if (arbeit.grading === undefined) return null;
+  const value = gradeFor(weighted, arbeit.grading);
+  return value === null ? null : { value, scale: arbeit.grading.scale };
+}
+
 async function appendCorrected(context: Context, arbeit: CorrectedArbeit): Promise<void> {
   requirePages(arbeit);
   requireConsistentStatistics(arbeit);
   await appendPages(context, arbeit.pages, arbeit.profile);
+  const weighted = weigh(arbeit);
   drawStatisticsPage(context.doc, context.fonts, {
     title: arbeit.title,
     profile: arbeit.profile,
     statistics: arbeit.statistics,
+    weighted,
+    grade: grade(arbeit, weighted),
     date: context.date,
     ...(arbeit.content && { content: arbeit.content }),
   });
@@ -221,11 +242,15 @@ export async function buildWordCountPdf(
 
 function coverEntry(arbeit: ClassArbeit): CoverEntry {
   if (arbeit.kind === 'corrected') {
+    const weighted = weigh(arbeit);
+    const value = grade(arbeit, weighted)?.value;
     return {
       name: arbeit.title,
       pages: arbeit.pages.length,
       words: arbeit.statistics.words,
       errors: arbeit.statistics.errors,
+      weighted,
+      ...(value !== undefined && { grade: value }),
     };
   }
   const summary = summarizeWords(arbeit);
@@ -249,6 +274,9 @@ function coverTotal(entries: readonly CoverEntry[]): CoverEntry {
     pages: entries.reduce((total, entry) => total + entry.pages, 0),
     words: sum('words'),
     errors: sum('errors'),
+    ...(entries.every((entry) => entry.weighted !== undefined) && {
+      weighted: combineWeighted(entries.flatMap((entry) => entry.weighted ?? [])) ?? undefined,
+    }),
     ...(complete < entries.length && { note: incompleteArbeitenNote(complete, entries.length) }),
   };
 }
@@ -262,11 +290,14 @@ export async function buildClassPdf(
   const total = arbeiten.reduce((sum, arbeit) => sum + arbeit.pages.length, 0);
   const context = await createContext(title, total, options);
   const entries = arbeiten.map(coverEntry);
+  const grading = arbeiten.find((arbeit) => arbeit.kind === 'corrected')?.grading;
   drawCoverPage(context.doc, context.fonts, {
     title,
     entries,
     total: coverTotal(entries),
     date: context.date,
+    quotients: entries.some((entry) => entry.weighted !== undefined),
+    scale: grading !== undefined && activeLimits(grading) !== null ? grading.scale : null,
   });
   for (const arbeit of arbeiten) {
     if (arbeit.kind === 'corrected') await appendCorrected(context, arbeit);
