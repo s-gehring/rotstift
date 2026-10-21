@@ -98,6 +98,25 @@ export class Sheet {
     });
   }
 
+  paragraph(text: string, x: number, width: number, style: TextStyle, leading: number): void {
+    let row = '';
+    const flush = () => {
+      this.ensure(leading);
+      this.text(row, x, this.y, style);
+      this.y -= leading;
+    };
+    for (const word of text.split(/\s+/u).filter(Boolean)) {
+      const candidate = row === '' ? word : `${row} ${word}`;
+      if (row !== '' && this.measure(candidate, style) > width) {
+        flush();
+        row = word;
+      } else {
+        row = candidate;
+      }
+    }
+    if (row !== '') flush();
+  }
+
   rule(y: number, color = COLORS.rule, thickness = 0.75): void {
     this.page.drawLine({
       start: { x: this.left, y },

@@ -290,6 +290,36 @@
   font-size: var(--font-size-sm);
 }
 
+.side-comments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.side-comment-text {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.side-comment-place {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.side-hint[data-status='dismissed'] .side-comment-text {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.side-summary {
+  margin: var(--space-2) 0 0;
+  padding: 0 var(--space-2);
+}
+
 .side-text {
   margin: var(--space-1) 0 0;
   color: var(--color-text-muted);

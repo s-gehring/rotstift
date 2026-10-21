@@ -2,7 +2,6 @@ import { pushSample, type Sample } from './format.ts';
 import {
   DEFAULT_MODEL_ID,
   MODELS,
-  offeredModels,
   recommendModel,
   type AnyModelInfo,
   type ModelInfo,
@@ -230,9 +229,5 @@ export function activeModel(
   state: SetupState,
   models: readonly AnyModelInfo[] = MODELS,
 ): AnyModelInfo {
-  const ram = state.hardware?.totalRamBytes ?? null;
-  const chosen = models.find((model) => model.id === state.selectedId);
-  const allowed =
-    chosen !== undefined && (ram === null || offeredModels(ram, models).includes(chosen));
-  return allowed ? chosen : recommendModel(models);
+  return models.find((model) => model.id === state.selectedId) ?? recommendModel(models);
 }

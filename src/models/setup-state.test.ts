@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODEL_ID, recommendModel } from './registry.ts';
+import { DEFAULT_MODEL_ID, DEFAULT_REVIEWER_ID, recommendModel, REVIEWERS } from './registry.ts';
 import {
   ANY_MODEL,
   activeModel,
@@ -32,6 +32,26 @@ const progress = (modelId: string, at: number, bytes: number) =>
 function loaded(status: ModelStatus = missing): SetupState {
   return setupReducer(INITIAL_SETUP, { type: 'loaded', statuses: [status], hardware: null });
 }
+
+describe('the reviewer choice', () => {
+  it('falls back to the default reviewer and keeps a ready selection', () => {
+    expect(activeModel(INITIAL_SETUP, REVIEWERS).id).toBe(DEFAULT_REVIEWER_ID);
+    const status: ModelStatus = {
+      modelId: DEFAULT_REVIEWER_ID,
+      state: 'ready',
+      downloadedBytes: 1000,
+      totalBytes: 1000,
+    };
+    const state = setupReducer(INITIAL_SETUP, {
+      type: 'loaded',
+      statuses: [status],
+      hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: null },
+      selectedId: DEFAULT_REVIEWER_ID,
+    });
+    expect(state.selectedId).toBe(DEFAULT_REVIEWER_ID);
+    expect(activeModel(state, REVIEWERS).id).toBe(DEFAULT_REVIEWER_ID);
+  });
+});
 
 describe('setupReducer', () => {
   it('tracks progress, speed samples and completion', () => {
@@ -93,7 +113,7 @@ describe('setupReducer', () => {
     expect(activeModel(switched).id).toBe(DEFAULT_MODEL_ID);
   });
 
-  it('falls back to the default for unknown choices and machines that are too small', () => {
+  it('falls back to the default for unknown choices but keeps a choice on a small machine', () => {
     const unknown = setupReducer(INITIAL_SETUP, {
       type: 'loaded',
       statuses: [],
@@ -107,7 +127,7 @@ describe('setupReducer', () => {
       hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: null },
       selectedId: STRONGER,
     });
-    expect(activeModel(small).id).toBe(DEFAULT_MODEL_ID);
+    expect(activeModel(small).id).toBe(STRONGER);
   });
 
   it('keeps the choice when a later refresh does not report one', () => {

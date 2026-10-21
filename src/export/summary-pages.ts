@@ -3,6 +3,7 @@ import { CATALOG, findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Statistics } from '../stats/statistics.ts';
 import { COLORS, Sheet, type Fonts } from './sheet.ts';
+import type { ContentReport } from './types.ts';
 import { formatDate, formatDecimal } from './text.ts';
 
 const DASH = '–';
@@ -87,12 +88,44 @@ export interface StatisticsPageInput {
   readonly profile: CorrectionProfile;
   readonly statistics: Statistics;
   readonly date: Date;
+  readonly content?: ContentReport;
+}
+
+function drawContent(sheet: Sheet, content: ContentReport): void {
+  sheet.y -= 18;
+  sheet.ensure(60);
+  sheet.text('Inhalt und Form', sheet.left, sheet.y, { size: 13, bold: true });
+  sheet.y -= 12;
+  sheet.rule(sheet.y);
+  sheet.y -= ROW - 4;
+  if (content.comments.length === 0) {
+    sheet.text('Keine Auffälligkeiten.', sheet.left, sheet.y, { size: 11, color: COLORS.muted });
+    sheet.y -= ROW;
+    return;
+  }
+  for (const comment of content.comments) {
+    sheet.ensure(ROW);
+    sheet.text(`S. ${comment.page}, Z. ${comment.line}`, sheet.left, sheet.y, {
+      size: 10.5,
+      color: COLORS.muted,
+    });
+    const text =
+      comment.coveredBy === undefined
+        ? comment.text
+        : `${comment.text} (siehe ${comment.coveredBy})`;
+    sheet.text(text, sheet.left + 80, sheet.y, { size: 11, maxWidth: sheet.width - 80 });
+    sheet.y -= ROW;
+  }
+  if (content.summary !== null) {
+    sheet.y -= 6;
+    sheet.paragraph(content.summary, sheet.left, sheet.width, { size: 11 }, 16);
+  }
 }
 
 export function drawStatisticsPage(
   doc: PDFDocument,
   fonts: Fonts,
-  { title, profile, statistics, date }: StatisticsPageInput,
+  { title, profile, statistics, date, content }: StatisticsPageInput,
 ): void {
   const sheet = new Sheet(doc, fonts);
   drawHeading(sheet, { label: 'Auswertung', title });
@@ -125,6 +158,8 @@ export function drawStatisticsPage(
     sheet.text(String(row.count), sheet.right, sheet.y, { size: 11, bold: true, align: 'right' });
     sheet.y -= ROW;
   }
+  if (rows.length === 0) sheet.y -= ROW;
+  if (content !== undefined) drawContent(sheet, content);
   drawFooter(sheet);
 }
 

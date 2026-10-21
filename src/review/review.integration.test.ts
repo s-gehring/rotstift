@@ -179,7 +179,9 @@ describe.skipIf(!available)('Berichtigen end to end with the real sidecar', () =
           },
         },
       });
-      flow.setCorrector(createSidecarCorrector(corrector, { engine, client: sidecar }));
+      const sidecarCorrector = createSidecarCorrector(corrector, { engine, client: sidecar });
+      flow.setCorrector(sidecarCorrector);
+      flow.setReviewer(sidecarCorrector);
 
       const phases = new Map<ReviewPhase, number>();
       let current: ReviewPhase | null = null;

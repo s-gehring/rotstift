@@ -15,6 +15,7 @@ const arbeit: Arbeit = { id: 'x', name: 'Anna', pages: [page('a'), page('b'), pa
 
 const noReview: ReviewState = {
   pages: {},
+  works: {},
   profile: null,
   run: null,
   stopping: false,

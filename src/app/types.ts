@@ -14,7 +14,7 @@ import type { Toasts } from '../ui/Toast.tsx';
 
 export type RunKind = 'correct' | 'count';
 
-export type ModelRole = 'transcriber' | 'corrector';
+export type ModelRole = 'transcriber' | 'corrector' | 'reviewer';
 
 export type Route =
   { readonly view: 'klasse' } | { readonly view: 'arbeit'; readonly arbeitId: string };
@@ -66,13 +66,18 @@ export interface Subject {
   readonly select: (profile: CorrectionProfile) => void;
   readonly scope: CorrectionScope;
   readonly setScope: (scope: CorrectionScope) => void;
+  readonly missing: ScopeField | null;
+  readonly clearMissing: () => void;
 }
+
+export type ScopeField = 'assignment' | 'formName';
 
 export interface Work {
   readonly count: WordCount;
   readonly review: Review;
   readonly transcriber: TranscriberStatus | null;
   readonly corrector: CorrectorStatus | null;
+  readonly reviewer: CorrectorStatus | null;
   readonly engine: ReviewEngine;
   readonly canRetryCount: boolean;
   readonly canRetryReview: boolean;
@@ -95,6 +100,7 @@ export interface SettingsRequest {
 export interface Models {
   readonly transcriber: ModelSetup;
   readonly corrector: ModelSetup<CorrectorInfo>;
+  readonly reviewer: ModelSetup<CorrectorInfo>;
   readonly switchLocked: Readonly<Record<ModelRole, boolean>>;
   readonly setup: SetupRequest;
   readonly settings: SettingsRequest;

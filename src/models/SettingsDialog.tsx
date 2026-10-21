@@ -6,9 +6,16 @@ import { Button } from '../ui/Button.tsx';
 import { Dialog } from '../ui/Dialog.tsx';
 import { DiagnosticsLog } from './DiagnosticsLog.tsx';
 import { describeDownloadError, formatSize } from './format.ts';
-import { choiceModels, modelNote, totalBytes, type AnyModelInfo } from './registry.ts';
+import {
+  customSource,
+  estimateRamBytes,
+  exceedsMemory,
+  totalBytes,
+  type AnyModelInfo,
+  type FileRole,
+} from './registry.ts';
 import { ROLE_NAME } from './role-text.ts';
-import type { ModelState } from './types.ts';
+import type { ModelState, ResolvedLink } from './types.ts';
 import { hasRunningJob } from './setup-state.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 import { WeightingSettings } from './WeightingSettings.tsx';
@@ -31,18 +38,156 @@ const BUSY: ReadonlySet<ModelState> = new Set([
   'deleting',
 ]);
 
+const FILE_ROLE: Readonly<Record<ModelRole, FileRole>> = {
+  transcriber: 'transcriber',
+  corrector: 'corrector',
+  reviewer: 'corrector',
+};
+
+function CustomModelForm({
+  role,
+  setup,
+  onDone,
+}: {
+  readonly role: ModelRole;
+  readonly setup: ModelSetup<AnyModelInfo>;
+  readonly onDone: () => void;
+}) {
+  const [link, setLink] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [resolved, setResolved] = useState<ResolvedLink | null>(null);
+  const [modelPath, setModelPath] = useState<string | null>(null);
+  const [projectorPath, setProjectorPath] = useState<string | null>(null);
+  const vision = FILE_ROLE[role] === 'transcriber';
+  const linkId = `custom-link-${role}`;
+
+  async function check() {
+    setChecking(true);
+    setResolved(null);
+    const result = await setup.resolveLink(link.trim());
+    setChecking(false);
+    if (result === null) return;
+    setResolved(result);
+    setModelPath(result.model);
+    setProjectorPath(vision ? result.projector : null);
+  }
+
+  const ready = resolved !== null && modelPath !== null && (!vision || projectorPath !== null);
+  return (
+    <div className="custom-model">
+      <form
+        className="custom-model-link"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (link.trim() !== '') void check();
+        }}
+      >
+        <label htmlFor={linkId}>Link zu Hugging Face</label>
+        <input
+          id={linkId}
+          type="text"
+          value={link}
+          placeholder="https://huggingface.co/…"
+          spellCheck={false}
+          onChange={(event) => {
+            setLink(event.target.value);
+            setResolved(null);
+          }}
+        />
+        <Button type="submit" disabled={checking || link.trim() === ''}>
+          {checking ? 'Wird geprüft …' : 'Prüfen'}
+        </Button>
+      </form>
+      {resolved !== null && (
+        <div className="custom-model-files">
+          {resolved.models.length > 1 && (
+            <label>
+              Modelldatei
+              <select
+                value={modelPath ?? ''}
+                onChange={(event) => setModelPath(event.target.value)}
+              >
+                {resolved.models.map((file) => (
+                  <option key={file.path} value={file.path}>
+                    {file.path} ({formatSize(file.bytes)})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {vision && resolved.projectors.length > 1 && (
+            <label>
+              Bilddatei
+              <select
+                value={projectorPath ?? ''}
+                onChange={(event) => setProjectorPath(event.target.value)}
+              >
+                {resolved.projectors.map((file) => (
+                  <option key={file.path} value={file.path}>
+                    {file.path} ({formatSize(file.bytes)})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <p className="settings-note">
+            {resolved.repo} ·{' '}
+            {formatSize(
+              [modelPath, projectorPath].reduce(
+                (sum, path) =>
+                  sum +
+                  ([...resolved.models, ...resolved.projectors].find((file) => file.path === path)
+                    ?.bytes ?? 0),
+                0,
+              ),
+            )}
+          </p>
+          <Button
+            disabled={!ready}
+            onClick={() => {
+              if (modelPath === null) return;
+              onDone();
+              void setup.addLink(resolved, modelPath, vision ? projectorPath : null);
+            }}
+          >
+            Hinzufügen und laden
+          </Button>
+        </div>
+      )}
+      <div className="settings-actions">
+        <Button
+          variant="quiet"
+          disabled={setup.state.importing}
+          onClick={() => {
+            onDone();
+            void setup.importCustom();
+          }}
+        >
+          Datei wählen …
+        </Button>
+        <Button variant="quiet" onClick={onDone}>
+          Abbrechen
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ModelSection({
   role,
   setup,
   locked,
+  sharedWith = null,
   onSetup,
 }: {
   readonly role: ModelRole;
   readonly setup: ModelSetup<AnyModelInfo>;
   readonly locked: boolean;
+  readonly sharedWith?: ModelRole | null;
   readonly onSetup: () => void;
 }) {
   const [confirming, setConfirming] = useState<AnyModelInfo | null>(null);
+  const [adding, setAdding] = useState(false);
   const keep = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (confirming !== null) keep.current?.focus();
@@ -50,10 +195,11 @@ function ModelSection({
   const { model, status } = setup;
   const state = status?.state ?? null;
   const busy = state !== null && BUSY.has(state);
-  const offered = choiceModels(setup.state.hardware?.totalRamBytes ?? null, model, setup.models);
-  const choice = offered.length > 1;
-  const rows = choice ? offered : [model];
+  const ram = setup.state.hardware?.totalRamBytes ?? null;
+  const rows = setup.models;
+  const choice = rows.length > 1;
   const headingId = `settings-${role}`;
+  const source = customSource(model);
   const switchDisabled = locked || hasRunningJob(setup.state);
   const confirmName = choice && confirming !== null ? confirming.displayName : ROLE_NAME[role];
   return (
@@ -68,7 +214,7 @@ function ModelSection({
             candidateState === 'ready' ||
             candidateState === 'corrupt' ||
             (setup.state.statuses[candidate.id]?.downloadedBytes ?? 0) > 0;
-          const note = modelNote(candidate);
+          const origin = customSource(candidate);
           return (
             <div key={candidate.id} className="settings-model">
               <label className="settings-model-label">
@@ -84,11 +230,21 @@ function ModelSection({
                   <span className="settings-model-line">
                     <span className="settings-model-name">{candidate.displayName}</span>
                     <span className="settings-model-size">{formatSize(totalBytes(candidate))}</span>
+                    <span
+                      className="settings-model-need"
+                      data-warn={exceedsMemory(candidate, ram) ? 'true' : undefined}
+                    >
+                      braucht etwa {formatSize(estimateRamBytes(candidate, ram))}
+                    </span>
                     <span className="settings-model-state" data-state={candidateState ?? 'unknown'}>
                       {candidateState === null ? '' : STATE_TEXT[candidateState]}
                     </span>
                   </span>
-                  {note !== null && <span className="settings-model-note">{note}</span>}
+                  {origin !== null && (
+                    <span className="settings-model-note">
+                      {origin.kind === 'huggingFace' ? origin.repo : 'Eigene Datei'}
+                    </span>
+                  )}
                 </span>
               </label>
               {hasFiles && !candidateBusy && (
@@ -108,9 +264,23 @@ function ModelSection({
       {setup.error !== null && (
         <p className="settings-error" role="alert">
           {describeDownloadError(setup.error)}
+          {model.id !== setup.defaultId && (
+            <Button
+              variant="quiet"
+              disabled={switchDisabled}
+              onClick={() => void setup.selectRecommended()}
+            >
+              Empfohlenes Modell nutzen
+            </Button>
+          )}
         </p>
       )}
       {setup.state.note !== null && <p className="settings-note">{setup.state.note}</p>}
+      {sharedWith !== null && (
+        <p className="settings-note">
+          Wird auch für {ROLE_NAME[sharedWith]} verwendet und nur einmal gespeichert.
+        </p>
+      )}
       {confirming !== null ? (
         <div className="confirm" role="alertdialog" aria-label={`${confirmName} löschen`}>
           <p>{confirmName} wirklich löschen?</p>
@@ -129,12 +299,14 @@ function ModelSection({
             Behalten
           </Button>
         </div>
+      ) : adding ? (
+        <CustomModelForm role={role} setup={setup} onDone={() => setAdding(false)} />
       ) : (
         <div className="settings-actions">
           {state === 'unverified' && (
             <Button onClick={() => void setup.verifyAgain()}>Erneut prüfen</Button>
           )}
-          {state !== null && state !== 'ready' && !busy && (
+          {state !== null && state !== 'ready' && !busy && source?.kind !== 'file' && (
             <>
               <Button onClick={onSetup}>Herunterladen</Button>
               <Button
@@ -146,6 +318,9 @@ function ModelSection({
               </Button>
             </>
           )}
+          <Button variant="quiet" disabled={switchDisabled} onClick={() => setAdding(true)}>
+            Eigenes Modell …
+          </Button>
         </div>
       )}
     </section>
@@ -154,7 +329,8 @@ function ModelSection({
 
 export function SettingsDialog() {
   const { models } = useApp();
-  const { settings, transcriber, corrector, switchLocked, setup } = models;
+  const { settings, transcriber, corrector, reviewer, switchLocked, setup } = models;
+  const reviewerShared = reviewer.model.id === corrector.model.id;
   const available = transcriber.available;
   return (
     <Dialog open={settings.open} onClose={settings.close} title="Einstellungen" size="md">
@@ -170,7 +346,15 @@ export function SettingsDialog() {
             role="corrector"
             setup={corrector}
             locked={switchLocked.corrector}
+            sharedWith={reviewerShared ? 'reviewer' : null}
             onSetup={() => setup.show(['corrector'])}
+          />
+          <ModelSection
+            role="reviewer"
+            setup={reviewer}
+            locked={switchLocked.reviewer}
+            sharedWith={reviewerShared ? 'corrector' : null}
+            onSetup={() => setup.show(['reviewer'])}
           />
           <DiagnosticsLog />
         </>

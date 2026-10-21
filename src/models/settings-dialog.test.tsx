@@ -5,19 +5,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProvider } from '../app/app-context.tsx';
 import { testAppModel, testModelSetup } from '../app/test-app.ts';
 import type { Models, ModelRole } from '../app/types.ts';
-import type { ModelClient } from './client.ts';
-import { defaultCorrector, recommendModel, totalBytes, type AnyModelInfo } from './registry.ts';
+import { ModelCallError, type ModelClient } from './client.ts';
+import {
+  defaultCorrector,
+  defaultReviewer,
+  recommendModel,
+  totalBytes,
+  type AnyModelInfo,
+  type CustomModel,
+} from './registry.ts';
 import { SettingsDialog } from './SettingsDialog.tsx';
 import { fakeModelClient, type FakeClientOptions } from './test-client.ts';
-import type { DownloadError, ModelState, ModelStatus } from './types.ts';
-import { useCorrectorModelSetup, useModelSetup, type ModelSetup } from './use-model-setup.ts';
+import type { DownloadError, ModelState, ModelStatus, ResolvedLink } from './types.ts';
+import {
+  useCorrectorModelSetup,
+  useModelSetup,
+  useReviewerModelSetup,
+  type ModelSetup,
+} from './use-model-setup.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const transcriber = recommendModel();
 const corrector = defaultCorrector();
+const reviewer = defaultReviewer();
 const GIB = 1024 ** 3;
 const QWEN_ID = 'qwen3-vl-4b-q4';
+const E4B_ID = 'gemma-4-e4b-q4';
 const BIG = { totalRamBytes: 16 * GIB, freeDiskBytes: 100e9 };
 
 const noop = () => undefined;
@@ -71,17 +85,19 @@ interface LiveProps {
 
 function Live({
   client,
-  switchLocked = { transcriber: false, corrector: false },
+  switchLocked = { transcriber: false, corrector: false, reviewer: false },
   show = noop,
 }: LiveProps) {
   const transcriberSetup = useModelSetup(client);
   const correctorSetup = useCorrectorModelSetup(client);
+  const reviewerSetup = useReviewerModelSetup(client);
   return (
     <AppProvider
       value={testAppModel({
         models: {
           transcriber: transcriberSetup,
           corrector: correctorSetup,
+          reviewer: reviewerSetup,
           switchLocked,
           settings: { open: true, show: noop, close: noop },
           setup: { open: false, roles: [], pendingRun: null, show, close: noop },
@@ -109,8 +125,20 @@ const section = (role: ModelRole) => {
   return found;
 };
 
+const activeRow = (parent: ParentNode) =>
+  [...parent.querySelectorAll('.settings-model')].find(
+    (row) => row.querySelector<HTMLInputElement>('input[type="radio"]')?.checked ?? true,
+  );
+
 const stateTexts = () =>
-  [...container.querySelectorAll('.settings-model-state')].map((el) => el.textContent);
+  [...container.querySelectorAll('section')].map(
+    (found) => activeRow(found)?.querySelector('.settings-model-state')?.textContent,
+  );
+
+const warned = () =>
+  [...container.querySelectorAll('.settings-model-need[data-warn]')].map(
+    (need) => need.closest('.settings-model')?.querySelector('.settings-model-name')?.textContent,
+  );
 
 const buttonLabels = (parent: ParentNode) =>
   [...parent.querySelectorAll('button')].map((el) => el.textContent);
@@ -133,20 +161,34 @@ describe('SettingsDialog static content', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'ready')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'missing')),
+      reviewer: testModelSetup(reviewer, statusOf(reviewer, 'missing')),
     });
     expect(container.querySelector('dialog h2')?.textContent).toBe('Einstellungen');
     expect(section('transcriber').querySelector('h3')?.textContent).toBe('Texterkennung');
     expect(section('corrector').querySelector('h3')?.textContent).toBe('Korrektur');
+    expect(section('reviewer').querySelector('h3')?.textContent).toBe('Inhalt und Form');
     expect(section('transcriber').textContent).toContain('GLM-OCR (Q8_0)');
     expect(section('transcriber').textContent).toContain('1,4 GB');
     expect(section('corrector').textContent).toContain('Gemma 4 E2B it (Q4_0)');
     expect(section('corrector').textContent).toContain('2,8 GB');
-    expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet']);
-    expect(buttonLabels(section('transcriber'))).toEqual(['Löschen']);
-    expect(buttonLabels(section('corrector'))).toEqual([
-      'Herunterladen',
-      'Modell aus Datei importieren …',
-    ]);
+    expect(section('reviewer').textContent).toContain('Gemma 4 E2B it (Q4_0)');
+    expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet', 'Nicht eingerichtet']);
+    expect(buttonLabels(section('transcriber'))).toEqual(['Löschen', 'Eigenes Modell …']);
+    for (const role of ['corrector', 'reviewer'] as const) {
+      expect(buttonLabels(section(role))).toEqual([
+        'Herunterladen',
+        'Modell aus Datei importieren …',
+        'Eigenes Modell …',
+      ]);
+    }
+    expect(container.querySelectorAll('.settings-model-note')).toHaveLength(0);
+    expect(section('corrector').textContent).toContain(
+      'Wird auch für Inhalt und Form verwendet und nur einmal gespeichert.',
+    );
+    expect(section('reviewer').textContent).toContain(
+      'Wird auch für Korrektur verwendet und nur einmal gespeichert.',
+    );
+    expect(section('transcriber').textContent).not.toContain('nur einmal gespeichert');
     expect(container.querySelector('summary')?.textContent).toBe('Protokoll');
     expect(container.querySelector('.settings-about')?.textContent).toMatch(
       /^Rotstift \d+\.\d+\.\d+ · Alles bleibt auf diesem Rechner\.$/,
@@ -169,6 +211,7 @@ describe('SettingsDialog static content', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, null, { available: false }),
       corrector: testModelSetup(corrector, null, { available: false }),
+      reviewer: testModelSetup(reviewer, null, { available: false }),
     });
     expect(container.querySelector('.dialog-body')?.textContent).toContain(
       'Modelle gibt es nur in der Desktop-App.',
@@ -261,7 +304,8 @@ describe('SettingsDialog static actions', () => {
       renderModels({
         transcriber: testModelSetup(transcriber, statusOf(transcriber, state, 1_000_000)),
       });
-      expect(buttonLabels(section('transcriber'))).toEqual([]);
+      expect(buttonLabels(section('transcriber'))).toEqual(['Eigenes Modell …']);
+      expect(buttonIn(section('transcriber'), 'Eigenes Modell …')?.disabled).toBe(true);
     },
   );
 
@@ -269,8 +313,9 @@ describe('SettingsDialog static actions', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'corrupt')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'missing', 300_000_000)),
+      reviewer: testModelSetup(reviewer, statusOf(reviewer, 'missing', 300_000_000)),
     });
-    expect(stateTexts()).toEqual(['Beschädigt', 'Nicht eingerichtet']);
+    expect(stateTexts()).toEqual(['Beschädigt', 'Nicht eingerichtet', 'Nicht eingerichtet']);
     expect(buttonIn(section('transcriber'), 'Löschen')).toBeDefined();
     expect(buttonIn(section('corrector'), 'Löschen')).toBeDefined();
     expect(buttonIn(section('corrector'), 'Herunterladen')).toBeDefined();
@@ -285,7 +330,7 @@ describe('SettingsDialog static actions', () => {
     act(() => buttonIn(section('transcriber'), 'Löschen')?.click());
     expect(transcriberSpies.remove).not.toHaveBeenCalled();
     const confirm = section('transcriber').querySelector('[role="alertdialog"]');
-    expect(confirm?.textContent).toContain('Texterkennung wirklich löschen?');
+    expect(confirm?.textContent).toContain('GLM-OCR (Q8_0) wirklich löschen?');
     expect(buttonLabels(confirm ?? container)).toEqual(['Löschen', 'Behalten']);
     expect(document.activeElement?.textContent).toBe('Behalten');
     expect(section('corrector').querySelector('[role="alertdialog"]')).toBeNull();
@@ -309,7 +354,7 @@ describe('SettingsDialog static actions', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'ready')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'ready')),
-      switchLocked: { transcriber: true, corrector: false },
+      switchLocked: { transcriber: true, corrector: false, reviewer: false },
     });
     expect(buttonIn(section('transcriber'), 'Löschen')?.disabled).toBe(true);
     expect(buttonIn(section('corrector'), 'Löschen')?.disabled).toBe(false);
@@ -317,17 +362,21 @@ describe('SettingsDialog static actions', () => {
 });
 
 describe('SettingsDialog with live model state', () => {
-  it('offers the model choice from 16 GB, only for the role with alternatives, and switches', async () => {
+  it('offers every model of each step with its memory need and switches', async () => {
     const fake = await mountLive({}, { hardware: BIG, states: { [transcriber.id]: 'ready' } });
-    await vi.waitFor(() => expect(radios(section('transcriber'))).toHaveLength(2));
-    expect(radios(section('corrector'))).toHaveLength(0);
+    for (const role of ['transcriber', 'corrector', 'reviewer'] as const) {
+      await vi.waitFor(() => expect(radios(section(role))).toHaveLength(2));
+    }
     expect(radios(section('transcriber')).map((radio) => radio.checked)).toEqual([true, false]);
     const text = section('transcriber').querySelector('.model-choice')?.textContent ?? '';
     expect(text).toContain('GLM-OCR (Q8_0)');
     expect(text).toContain('Qwen3-VL 4B Instruct (Q4_K_M)');
     expect(text).toContain('3,0 GB');
-    expect(text).toContain('Zählt genauer, braucht doppelt so lange. Nur zum Wörterzählen.');
-    expect(container.querySelectorAll('.settings-model-note')).toHaveLength(1);
+    expect(text).toContain('braucht etwa 5,7 GB');
+    expect(section('corrector').textContent).toContain('Gemma 4 E4B it (Q4_0)');
+    expect(section('corrector').textContent).toContain('braucht etwa 7,6 GB');
+    expect(container.querySelectorAll('.settings-model-note')).toHaveLength(0);
+    expect(warned()).toEqual([]);
 
     await click(radios(section('transcriber'))[1]);
     expect(fake.select).toHaveBeenCalledExactlyOnceWith(QWEN_ID);
@@ -335,12 +384,13 @@ describe('SettingsDialog with live model state', () => {
       expect(radios(section('transcriber')).map((radio) => radio.checked)).toEqual([false, true]),
     );
     expect(
-      radios(section('transcriber'))
-        .find((radio) => radio.checked)
-        ?.closest('.settings-model')
-        ?.querySelector('.settings-model-name')?.textContent,
+      activeRow(section('transcriber'))?.querySelector('.settings-model-name')?.textContent,
     ).toBe('Qwen3-VL 4B Instruct (Q4_K_M)');
-    expect(stateTexts()[1]).toBe('Nicht eingerichtet');
+    expect(stateTexts()[0]).toBe('Nicht eingerichtet');
+
+    await click(radios(section('corrector'))[1]);
+    expect(fake.selectCorrector).toHaveBeenCalledExactlyOnceWith(E4B_ID);
+    expect(fake.selectReviewer).not.toHaveBeenCalled();
   });
 
   it('lists every model of a choice once with size, state and Löschen', async () => {
@@ -374,13 +424,27 @@ describe('SettingsDialog with live model state', () => {
     expect(fake.remove).toHaveBeenCalledExactlyOnceWith(QWEN_ID);
   });
 
-  it.each([
-    ['8 GB', { totalRamBytes: 8 * GIB, freeDiskBytes: 100e9 }],
-    ['unknown memory', null],
-  ])('offers no model choice with %s', async (_label, hardware) => {
-    await mountLive({}, { hardware, states: { [transcriber.id]: 'ready' } });
-    expect(radios(container)).toHaveLength(0);
-    expect(section('transcriber').querySelectorAll('.settings-model')).toHaveLength(1);
+  it('marks the models that exceed the memory of an 8 GB machine', async () => {
+    await mountLive(
+      {},
+      {
+        hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: 100e9 },
+        states: { [transcriber.id]: 'ready' },
+      },
+    );
+    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(2));
+    expect(warned()).toEqual([
+      'Qwen3-VL 4B Instruct (Q4_K_M)',
+      'Gemma 4 E4B it (Q4_0)',
+      'Gemma 4 E4B it (Q4_0)',
+    ]);
+    expect(section('corrector').textContent).toContain('braucht etwa 5,5 GB');
+  });
+
+  it('marks nothing with unknown memory', async () => {
+    await mountLive({}, { hardware: null, states: { [transcriber.id]: 'ready' } });
+    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(2));
+    expect(warned()).toEqual([]);
   });
 
   it('blocks switching while another model is being handled', async () => {
@@ -391,7 +455,7 @@ describe('SettingsDialog with live model state', () => {
 
   it('blocks switching and deleting for a locked role', async () => {
     await mountLive(
-      { switchLocked: { transcriber: true, corrector: false } },
+      { switchLocked: { transcriber: true, corrector: false, reviewer: false } },
       { hardware: BIG, states: { [transcriber.id]: 'ready', [corrector.id]: 'ready' } },
     );
     await vi.waitFor(() => expect(radios(section('transcriber'))).toHaveLength(2));
@@ -406,28 +470,69 @@ describe('SettingsDialog with live model state', () => {
       { show },
       { states: { [transcriber.id]: 'ready', [corrector.id]: 'ready' } },
     );
-    expect(stateTexts()).toEqual(['Bereit', 'Bereit']);
+    expect(stateTexts()).toEqual(['Bereit', 'Bereit', 'Bereit']);
 
     await click(buttonIn(section('corrector'), 'Löschen'));
-    expect(section('corrector').textContent).toContain('Korrektur wirklich löschen?');
+    expect(section('corrector').textContent).toContain('Gemma 4 E2B it (Q4_0) wirklich löschen?');
     await click(buttonIn(section('corrector'), 'Behalten'));
     expect(fake.remove).not.toHaveBeenCalled();
-    expect(stateTexts()).toEqual(['Bereit', 'Bereit']);
+    expect(stateTexts()).toEqual(['Bereit', 'Bereit', 'Bereit']);
 
     await click(buttonIn(section('corrector'), 'Löschen'));
     await click(
       buttonIn(section('corrector').querySelector('[role="alertdialog"]') ?? container, 'Löschen'),
     );
     expect(fake.remove).toHaveBeenCalledExactlyOnceWith(corrector.id);
-    await vi.waitFor(() => expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet']));
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet', 'Nicht eingerichtet']),
+    );
     expect(buttonLabels(section('corrector'))).toEqual([
       'Herunterladen',
       'Modell aus Datei importieren …',
+      'Eigenes Modell …',
     ]);
-    expect(buttonLabels(section('transcriber'))).toEqual(['Löschen']);
+    expect(buttonLabels(section('transcriber'))).toEqual(['Löschen', 'Eigenes Modell …']);
 
     await click(buttonIn(section('corrector'), 'Herunterladen'));
     expect(show).toHaveBeenCalledExactlyOnceWith(['corrector']);
+  });
+
+  it('deleting the shared model from the reviewer section removes it for the corrector too', async () => {
+    const show = vi.fn<(roles: readonly ModelRole[]) => void>();
+    const fake = await mountLive({ show }, { states: { [corrector.id]: 'ready' } });
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual(['Nicht eingerichtet', 'Bereit', 'Bereit']),
+    );
+
+    await click(buttonIn(section('reviewer'), 'Löschen'));
+    expect(section('reviewer').textContent).toContain('Gemma 4 E2B it (Q4_0) wirklich löschen?');
+    await click(
+      buttonIn(section('reviewer').querySelector('[role="alertdialog"]') ?? container, 'Löschen'),
+    );
+    expect(fake.remove).toHaveBeenCalledExactlyOnceWith(reviewer.id);
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual([
+        'Nicht eingerichtet',
+        'Nicht eingerichtet',
+        'Nicht eingerichtet',
+      ]),
+    );
+
+    await click(buttonIn(section('reviewer'), 'Herunterladen'));
+    expect(show).toHaveBeenCalledExactlyOnceWith(['reviewer']);
+  });
+
+  it('locks the reviewer section on its own', async () => {
+    await mountLive(
+      { switchLocked: { transcriber: false, corrector: false, reviewer: true } },
+      { states: { [corrector.id]: 'ready' } },
+    );
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual(['Nicht eingerichtet', 'Bereit', 'Bereit']),
+    );
+    expect(section('reviewer').querySelector('fieldset')?.disabled).toBe(true);
+    expect(buttonIn(section('reviewer'), 'Löschen')?.disabled).toBe(true);
+    expect(buttonIn(section('corrector'), 'Löschen')?.disabled).toBe(false);
   });
 
   it('verifies leftover files again on request and shows the verified result', async () => {
@@ -454,5 +559,158 @@ describe('SettingsDialog with live model state', () => {
     });
     expect(container.textContent).toContain('Modelle gibt es nur in der Desktop-App.');
     expect(container.querySelector('section')).toBeNull();
+  });
+});
+
+const COMMIT = 'a'.repeat(40);
+
+const linked: CustomModel = {
+  id: 'custom-0123456789ab',
+  role: 'corrector',
+  source: { kind: 'huggingFace', repo: 'owner/small-GGUF', revision: COMMIT },
+  files: {
+    model: {
+      name: 'small-Q4_K_M.gguf',
+      url: `https://huggingface.co/owner/small-GGUF/resolve/${COMMIT}/small-Q4_K_M.gguf`,
+      sha256: 'b'.repeat(64),
+      bytes: 1_500_000_000,
+    },
+    mmproj: null,
+  },
+};
+
+const fromFile: CustomModel = {
+  id: 'custom-ba9876543210',
+  role: 'corrector',
+  source: { kind: 'file' },
+  files: {
+    model: { name: 'own.gguf', url: '', sha256: 'c'.repeat(64), bytes: 2_000_000_000 },
+    mmproj: null,
+  },
+};
+
+const resolvedLink: ResolvedLink = {
+  repo: 'owner/small-GGUF',
+  commit: COMMIT,
+  models: [
+    { path: 'small-Q4_K_M.gguf', bytes: 1_500_000_000, sha256: 'b'.repeat(64) },
+    { path: 'small-Q8_0.gguf', bytes: 2_600_000_000, sha256: 'd'.repeat(64) },
+  ],
+  projectors: [],
+  model: 'small-Q4_K_M.gguf',
+  projector: null,
+};
+
+const typeInto = (input: HTMLInputElement | null, value: string) =>
+  act(() => {
+    if (input === null) throw new Error('no input');
+    Reflect.set(HTMLInputElement.prototype, 'value', value, input);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+describe('SettingsDialog with a custom model', () => {
+  it('adds a model from a Hugging Face link, downloads it for this step and probes it', async () => {
+    const fake = await mountLive(
+      {},
+      { hardware: BIG, states: { [transcriber.id]: 'ready', [corrector.id]: 'ready' } },
+    );
+    fake.resolveLink.mockResolvedValueOnce(resolvedLink);
+    fake.addLink.mockImplementationOnce(() => Promise.resolve(fake.addCustom(linked)));
+
+    await click(buttonIn(section('corrector'), 'Eigenes Modell …'));
+    expect(buttonIn(section('corrector'), 'Prüfen')?.disabled).toBe(true);
+    typeInto(
+      section('corrector').querySelector('input[type="text"]'),
+      'https://huggingface.co/owner/small-GGUF',
+    );
+    await click(buttonIn(section('corrector'), 'Prüfen'));
+    expect(fake.resolveLink).toHaveBeenCalledExactlyOnceWith(
+      'https://huggingface.co/owner/small-GGUF',
+    );
+    await vi.waitFor(() =>
+      expect(buttonIn(section('corrector'), 'Hinzufügen und laden')).toBeDefined(),
+    );
+    const options = [...section('corrector').querySelectorAll('option')].map(
+      (option) => option.value,
+    );
+    expect(options).toEqual(['small-Q4_K_M.gguf', 'small-Q8_0.gguf']);
+    expect(section('corrector').textContent).toContain('owner/small-GGUF · 1,5 GB');
+
+    await click(buttonIn(section('corrector'), 'Hinzufügen und laden'));
+    expect(fake.addLink).toHaveBeenCalledExactlyOnceWith(
+      'corrector',
+      'owner/small-GGUF',
+      COMMIT,
+      'small-Q4_K_M.gguf',
+      null,
+    );
+    await vi.waitFor(() => expect(fake.startDownload).toHaveBeenCalledWith(linked.id));
+    expect(fake.selectCorrector).toHaveBeenLastCalledWith(linked.id);
+    expect(fake.selectReviewer).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(radios(section('reviewer'))).toHaveLength(3));
+    expect(
+      activeRow(section('corrector'))?.querySelector('.settings-model-name')?.textContent,
+    ).toBe('small-Q4_K_M.gguf');
+    expect(activeRow(section('corrector'))?.textContent).toContain('owner/small-GGUF');
+
+    expect(fake.probe).not.toHaveBeenCalled();
+    await act(async () => {
+      fake.dispatch({ modelId: linked.id, state: 'done' });
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(fake.probe).toHaveBeenCalledExactlyOnceWith(linked.id));
+  });
+
+  it('shows a failed link check at the step', async () => {
+    const fake = await mountLive({}, { hardware: BIG, states: { [corrector.id]: 'ready' } });
+    fake.resolveLink.mockRejectedValueOnce(
+      new ModelCallError({ kind: 'custom', detail: { reason: 'gated' } }),
+    );
+    await click(buttonIn(section('reviewer'), 'Eigenes Modell …'));
+    typeInto(section('reviewer').querySelector('input[type="text"]'), 'https://hf.co/a/b');
+    await click(buttonIn(section('reviewer'), 'Prüfen'));
+    await vi.waitFor(() =>
+      expect(section('reviewer').querySelector('[role="alert"]')?.textContent).toContain(
+        'Dieses Modell verlangt eine Anmeldung bei Hugging Face.',
+      ),
+    );
+    expect(section('corrector').querySelector('[role="alert"]')).toBeNull();
+    expect(buttonIn(section('reviewer'), 'Hinzufügen und laden')).toBeUndefined();
+  });
+
+  it('imports a model from a file, reports what the runtime cannot load and goes back', async () => {
+    const fake = await mountLive(
+      {},
+      { hardware: BIG, states: { [corrector.id]: 'ready', [fromFile.id]: 'ready' } },
+    );
+    fake.importCustom.mockImplementationOnce(() => Promise.resolve(fake.addCustom(fromFile)));
+    fake.probe.mockResolvedValueOnce({
+      kind: 'exitedDuringStartup',
+      detail: { code: 1, log: "error: unknown model architecture: 'granitehybrid'" },
+    });
+
+    await click(buttonIn(section('reviewer'), 'Eigenes Modell …'));
+    await click(buttonIn(section('reviewer'), 'Datei wählen …'));
+    expect(fake.importCustom).toHaveBeenCalledExactlyOnceWith('corrector');
+    await vi.waitFor(() => expect(fake.probe).toHaveBeenCalledExactlyOnceWith(fromFile.id));
+    expect(fake.startDownload).not.toHaveBeenCalled();
+    expect(fake.selectReviewer).toHaveBeenLastCalledWith(fromFile.id);
+    const alert = () => section('reviewer').querySelector('[role="alert"]');
+    await vi.waitFor(() =>
+      expect(alert()?.textContent).toContain(
+        'Dieses Modell kennt die eingebaute Laufzeit nicht (Architektur granitehybrid).',
+      ),
+    );
+    expect(activeRow(section('reviewer'))?.textContent).toContain('Eigene Datei');
+    expect(buttonIn(section('reviewer'), 'Herunterladen')).toBeUndefined();
+
+    await click(buttonIn(alert() ?? container, 'Empfohlenes Modell nutzen'));
+    expect(fake.selectReviewer).toHaveBeenLastCalledWith(reviewer.id);
+    await vi.waitFor(() =>
+      expect(
+        activeRow(section('reviewer'))?.querySelector('.settings-model-name')?.textContent,
+      ).toBe('Gemma 4 E2B it (Q4_0)'),
+    );
+    expect(alert()).toBeNull();
   });
 });

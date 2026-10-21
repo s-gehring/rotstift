@@ -185,6 +185,7 @@ async function appendCorrected(context: Context, arbeit: CorrectedArbeit): Promi
     profile: arbeit.profile,
     statistics: arbeit.statistics,
     date: context.date,
+    ...(arbeit.content && { content: arbeit.content }),
   });
 }
 

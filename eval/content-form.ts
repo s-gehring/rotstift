@@ -10,12 +10,8 @@ import {
   buildChecklistRequest,
   buildMessages,
 } from './content-form-prompt.ts';
-import {
-  buildFeatureRequest,
-  buildSummaryRequest,
-  featureSchema,
-  featuresFor,
-} from './content-form-features.ts';
+import { reviewContent, summaryText } from '../src/content-form/review.ts';
+import { sampleInput } from './content-form-features.ts';
 import { parseReview, serializeReview } from './content-form-review.ts';
 import type { ReviewComment } from './content-form-review.ts';
 import { defectTable, listing, summaryTable } from './content-form-report.ts';
@@ -75,37 +71,38 @@ async function featureReview(
   temperature: number,
   seed: number,
 ) {
-  const comments: ReviewComment[] = [];
   const answers: unknown[] = [];
-  for (const feature of featuresFor(sample)) {
-    const response = await postJson(port, '/v1/chat/completions', {
-      messages: buildFeatureRequest(sample, feature),
-      temperature,
-      seed,
-      max_tokens: 80,
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: 'antwort', schema: featureSchema(feature, sample.lines.length) },
-      },
-    });
-    if (response.status !== 200) throw new Error(`HTTP ${response.status}: ${response.body}`);
-    const answer = record(JSON.parse(readCompletion(JSON.parse(response.body)).content));
-    answers.push({ question: feature.question, ...answer });
-    if (answer['erfuellt'] !== false) continue;
-    const line = Number(answer['zeile']);
-    const written = typeof answer['kommentar'] === 'string' ? answer['kommentar'].trim() : '';
-    const text = feature.comment ?? (written || 'Aufgabe nicht erfüllt');
-    const taken = comments.some(
-      (comment) =>
-        comment.text === text || (feature.comment === null && comment.kind === 'content'),
-    );
-    if (!taken) comments.push({ line, kind: feature.kind, text });
-  }
-  const findings = comments.map((comment) => comment.text);
-  const summary = (await ask(port, buildSummaryRequest(sample, findings), temperature, seed))
-    .replaceAll(/\s+/g, ' ')
-    .trim();
-  return { output: serializeReview({ comments, summary }), answers };
+  const input = sampleInput(sample);
+  const result = await reviewContent(
+    input,
+    async (request) => {
+      const response = await postJson(port, '/v1/chat/completions', {
+        messages: request.messages,
+        temperature,
+        seed,
+        max_tokens: 96,
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'antwort', schema: request.schema },
+        },
+      });
+      if (response.status !== 200) throw new Error(`HTTP ${response.status}: ${response.body}`);
+      const content = readCompletion(JSON.parse(response.body)).content;
+      answers.push(content);
+      return content;
+    },
+    new AbortController().signal,
+  );
+  if (!result.ok) throw new Error(`Prüfung fehlgeschlagen: ${result.error.kind}`);
+  const comments: ReviewComment[] = result.comments.map((comment) => ({
+    line: comment.line,
+    kind: comment.kind,
+    text: comment.text,
+  }));
+  return {
+    output: serializeReview({ comments, summary: summaryText(result.comments) ?? '' }),
+    answers,
+  };
 }
 
 async function runReview(

@@ -2,15 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ModelClient } from '../models/client.ts';
 import {
   useCorrectorSetup,
+  useReviewerSetup,
   type CorrectorSetup,
   type CreateCorrector,
 } from '../models/corrector-setup.ts';
 import type { Corrector } from './corrector.ts';
 import {
+  CORRECTOR_TEXTS,
   resolveBrowserCorrector,
+  REVIEWER_TEXTS,
   sidecarCorrectorStatus,
   type CorrectorEnvironment,
   type CorrectorStatus,
+  type ModelTexts,
 } from './provider.ts';
 
 async function loadPreview(): Promise<Corrector> {
@@ -25,12 +29,12 @@ export function browserCorrectorEnvironment(): CorrectorEnvironment {
   return { isDev: import.meta.env.DEV, loadPreview };
 }
 
-function useBrowserCorrector(enabled: boolean): CorrectorStatus | null {
+function useBrowserCorrector(enabled: boolean, texts: ModelTexts): CorrectorStatus | null {
   const [status, setStatus] = useState<CorrectorStatus | null>(null);
   useEffect(() => {
     if (!enabled) return undefined;
     let current = true;
-    resolveBrowserCorrector(browserCorrectorEnvironment()).then(
+    resolveBrowserCorrector(browserCorrectorEnvironment(), texts).then(
       (resolved) => {
         if (current) setStatus(resolved);
       },
@@ -46,7 +50,7 @@ function useBrowserCorrector(enabled: boolean): CorrectorStatus | null {
     return () => {
       current = false;
     };
-  }, [enabled]);
+  }, [enabled, texts]);
   return enabled ? status : null;
 }
 
@@ -55,19 +59,31 @@ export interface CorrectorChoice {
   readonly setup: CorrectorSetup;
 }
 
-export function useCorrector(
+function useCorrectorStatus(
   client: ModelClient | null,
-  create?: CreateCorrector,
+  setup: CorrectorSetup,
+  texts: ModelTexts,
 ): CorrectorChoice {
-  const setup = useCorrectorSetup(client, create);
-  const browser = useBrowserCorrector(client === null);
+  const browser = useBrowserCorrector(client === null, texts);
   const modelState = setup.setup.status?.state;
   const sidecar = useMemo(
     () =>
       sidecarCorrectorStatus(
         modelState === undefined ? null : { state: modelState, corrector: setup.corrector },
+        texts,
       ),
-    [modelState, setup.corrector],
+    [modelState, setup.corrector, texts],
   );
   return { status: client === null ? browser : sidecar, setup };
+}
+
+export function useCorrector(
+  client: ModelClient | null,
+  create?: CreateCorrector,
+): CorrectorChoice {
+  return useCorrectorStatus(client, useCorrectorSetup(client, create), CORRECTOR_TEXTS);
+}
+
+export function useReviewer(client: ModelClient | null, create?: CreateCorrector): CorrectorChoice {
+  return useCorrectorStatus(client, useReviewerSetup(client, create), REVIEWER_TEXTS);
 }

@@ -7,31 +7,41 @@ import {
   DEFAULT_CORRECTOR_ID,
   MODELS,
   DEFAULT_MODEL_ID,
+  DEFAULT_REVIEWER_ID,
+  REVIEWERS,
   defaultCorrector,
+  defaultReviewer,
   findCorrector,
+  findReviewer,
   parseRegistry,
-  choiceModels,
+  customEntry,
+  customSource,
+  estimateRamBytes,
+  exceedsMemory,
   findModel,
-  isLowOnMemory,
-  modelNote,
   modelSource,
-  offeredModels,
   recommendModel,
   totalBytes,
+  type CustomModel,
   type ModelInfo,
 } from './registry.ts';
 
 const GIB = 1024 ** 3;
 const model = recommendModel();
 
-const list = (ram: number | null, active: ModelInfo) =>
-  choiceModels(ram, active).map((entry) => entry.id);
-const ids = (ram: number | null) => offeredModels(ram).map((entry) => entry.id);
+const TEMPLATES = { transcriber: DEFAULT_MODEL_ID, corrector: DEFAULT_CORRECTOR_ID };
 
 const parse =
   (...models: unknown[]) =>
   () =>
-    parseRegistry({ models });
+    parseRegistry({ customTemplates: TEMPLATES, models });
+
+const customFile = (name: string, digit: string, bytes: number) => ({
+  name,
+  url: '',
+  sha256: digit.repeat(64),
+  bytes,
+});
 
 function variant(id: string, recommendedRamGb: number): ModelInfo {
   return { ...model, id, recommendedRamGb };
@@ -58,12 +68,6 @@ describe('registry', () => {
     });
   });
 
-  it('warns below the recommended memory with a tolerance for reserved memory', () => {
-    expect(isLowOnMemory(model, model.recommendedRamGb * GIB)).toBe(false);
-    expect(isLowOnMemory(model, model.recommendedRamGb * GIB * 0.95)).toBe(false);
-    expect(isLowOnMemory(model, 4 * GIB)).toBe(true);
-  });
-
   it('keeps GLM-OCR as the default and lists the stronger model second', () => {
     expect(MODELS.map((entry) => entry.id)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
     expect(recommendModel().id).toBe(DEFAULT_MODEL_ID);
@@ -82,11 +86,8 @@ describe('registry', () => {
     expect(stronger && totalBytes(stronger)).toBe(2_497_281_664 + 453_974_304);
   });
 
-  it('recommends the default on every machine, even a large one', () => {
-    for (const ram of [null, 2 * GIB, 8 * GIB, 64 * GIB]) {
-      expect(recommendModel().id).toBe(DEFAULT_MODEL_ID);
-      expect(offeredModels(ram)[0]?.id).toBe(DEFAULT_MODEL_ID);
-    }
+  it('recommends the default and falls back to the smallest model', () => {
+    expect(recommendModel().id).toBe(DEFAULT_MODEL_ID);
     const small = variant('small', 4);
     const large = variant('large', 16);
     expect(recommendModel([large, small]).id).toBe('small');
@@ -94,28 +95,103 @@ describe('registry', () => {
     expect(() => recommendModel([])).toThrow('Modellliste ist leer');
   });
 
-  it('offers the stronger model from 16 GB, with a tolerance for reserved memory', () => {
-    expect(ids(null)).toEqual([DEFAULT_MODEL_ID]);
-    expect(ids(8 * GIB)).toEqual([DEFAULT_MODEL_ID]);
-    expect(ids(12 * GIB)).toEqual([DEFAULT_MODEL_ID]);
-    expect(ids(15.7 * GIB)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
-    expect(ids(16 * GIB)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
-    expect(ids(48 * GIB)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
-    expect(offeredModels(2 * GIB, [variant('only', 32)]).map((entry) => entry.id)).toEqual([
-      'only',
-    ]);
+  it('estimates the memory need from the measured peaks', () => {
+    const e2b = findCorrector(DEFAULT_CORRECTOR_ID);
+    const e4b = findCorrector('gemma-4-e4b-q4');
+    if (e2b === undefined || e4b === undefined) throw new Error('missing corrector');
+    expect(estimateRamBytes(e2b, 8 * GIB) / 1e9).toBeCloseTo(3.63, 2);
+    expect(estimateRamBytes(e4b, 8 * GIB) / 1e9).toBeCloseTo(5.47, 2);
+    expect(estimateRamBytes(e4b, 16 * GIB)).toBeGreaterThan(estimateRamBytes(e4b, 8 * GIB));
+    expect(estimateRamBytes(model, 8 * GIB)).toBe(estimateRamBytes(model, 16 * GIB));
   });
 
-  it('keeps the active model in the choice even when the machine does not qualify', () => {
-    const stronger = findModel('qwen3-vl-4b-q4') ?? model;
-    expect(list(null, stronger)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
-    expect(list(8 * GIB, stronger)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
-    expect(list(null, model)).toEqual([DEFAULT_MODEL_ID]);
-    expect(list(32 * GIB, model)).toEqual([DEFAULT_MODEL_ID, 'qwen3-vl-4b-q4']);
+  it('warns about Gemma 4 E4B on 8 GB but not about the defaults', () => {
+    const e4b = findCorrector('gemma-4-e4b-q4');
+    if (e4b === undefined) throw new Error('missing corrector');
+    expect(exceedsMemory(e4b, 8 * GIB)).toBe(true);
+    expect(exceedsMemory(e4b, 16 * GIB)).toBe(false);
+    expect(exceedsMemory(e4b, null)).toBe(false);
+    expect(exceedsMemory(defaultCorrector(), 8 * GIB)).toBe(false);
+    expect(exceedsMemory(recommendModel(), 8 * GIB)).toBe(false);
+    expect(exceedsMemory(recommendModel(), 6 * GIB)).toBe(true);
+  });
+
+  it('builds a custom text model from the template with its own files', () => {
+    const custom: CustomModel = {
+      id: 'custom-0123456789ab',
+      role: 'corrector',
+      source: { kind: 'huggingFace', repo: 'owner/name', revision: 'a'.repeat(40) },
+      files: { model: customFile('own.gguf', 'b', 3e9), mmproj: null },
+    };
+    const entry = customEntry(custom);
+    expect(entry).toMatchObject({
+      id: custom.id,
+      role: 'corrector',
+      displayName: 'own.gguf',
+      license: '',
+      files: { model: custom.files.model },
+      system: defaultCorrector().system,
+      server: { ...defaultCorrector().server, cpuRepack: false },
+    });
+    expect(entry.files).not.toHaveProperty('mmproj');
+    expect(customSource(entry)).toEqual(custom.source);
+    expect(customSource(defaultCorrector())).toBeNull();
+  });
+
+  it('builds a custom transcriber without the reading threshold', () => {
+    const template = findModel('qwen3-vl-4b-q4');
+    const entry = customEntry({
+      id: 'custom-ba9876543210',
+      role: 'transcriber',
+      source: { kind: 'file' },
+      files: {
+        model: customFile('vision.gguf', 'c', 2e9),
+        mmproj: customFile('mmproj.gguf', 'd', 4e8),
+      },
+    });
+    expect(entry).toMatchObject({
+      role: 'transcriber',
+      prompt: template?.prompt,
+      server: { cpuRepack: false },
+      request: { uncertainBelow: null },
+    });
+    expect(totalBytes(entry)).toBe(2.4e9);
+    expect(() =>
+      customEntry({
+        id: 'custom-ba9876543210',
+        role: 'transcriber',
+        source: { kind: 'file' },
+        files: { model: customFile('vision.gguf', 'c', 2e9), mmproj: null },
+      }),
+    ).toThrow('keine Bilddatei');
+  });
+
+  it('requires both custom templates in the registry with the right role', () => {
+    const transcriber = recommendModel();
+    const corrector = defaultCorrector();
+    const withTemplates = (customTemplates: unknown) => () =>
+      parseRegistry({ customTemplates, models: [transcriber, corrector] });
+    expect(withTemplates(TEMPLATES)).not.toThrow();
+    expect(withTemplates({ ...TEMPLATES, corrector: 'missing' })).toThrow('Vorlage missing');
+    expect(withTemplates({ ...TEMPLATES, transcriber: DEFAULT_CORRECTOR_ID })).toThrow(
+      `Vorlage ${DEFAULT_CORRECTOR_ID}`,
+    );
+    expect(withTemplates({ transcriber: DEFAULT_MODEL_ID })).toThrow(ZodError);
+  });
+
+  it('offers the text models as reviewers without a second registry entry', () => {
+    expect(REVIEWERS).toEqual(CORRECTORS);
+    expect(DEFAULT_REVIEWER_ID).toBe(DEFAULT_CORRECTOR_ID);
+    expect(defaultReviewer()).toBe(defaultCorrector());
+    expect(findReviewer(DEFAULT_REVIEWER_ID)).toBe(findCorrector(DEFAULT_CORRECTOR_ID));
+    expect(findReviewer(DEFAULT_MODEL_ID)).toBeUndefined();
+    expect(
+      ALL_MODELS.filter((entry) => entry.files.model.name === defaultReviewer().files.model.name),
+    ).toHaveLength(1);
   });
 
   it('lists Gemma 4 E2B as the corrector exactly as the evaluation recommends', () => {
-    expect(CORRECTORS.map((entry) => entry.id)).toEqual([DEFAULT_CORRECTOR_ID]);
+    expect(CORRECTORS.map((entry) => entry.id)).toEqual([DEFAULT_CORRECTOR_ID, 'gemma-4-e4b-q4']);
     expect(ALL_MODELS).toHaveLength(MODELS.length + CORRECTORS.length);
     expect(findModel(DEFAULT_CORRECTOR_ID)).toBeUndefined();
     expect(findCorrector(DEFAULT_MODEL_ID)).toBeUndefined();
@@ -149,7 +225,11 @@ describe('registry', () => {
     expect(corrector.system).toContain('Gib nur die Zeilen aus, ohne Erklärung.');
     expect(totalBytes(corrector)).toBe(2_841_481_184);
     expect(recommendModel(CORRECTORS).id).toBe(DEFAULT_CORRECTOR_ID);
-    expect(offeredModels(8 * GIB, CORRECTORS)).toEqual([corrector]);
+    expect(findCorrector('gemma-4-e4b-q4')).toMatchObject({
+      recommendedRamGb: 16,
+      files: { model: { name: 'gemma-4-E4B-it-Q4_0.gguf', bytes: 4_590_807_392 } },
+      system: corrector.system,
+    });
   });
 
   it('keeps weight repacking for transcribers', () => {
@@ -200,11 +280,5 @@ describe('registry', () => {
     expect(parse({ ...transcriber, request: withoutThreshold }, corrector)).toThrow(ZodError);
     const correctorRequest = { ...corrector.request, uncertainBelow: 0.95 };
     expect(parse(transcriber, { ...corrector, request: correctorRequest })).toThrow(ZodError);
-  });
-
-  it('describes the stronger model in one short line only', () => {
-    const note = modelNote(findModel('qwen3-vl-4b-q4') ?? model);
-    expect(note).toBe('Zählt genauer, braucht doppelt so lange. Nur zum Wörterzählen.');
-    expect(modelNote(model)).toBeNull();
   });
 });

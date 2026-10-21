@@ -1,5 +1,6 @@
 import { formatRemaining } from '../pipeline/progress.ts';
-import type { DownloadError, UnmatchedFile, UnmatchedReason } from './types.ts';
+import type { LlmError } from '../llm/types.ts';
+import type { CustomProblem, DownloadError, UnmatchedFile, UnmatchedReason } from './types.ts';
 
 const MEGABYTE = 1_000_000;
 const GIGABYTE = 1_000_000_000;
@@ -84,6 +85,8 @@ export function describeDownloadError(error: DownloadError): string {
       return 'Dieses Modell ist in dieser Version nicht bekannt.';
     case 'io':
       return 'Die Modelldatei konnte nicht gespeichert oder gelesen werden. Bitte prüfen, ob genug Speicherplatz frei ist und der Ordner beschreibbar ist.';
+    case 'custom':
+      return describeCustomProblem(error.detail);
     default: {
       const unreachable: never = error;
       return unreachable;
@@ -116,4 +119,52 @@ export function describeImport(
     parts.push(`Nicht übernommen: ${reasons.join(', ')}.`);
   }
   return parts.join(' ');
+}
+
+export function describeCustomProblem(problem: CustomProblem): string {
+  switch (problem.reason) {
+    case 'noLink':
+      return 'Das ist kein Link zu einem Modell auf Hugging Face.';
+    case 'gated':
+      return 'Dieses Modell verlangt eine Anmeldung bei Hugging Face.';
+    case 'notFound':
+      return 'Dieses Modell oder diese Datei gibt es auf Hugging Face nicht.';
+    case 'noGguf':
+      return 'Hier liegt keine GGUF-Datei.';
+    case 'splitFile':
+      return 'Geteilte GGUF-Dateien werden nicht unterstützt.';
+    case 'noProjector':
+      return 'Für die Erkennung fehlt die Bilddatei (mmproj).';
+    case 'tooManyFiles':
+      return 'Bitte ein Modell wählen, für die Erkennung dazu eine Bilddatei (mmproj).';
+    case 'notGguf':
+      return `${problem.file} ist keine GGUF-Datei.`;
+    case 'projector':
+      return `${problem.file} ist eine Bilddatei (mmproj), kein Modell.`;
+    case 'unsupported':
+      return problem.what === null
+        ? 'Dieses Modell ließ sich nicht laden.'
+        : `Dieses Modell kennt die eingebaute Laufzeit nicht (${problem.what}).`;
+    default: {
+      const unreachable: never = problem;
+      return unreachable;
+    }
+  }
+}
+
+const UNKNOWN_PARTS: readonly [RegExp, string][] = [
+  [/unknown model architecture: '([^']+)'/u, 'Architektur'],
+  [/unknown projector type: ([\w.-]+)/u, 'Projektor'],
+];
+
+export function probeProblem(error: LlmError): CustomProblem {
+  const log =
+    'detail' in error && typeof error.detail === 'object' && 'log' in error.detail
+      ? error.detail.log
+      : '';
+  for (const [pattern, label] of UNKNOWN_PARTS) {
+    const found = pattern.exec(log)?.[1];
+    if (found !== undefined) return { reason: 'unsupported', what: `${label} ${found}` };
+  }
+  return { reason: 'unsupported', what: null };
 }

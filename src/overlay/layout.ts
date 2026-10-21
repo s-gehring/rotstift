@@ -18,10 +18,17 @@ import { fitRow, sizeLadder } from './pack.ts';
 import { createRandom, seedFor, spread } from './random.ts';
 import { caret, clampPath, hand, ring } from './strokes.ts';
 
+export interface PageComment {
+  readonly line: number;
+  readonly text: string;
+}
+
 export interface LayoutOptions {
   readonly page: PageSize;
   readonly profile: CorrectionProfile;
   readonly locator?: TextLocator;
+  readonly comments?: readonly PageComment[];
+  readonly summary?: string | null;
 }
 
 type LocatedLine = PlacedLine;
@@ -100,11 +107,234 @@ export function layoutOverlay(transcript: Transcript, options: LayoutOptions): O
     }
     previous = line.frame;
   }
+  const placed = items.map((item) => (item.kind === 'text' ? keepInPage(item, frame) : item));
+  const taken = placed.flatMap((item) => (item.kind === 'text' ? [textBox(item)] : []));
+  const notes = [
+    ...commentItems(lines, frame, options.comments ?? [], taken),
+    ...summaryItems(lines, frame, options.summary ?? null),
+  ];
   return {
     page,
-    items: items.map((item) => (item.kind === 'text' ? keepInPage(item, frame) : item)),
+    items: [...placed, ...notes.map((item) => keepInPage(item, frame))],
     skippedLines,
   };
+}
+
+interface Box {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+const COMMENT_PREFERRED = 0.6;
+const COMMENT_MAX_ROWS = 3;
+const COMMENT_SEARCH_LINES = 3;
+const SIGN_TEXT = '*';
+const SUMMARY_PREFERRED = 0.62;
+const SUMMARY_MIN = 0.4;
+const SUMMARY_GAP = 0.7;
+const SUMMARY_MAX_ROWS = 4;
+const DESCENT = 0.25;
+
+function textBox(item: TextItem): Box {
+  const width = estimateTextWidth(item.text, item.size) * WIDTH_SAFETY;
+  const share = item.anchor === 'end' ? 1 : item.anchor === 'middle' ? 0.5 : 0;
+  const left = item.x - width * share;
+  return {
+    left,
+    right: left + width,
+    top: item.y - item.size * FIX_ASCENT,
+    bottom: item.y + item.size * DESCENT,
+  };
+}
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+function wrapWords(
+  text: string,
+  size: number,
+  available: number,
+  maxRows: number,
+): string[] | null {
+  const rows: string[] = [];
+  let row = '';
+  for (const word of text.split(' ').filter(Boolean)) {
+    const candidate = row === '' ? word : `${row} ${word}`;
+    if (fitsAt(candidate, size, available)) {
+      row = candidate;
+      continue;
+    }
+    if (row === '' || !fitsAt(word, size, available)) return null;
+    rows.push(row);
+    row = word;
+  }
+  if (row !== '') rows.push(row);
+  return rows.length > 0 && rows.length <= maxRows ? rows : null;
+}
+
+function fitWords(
+  text: string,
+  preferred: number,
+  minimum: number,
+  available: number,
+  maxRows: number,
+): CodeRows | null {
+  for (const size of sizeLadder(preferred, Math.min(minimum, preferred))) {
+    const rows = wrapWords(text, size, available, maxRows);
+    if (rows !== null) return { rows, size };
+  }
+  return null;
+}
+
+function shifts(step: number, reach: number): number[] {
+  const result = [0];
+  for (let offset = step; offset <= reach; offset += step) result.push(offset, -offset);
+  return result;
+}
+
+function marginComment(
+  line: LocatedLine,
+  comment: PageComment,
+  frame: Frame,
+  taken: readonly Box[],
+): TextItem[] | null {
+  const { column, page, pad } = frame;
+  if (column.mode !== 'margin') return null;
+  const height = line.frame.height;
+  const random = createRandom(seedFor(line.number, 77, 3));
+  const rotate = spread(random, 1) + lineAngleAt(line.frame, column.left);
+  const middle = lineTopAt(line.frame, column.left) + height * CODE_CENTER;
+  const place = (x: number, shift: number): TextItem[] | null => {
+    const fitted = fitWords(
+      comment.text,
+      height * COMMENT_PREFERRED,
+      height * MIN_CODE_FRACTION,
+      column.right - x,
+      COMMENT_MAX_ROWS,
+    );
+    if (fitted === null) return null;
+    const { rows, size } = fitted;
+    const step = size * ROW_HEIGHT_EM;
+    const first = middle + size * CODE_DROP - (step * (rows.length - 1)) / 2 + shift;
+    return rows.map((text, row) => ({
+      kind: 'text',
+      role: 'comment',
+      text,
+      x,
+      y: first + row * step,
+      size,
+      rotate,
+      anchor: 'start',
+      line: line.number,
+      mark: null,
+      title: comment.text,
+    }));
+  };
+  for (const shift of shifts(height * 0.5, height * COMMENT_SEARCH_LINES)) {
+    let x = column.left;
+    while (x < column.right) {
+      const items = place(x, shift);
+      if (items === null) break;
+      const boxes = items.map(textBox);
+      if (!boxes.every((box) => box.top >= pad && box.bottom <= page.height - pad)) break;
+      const blockers = taken.filter((other) => boxes.some((box) => overlaps(box, other)));
+      if (blockers.length === 0) return items;
+      x = Math.max(...blockers.map((other) => other.right)) + height * 0.3;
+    }
+  }
+  return null;
+}
+
+function signItem(
+  line: LocatedLine,
+  comment: PageComment,
+  frame: Frame,
+  taken: readonly Box[],
+): TextItem {
+  const height = line.frame.height;
+  const size = height * CODE_PREFERRED;
+  const { column } = frame;
+  const y = (x: number) => lineTopAt(line.frame, x) + height * CODE_CENTER + size * CODE_DROP;
+  const sign = (x: number, anchor: TextItem['anchor']): TextItem => ({
+    kind: 'text',
+    role: 'sign',
+    text: SIGN_TEXT,
+    x,
+    y: y(x),
+    size,
+    rotate: lineAngleAt(line.frame, x),
+    anchor,
+    line: line.number,
+    mark: null,
+    title: comment.text,
+  });
+  const candidates =
+    column.mode === 'margin'
+      ? [sign(column.right, 'end'), sign(column.left, 'start')]
+      : [sign(frame.page.width - frame.inset, 'end')];
+  const free = candidates.find((item) => !taken.some((other) => overlaps(textBox(item), other)));
+  return free ?? sign(Math.max(frame.pad, line.bbox.x - size * 0.3), 'end');
+}
+
+function commentItems(
+  lines: readonly LocatedLine[],
+  frame: Frame,
+  comments: readonly PageComment[],
+  taken: readonly Box[],
+): TextItem[] {
+  const occupied = [...taken];
+  const items: TextItem[] = [];
+  for (const comment of comments.toSorted((a, b) => a.line - b.line)) {
+    const line = lines.find((candidate) => candidate.number === comment.line);
+    if (line === undefined) continue;
+    const placed = marginComment(line, comment, frame, occupied) ?? [
+      signItem(line, comment, frame, occupied),
+    ];
+    items.push(...placed);
+    occupied.push(...placed.map(textBox));
+  }
+  return items;
+}
+
+function summaryItems(
+  lines: readonly LocatedLine[],
+  frame: Frame,
+  summary: string | null,
+): TextItem[] {
+  if (summary === null || summary.trim() === '' || lines.length === 0) return [];
+  const meanHeight = lines.reduce((sum, line) => sum + line.frame.height, 0) / lines.length;
+  const bottom = Math.max(...lines.map((line) => line.bbox.y + line.bbox.height));
+  const textRight = Math.max(...lines.map((line) => line.bbox.x + line.bbox.width));
+  const fitted = fitWords(
+    summary,
+    meanHeight * SUMMARY_PREFERRED,
+    meanHeight * SUMMARY_MIN,
+    Math.min(textRight, frame.page.width - frame.inset) - frame.textLeft,
+    SUMMARY_MAX_ROWS,
+  );
+  if (fitted === null) return [];
+  const { rows, size } = fitted;
+  const step = size * ROW_HEIGHT_EM;
+  const first = bottom + meanHeight * SUMMARY_GAP + size * FIX_ASCENT;
+  if (first + step * (rows.length - 1) + size * DESCENT > frame.page.height - frame.pad) return [];
+  const random = createRandom(seedFor(lines.length, 55, rows.length));
+  const rotate = spread(random, 0.6);
+  return rows.map((text, row) => ({
+    kind: 'text',
+    role: 'summary',
+    text,
+    x: frame.textLeft,
+    y: first + row * step,
+    size,
+    rotate,
+    anchor: 'start',
+    line: 0,
+    mark: null,
+    title: summary,
+  }));
 }
 
 function keepInPage(item: TextItem, frame: Frame): TextItem {

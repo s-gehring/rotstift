@@ -56,6 +56,19 @@ Eigene Tags mit Bindestrich, damit sie nie mit echtem HTML kollidieren und der B
 - `<rs-struck>Text</rs-struck>`: Durchgestrichener Text der Zeile, ohne Attribute und ohne verschachtelte Elemente. Er bleibt im Transkript, wird aber nicht gezählt und nicht korrigiert. Markierungen dürfen nicht in gestrichenem Text liegen, eine Auslassung darf an seinem Rand stehen.
 - Die Zeilen stehen auf oberster Ebene. Text außerhalb von Zeilen, andere Elemente und verschachtelte oder überlappende Markierungen sind ungültig. Whitespace wird zu einem Leerzeichen zusammengezogen, ein umgebendes Markdown-Codeblock-Fence wird toleriert. Unbekannte Attribute (z. B. `correction` statt `fix`) werden gemeldet.
 
+### Inhalt und Form
+
+Kommentare zu Inhalt und Form ([0007](0007-korrekturumfang.md)) sind keine Markierungen im Text, sondern ein eigener Block je Seite neben den Zeilen. Das Modell schreibt sie nicht in diesem Format, es beantwortet Fragen als JSON; das Format beschreibt das Ergebnis.
+
+```html
+<rs-comment n="1" kind="form">Ort und Datum fehlen</rs-comment>
+<rs-summary>Inhalt: Thema verfehlt. Form: Ort und Datum fehlen.</rs-summary>
+```
+
+- `<rs-comment n="…" kind="…">Text</rs-comment>`: Kommentar zur Zeile `n` (Pflicht, positive ganze Zahl) der Seite. `kind` ist `content` (Inhalt) oder `form` (Form). Der Text ist reiner Text, nicht leer, ohne Elemente.
+- `<rs-summary>Text</rs-summary>`: Schlusskommentar ohne Attribute, höchstens einmal, nur auf der letzten Seite einer Arbeit.
+- Andere Elemente und Text außerhalb dieser beiden sind ungültig. `parseNotes` meldet alle Probleme auf einmal, `serializeNotes` ist dazu invers (`src/annotations/notes.ts`).
+
 ### Datenmodell und Prüfung
 
 `src/annotations/transcript.ts` definiert das Modell mit Zod: `Transcript` besteht aus `lines`, jede Zeile hat `number`, `bbox?`, `text` (Originaltext ohne Markup), `marks` und `struck?`. `struck` listet gestrichene Stellen als `offset` und `text` in `text`, sortiert und ohne Überlappung. Eine `Mark` hat `kind` (`error` oder `omission`), `type`, `original`, `correction` und `offset` (Zeichenposition in `text`). `listErrors` liefert alle Markierungen mit Zeilennummer. Das Schema prüft zusätzlich, dass Markierungen zum Text passen, sortiert sind, sich nicht überlappen und dass Korrektur und Original sich unterscheiden.

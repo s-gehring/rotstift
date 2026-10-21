@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { AppProvider } from '../app/app-context.tsx';
 import { testAppModel, testWork } from '../app/test-app.ts';
+import { createFakeCorrector } from '../correction/fake-corrector.ts';
+import { DEFAULT_SCOPE } from '../correction/scope.ts';
 import type { Navigation, RunController } from '../app/types.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { Runner } from '../pipeline/runner.ts';
@@ -472,5 +474,62 @@ describe('an Arbeit whose words were only counted', () => {
     });
     expect(query('.detail-figures')?.textContent).toBe('10 Wörter');
     expect(query('.sheet-problem')).toBeNull();
+  });
+});
+
+describe('content and form comments', () => {
+  it('are listed in the column and can be dismissed and restored through the flow', async () => {
+    const harness = setupReview(['a', 'b']);
+    harness.flow.setReviewer(
+      createFakeCorrector(
+        (lines) => lines.join('\n'),
+        () => ({
+          ok: true,
+          questions: 2,
+          comments: [{ pageId: 'b', line: 1, kind: 'form', text: 'Anrede fehlt' }],
+        }),
+      ),
+    );
+    const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }];
+    await harness.flow.start(
+      harness.pages,
+      DEUTSCH,
+      { ...DEFAULT_SCOPE, form: true, formName: 'Persönlicher Brief' },
+      [{ id: 'x', pageIds: ['a', 'b'] }],
+    );
+    show({ flow: harness.flow, runner: harness.runner, arbeiten });
+
+    expect(texts('.side-comment-text')).toEqual(['S. 2, Z. 1 Anrede fehlt']);
+
+    act(() => button('Verwerfen: Anrede fehlt').click());
+    expect(harness.flow.getState().works.x?.comments[0]?.status).toBe('dismissed');
+    expect(query('.side-content [data-status]')?.getAttribute('data-status')).toBe('dismissed');
+    expect(query('.side-content .side-page-figure')?.textContent).toBe('0');
+
+    act(() => button('Rückgängig: Anrede fehlt').click());
+    expect(harness.flow.getState().works.x?.comments[0]?.status).toBe('open');
+    expect(query('.side-content .side-page-figure')?.textContent).toBe('1');
+  });
+
+  it('say there is nothing to note when a finished review found nothing', async () => {
+    const harness = setupReview(['a']);
+    harness.flow.setReviewer(
+      createFakeCorrector(
+        (lines) => lines.join('\n'),
+        () => ({ ok: true, questions: 2, comments: [] }),
+      ),
+    );
+    await harness.flow.start(
+      harness.pages,
+      DEUTSCH,
+      { ...DEFAULT_SCOPE, content: true, assignment: 'Beschreibe deinen Tag.' },
+      [{ id: 'x', pageIds: ['a'] }],
+    );
+    show({
+      flow: harness.flow,
+      runner: harness.runner,
+      arbeiten: [{ id: 'x', name: 'Aufsatz Ada', pages: harness.pages }],
+    });
+    expect(query('.detail-side')?.textContent).toContain('Inhalt und Form: keine Auffälligkeiten');
   });
 });

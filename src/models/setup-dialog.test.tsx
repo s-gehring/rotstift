@@ -10,7 +10,7 @@ import { defaultCorrector, recommendModel } from './registry.ts';
 import { SetupDialog } from './SetupDialog.tsx';
 import { fakeModelClient, type FakeClientOptions } from './test-client.ts';
 import type { DownloadEvent } from './types.ts';
-import { useCorrectorModelSetup, useModelSetup } from './use-model-setup.ts';
+import { useCorrectorModelSetup, useModelSetup, useReviewerModelSetup } from './use-model-setup.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -29,10 +29,12 @@ interface HarnessProps {
 function Harness({ client, roles, open = true, onClose = () => undefined }: HarnessProps) {
   const transcriberSetup = useModelSetup(client);
   const correctorSetup = useCorrectorModelSetup(client);
+  const reviewerSetup = useReviewerModelSetup(client);
   const app = testAppModel({
     models: {
       transcriber: transcriberSetup,
       corrector: correctorSetup,
+      reviewer: reviewerSetup,
       setup: { open, roles, pendingRun: null, show: () => undefined, close: onClose },
     },
   });
@@ -121,6 +123,40 @@ describe('SetupDialog content', () => {
     ]);
     expect(button('Herunterladen')?.disabled).toBe(false);
     expect(progressBar()).toBeNull();
+  });
+
+  it('lists the reviewer apart from the transcriber', async () => {
+    await mount({ roles: ['transcriber', 'reviewer'] });
+    const listed = [...container.querySelectorAll('.setup-models li')].map((row) =>
+      [...row.querySelectorAll('span')].map((cell) => cell.textContent.trim()),
+    );
+    expect(listed).toEqual([
+      ['Texterkennung', '1,4 GB', ''],
+      ['Inhalt und Form', '2,8 GB', ''],
+      ['Zusammen', '4,3 GB', ''],
+    ]);
+  });
+
+  it('lists the file of corrector and reviewer once and counts its size once', async () => {
+    const fake = await mount({ roles: ['transcriber', 'corrector', 'reviewer'] }, {}, [
+      'missing',
+      'missing',
+    ]);
+    const listed = [...container.querySelectorAll('.setup-models li')].map((row) =>
+      [...row.querySelectorAll('span')].map((cell) => cell.textContent.trim()),
+    );
+    expect(listed).toEqual([
+      ['Texterkennung', '1,4 GB', ''],
+      ['Korrektur sowie Inhalt und Form', '2,8 GB', ''],
+      ['Zusammen', '4,3 GB', ''],
+    ]);
+
+    expect(container.querySelectorAll('.setup-offline-role')).toHaveLength(2);
+
+    await click(button('Herunterladen'));
+    expect(fake.startDownload.mock.calls.map(([modelId]) => modelId).toSorted()).toEqual(
+      [transcriber.id, corrector.id].toSorted(),
+    );
   });
 
   it('omits the total row when only one role is requested', async () => {
@@ -213,17 +249,17 @@ describe('SetupDialog focus', () => {
 });
 
 describe('SetupDialog warnings', () => {
-  it('warns in one sentence when the machine has less memory than recommended', async () => {
+  it('warns in one sentence about the model that needs the most memory', async () => {
     await mount({ roles: BOTH }, { hardware: { totalRamBytes: 4 * GIB, freeDiskBytes: 100e9 } });
     await vi.waitFor(() =>
       expect(container.querySelector('.setup-warning')?.textContent).toBe(
-        'Dieser Rechner hat 4,0 GB Arbeitsspeicher, empfohlen sind 8 GB.',
+        'Gemma 4 E2B it (Q4_0) braucht etwa 3,6 GB, dieser Rechner hat 4,0 GB Arbeitsspeicher.',
       ),
     );
     expect(container.querySelectorAll('.setup-warning')).toHaveLength(1);
   });
 
-  it('does not warn about memory at the recommended size or above', async () => {
+  it('does not warn about the default models on 8 GB', async () => {
     await mount({ roles: BOTH }, { hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: 100e9 } });
     await vi.waitFor(() => expect(rows()).toEqual(['missing', 'missing']));
     expect(container.querySelector('.setup-warning')).toBeNull();

@@ -7,6 +7,8 @@ import {
   formatSize,
   pushSample,
   remainingText,
+  describeCustomProblem,
+  probeProblem,
 } from './format.ts';
 import type { DownloadError } from './types.ts';
 
@@ -106,5 +108,38 @@ describe('describeImport', () => {
     expect(text).toContain('two.gguf (konnte nicht gelesen oder gespeichert werden)');
     expect(text).toContain('three.gguf (wurde schon übernommen)');
     expect(text).toContain('Übernommen: 1 von 2 Dateien.');
+  });
+});
+
+const exited = (log: string) =>
+  probeProblem({ kind: 'exitedDuringStartup', detail: { code: 1, log } });
+
+describe('custom models', () => {
+  it('describes each problem with a custom model in one sentence', () => {
+    expect(describeDownloadError({ kind: 'custom', detail: { reason: 'noProjector' } })).toBe(
+      'Für die Erkennung fehlt die Bilddatei (mmproj).',
+    );
+    expect(describeCustomProblem({ reason: 'notGguf', file: 'notes.txt' })).toBe(
+      'notes.txt ist keine GGUF-Datei.',
+    );
+    expect(describeCustomProblem({ reason: 'projector', file: 'mmproj-F16.gguf' })).toBe(
+      'mmproj-F16.gguf ist eine Bilddatei (mmproj), kein Modell.',
+    );
+    expect(describeCustomProblem({ reason: 'unsupported', what: null })).toBe(
+      'Dieses Modell ließ sich nicht laden.',
+    );
+  });
+
+  it('names the part of a model the runtime does not know', () => {
+    expect(exited("llama_model_load: error: unknown model architecture: 'granitehybrid'")).toEqual({
+      reason: 'unsupported',
+      what: 'Architektur granitehybrid',
+    });
+    expect(exited('clip_init: unknown projector type: minicpmv4_7\n')).toEqual({
+      reason: 'unsupported',
+      what: 'Projektor minicpmv4_7',
+    });
+    expect(exited('out of memory')).toEqual({ reason: 'unsupported', what: null });
+    expect(probeProblem({ kind: 'startupTimeout' })).toEqual({ reason: 'unsupported', what: null });
   });
 });
