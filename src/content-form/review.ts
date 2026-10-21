@@ -3,7 +3,13 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { CorrectError } from '../correction/corrector.ts';
 import { cleanAssignment, type CorrectionScope } from '../correction/scope.ts';
 import type { ChatMessage } from '../llm/types.ts';
-import { findTextForm, type CommentKind } from './catalog.ts';
+import {
+  TEXT_FORMS,
+  matchTextForm,
+  normalizeFormName,
+  type CommentKind,
+  type TextForm,
+} from './catalog.ts';
 
 export interface WorkLine {
   readonly pageId: string;
@@ -31,7 +37,12 @@ export interface ContentInput {
 }
 
 export type ContentResult =
-  | { readonly ok: true; readonly comments: readonly ContentComment[]; readonly questions: number }
+  | {
+      readonly ok: true;
+      readonly comments: readonly ContentComment[];
+      readonly questions: number;
+      readonly checkedAs?: string;
+    }
   | { readonly ok: false; readonly error: CorrectError };
 
 export interface QuestionRequest {
@@ -78,9 +89,11 @@ export function reviewsContent(scope: CorrectionScope): boolean {
   return (scope.content && !needsAssignment(scope)) || (scope.form && !needsFormName(scope));
 }
 
-export function contentQuestions(scope: CorrectionScope): ContentQuestion[] {
+export function contentQuestions(
+  scope: CorrectionScope,
+  known: TextForm | null = matchTextForm(cleanFormName(scope.formName)),
+): ContentQuestion[] {
   const formName = cleanFormName(scope.formName);
-  const known = findTextForm(formName);
   const form: ContentQuestion[] =
     !scope.form || formName === ''
       ? []
@@ -99,6 +112,61 @@ export function contentQuestions(scope: CorrectionScope): ContentQuestion[] {
           }));
   const content = scope.content && !needsAssignment(scope) ? TASK_QUESTIONS : [];
   return [...form, ...content];
+}
+
+export const NO_FORM = 'keine';
+
+export function formRequest(scope: CorrectionScope): QuestionRequest {
+  const assignment = cleanAssignment(scope.assignment);
+  const names = TEXT_FORMS.map((form) => form.name);
+  return {
+    messages: [
+      {
+        role: 'system',
+        content: [
+          'Du ordnest eine Textform aus dem Unterricht einer bekannten Textform zu.',
+          ...(assignment === '' ? [] : [`<aufgabe>\n${assignment}\n</aufgabe>`]),
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          `Verlangte Textform: ${cleanFormName(scope.formName)}`,
+          `Bekannte Textformen: ${names.join(', ')}.`,
+          `Frage: Ist die verlangte Textform nur ein anderer Name oder eine Unterart einer bekannten Textform? Eigene Textformen wie Gedicht, Tagebucheintrag oder Lebenslauf sind es nicht.`,
+          `Antworte als JSON: textform ist diese bekannte Textform, sonst „${NO_FORM}“.`,
+        ].join('\n'),
+      },
+    ],
+    schema: {
+      type: 'object',
+      properties: { textform: { enum: [...names, NO_FORM] } },
+      required: ['textform'],
+      additionalProperties: false,
+    },
+  };
+}
+
+const formAnswerSchema = z.object({ textform: z.string() });
+
+export function readFormAnswer(answer: string): TextForm | null {
+  try {
+    const parsed = formAnswerSchema.safeParse(JSON.parse(answer));
+    if (!parsed.success) return null;
+    return TEXT_FORMS.find((form) => form.name === parsed.data.textform) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveTextForm(
+  scope: CorrectionScope,
+  ask: AskQuestion,
+  signal: AbortSignal,
+): Promise<TextForm | null> {
+  const formName = cleanFormName(scope.formName);
+  if (!scope.form || formName === '') return null;
+  return matchTextForm(formName) ?? readFormAnswer(await ask(formRequest(scope), signal));
 }
 
 export function numberWorkLines(lines: readonly WorkLine[]): string {
@@ -126,10 +194,12 @@ function contextMessage(profile: CorrectionProfile, scope: CorrectionScope): Cha
   };
 }
 
+export const QUOTE_MAX_LENGTH = 60;
+
 export function questionRequest(input: ContentInput, question: ContentQuestion): QuestionRequest {
   const ask = [
     `Frage: ${question.question}`,
-    'Antworte als JSON: erfuellt ist true oder false, zeile ist die Zeile, an der der Mangel steht oder das Fehlende stehen müsste.',
+    'Antworte als JSON: erfuellt ist true oder false, zitat sind die ersten Wörter der Stelle, an der der Mangel steht oder das Fehlende stehen müsste, wörtlich aus dem Text ohne Zeilennummer.',
     ...(question.comment === null
       ? [`kommentar nennt den Mangel in höchstens ${COMMENT_MAX_WORDS} Wörtern, leer wenn erfüllt.`]
       : []),
@@ -143,20 +213,41 @@ export function questionRequest(input: ContentInput, question: ContentQuestion):
       type: 'object',
       properties: {
         erfuellt: { type: 'boolean' },
-        zeile: { type: 'integer', minimum: 1, maximum: Math.max(1, input.lines.length) },
+        zitat: { type: 'string', maxLength: QUOTE_MAX_LENGTH },
         ...(question.comment === null && {
           kommentar: { type: 'string', maxLength: COMMENT_MAX_LENGTH },
         }),
       },
-      required: ['erfuellt', 'zeile', ...(question.comment === null ? ['kommentar'] : [])],
+      required: ['erfuellt', 'zitat', ...(question.comment === null ? ['kommentar'] : [])],
       additionalProperties: false,
     },
   };
 }
 
+const wordsOf = (text: string) => text.toLocaleLowerCase('de').match(/[\p{L}\p{N}]+/gu) ?? [];
+
+export function quoteLine(lines: readonly WorkLine[], quote: string): number | null {
+  const wanted = wordsOf(quote.replace(/^\s*\d+\s*:/u, ''));
+  if (wanted.length === 0) return null;
+  const text = lines.flatMap((line, index) => wordsOf(line.text).map((word) => ({ word, index })));
+  let best: { index: number; run: number } | null = null;
+  for (let start = 0; start < text.length; start += 1) {
+    for (let offset = 0; offset < wanted.length; offset += 1) {
+      let run = 0;
+      while (offset + run < wanted.length && text[start + run]?.word === wanted[offset + run]) {
+        run += 1;
+      }
+      const at = text[start];
+      if (at !== undefined && run > (best?.run ?? 0)) best = { index: at.index, run };
+    }
+  }
+  if (best === null) return null;
+  return best.run >= Math.min(2, wanted.length) ? best.index : null;
+}
+
 const answerSchema = z.object({
   erfuellt: z.boolean(),
-  zeile: z.number().int(),
+  zitat: z.string(),
   kommentar: z.string().optional(),
 });
 
@@ -174,8 +265,7 @@ export function tidyComment(text: string): string {
 export function readAnswer(
   answer: string,
   question: ContentQuestion,
-  lineCount: number,
-): { readonly met: boolean; readonly line: number; readonly text: string } | null {
+): { readonly met: boolean; readonly quote: string; readonly text: string } | null {
   let json: unknown;
   try {
     json = JSON.parse(answer);
@@ -184,11 +274,10 @@ export function readAnswer(
   }
   const parsed = answerSchema.safeParse(json);
   if (!parsed.success) return null;
-  const line = Math.min(Math.max(parsed.data.zeile, 1), Math.max(lineCount, 1));
   const written = tidyComment(parsed.data.kommentar ?? '');
   return {
     met: parsed.data.erfuellt,
-    line,
+    quote: parsed.data.zitat,
     text: question.comment ?? (written === '' ? 'Aufgabe nicht erfüllt' : written),
   };
 }
@@ -200,20 +289,19 @@ export async function reviewContent(
   ask: AskQuestion,
   signal: AbortSignal,
 ): Promise<ContentResult> {
-  const questions = contentQuestions(input.scope);
+  const known = await resolveTextForm(input.scope, ask, signal);
+  const checked =
+    known === null ? input : { ...input, scope: { ...input.scope, formName: known.name } };
+  const questions = contentQuestions(checked.scope, known);
   const comments: ContentComment[] = [];
   let answered = 0;
   for (const question of questions) {
     signal.throwIfAborted();
-    const answer = readAnswer(
-      await ask(questionRequest(input, question), signal),
-      question,
-      input.lines.length,
-    );
+    const answer = readAnswer(await ask(questionRequest(checked, question), signal), question);
     if (answer === null) continue;
     answered += 1;
     if (answer.met) continue;
-    const target = nearestText(input.lines, answer.line - 1);
+    const target = nearestText(input.lines, quoteLine(input.lines, answer.quote) ?? 0);
     if (target === null) continue;
     const repeated =
       comments.some((comment) => comment.text === answer.text) ||
@@ -230,7 +318,15 @@ export async function reviewContent(
   if (questions.length > 0 && answered === 0) {
     return { ok: false, error: { kind: 'failed', message: INVALID_ANSWERS } };
   }
-  return { ok: true, comments, questions: questions.length };
+  const renamed =
+    known !== null &&
+    normalizeFormName(known.name) !== normalizeFormName(cleanFormName(input.scope.formName));
+  return {
+    ok: true,
+    comments,
+    questions: questions.length,
+    ...(renamed && { checkedAs: known.name }),
+  };
 }
 
 function nearestText(lines: readonly WorkLine[], index: number): WorkLine | null {

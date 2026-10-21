@@ -39,9 +39,18 @@ const NO_GREETING: ContentComment = {
   text: 'Anrede fehlt',
 };
 
-async function reviewed(comments: readonly ContentComment[], blankLast = false) {
+async function reviewed(
+  comments: readonly ContentComment[],
+  blankLast = false,
+  checkedAs?: string,
+) {
   const setup = setupReview(['a', 'b']);
-  const answer: ContentResult = { ok: true, comments, questions: 2 };
+  const answer: ContentResult = {
+    ok: true,
+    comments,
+    questions: 2,
+    ...(checkedAs !== undefined && { checkedAs }),
+  };
   setup.flow.setReviewer(
     createFakeCorrector(
       (lines) => lines.join('\n'),
@@ -96,6 +105,7 @@ describe('the content review in the Arbeit model', () => {
     expect(model().content).toEqual({
       status: 'done',
       message: null,
+      checkedAs: null,
       summary: 'Inhalt: Aufgabe nicht erfüllt. Form: Anrede fehlt.',
       comments: [
         {
@@ -160,8 +170,19 @@ describe('the content review in the Arbeit model', () => {
 
   it('reports a review without findings as done with no summary', async () => {
     const { model } = await reviewed([]);
-    expect(model().content).toEqual({ status: 'done', comments: [], summary: null, message: null });
+    expect(model().content).toEqual({
+      status: 'done',
+      comments: [],
+      summary: null,
+      message: null,
+      checkedAs: null,
+    });
     expect(model().pages.every((page) => page.correction?.summary === null)).toBe(true);
+  });
+
+  it('carries the catalogue form the review checked against', async () => {
+    const { model } = await reviewed([NO_GREETING], false, 'Persönlicher Brief');
+    expect(model().content?.checkedAs).toBe('Persönlicher Brief');
   });
 
   it('drops comments that point to a page outside the Arbeit', async () => {
@@ -216,6 +237,7 @@ describe('the content review in the Arbeit model', () => {
       comments: [],
       summary: null,
       message: 'Der Text konnte nicht korrigiert werden (Zeitüberschreitung).',
+      checkedAs: null,
     });
   });
 });
@@ -249,7 +271,7 @@ function entry(index: number, overrides: Partial<CommentEntry> = {}): CommentEnt
 
 function content(overrides: Partial<ContentReviewModel> = {}): ContentReviewModel {
   const comments = overrides.comments ?? [];
-  return { status: 'done', comments, summary: null, message: null, ...overrides };
+  return { status: 'done', comments, summary: null, message: null, checkedAs: null, ...overrides };
 }
 
 const noop = () => undefined;
@@ -301,6 +323,21 @@ describe('the content column of an Arbeit', () => {
     ]);
     expect(container.querySelector('#side-content')).toBeNull();
     expect(all('button')).toEqual([]);
+  });
+
+  it('names the catalogue form the review checked against', () => {
+    renderSide({ content: content({ checkedAs: 'Persönlicher Brief' }), onComment: noop });
+    expect(all('.side-empty').map((element) => element.textContent)).toEqual([
+      'Inhalt und Form: keine Auffälligkeiten · geprüft als Persönlicher Brief',
+    ]);
+
+    renderSide({
+      content: content({ checkedAs: 'Persönlicher Brief', comments: [entry(0)] }),
+      onComment: noop,
+    });
+    expect(all('.side-empty').map((element) => element.textContent)).toEqual([
+      'geprüft als Persönlicher Brief',
+    ]);
   });
 
   it('lists each comment with its page and line and counts the open ones', () => {

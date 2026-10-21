@@ -228,7 +228,12 @@ function ContentSection({
 }) {
   const open = content.comments.filter((comment) => comment.status === 'open');
   if (content.status === 'done' && content.comments.length === 0) {
-    return <p className="side-empty">Inhalt und Form: keine Auffälligkeiten</p>;
+    return (
+      <p className="side-empty">
+        Inhalt und Form: keine Auffälligkeiten
+        {content.checkedAs !== null && ` · geprüft als ${content.checkedAs}`}
+      </p>
+    );
   }
   const figure =
     content.status === 'reviewing' || content.status === 'cancelled'
@@ -242,6 +247,7 @@ function ContentSection({
         <h2 id="side-content">Inhalt und Form</h2>
         <span className="side-page-figure">{figure}</span>
       </header>
+      {content.checkedAs !== null && <p className="side-empty">geprüft als {content.checkedAs}</p>}
       {content.status === 'failed' && content.message !== null && (
         <p className="side-empty">{content.message}</p>
       )}

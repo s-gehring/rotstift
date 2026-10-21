@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FORM_SUGGESTIONS, TEXT_FORMS, findTextForm, normalizeFormName } from './catalog.ts';
+import {
+  FORM_SUGGESTIONS,
+  TEXT_FORMS,
+  findTextForm,
+  matchTextForm,
+  normalizeFormName,
+} from './catalog.ts';
 import { COMMENT_MAX_LENGTH } from './review.ts';
 
 describe('findTextForm', () => {
@@ -44,6 +50,38 @@ describe('findTextForm', () => {
     expect(findTextForm('Gedicht')).toBeNull();
     expect(findTextForm('Kochrezept')).toBeNull();
     expect(findTextForm('')).toBeNull();
+  });
+});
+
+describe('matchTextForm', () => {
+  it.each([
+    ['Brief an einen Freund', 'Persönlicher Brief'],
+    ['Liebesbrief', 'Persönlicher Brief'],
+    ['Bewerbungsbrief', 'Bewerbungsschreiben'],
+    ['Formeller Beschwerdebrief', 'Formeller Brief'],
+    ['E-Mail an die Lehrerin', 'E-Mail'],
+    ['Kochrezept', 'Vorgangsbeschreibung'],
+    ['Ortsbeschreibung', 'Beschreibung'],
+    ['Steckbrief', 'Beschreibung'],
+    ['Klosterchronik', 'Chronik'],
+    ['Zeitungsmeldung', 'Bericht'],
+    ['Textzusammenfassung', 'Zusammenfassung'],
+    ['Inhaltsangabe einer Kurzgeschichte', 'Inhaltsangabe'],
+    ['History essay', 'Essay'],
+    ['Erörterungsaufsatz', 'Lineare Erörterung'],
+  ])('maps %s to %s', (name, form) => {
+    expect(matchTextForm(name)?.name).toBe(form);
+  });
+
+  it.each(['Gedicht', 'Argumentation', 'Reportage', 'Briefing', 'Tagebucheintrag', ''])(
+    'leaves %s unmatched',
+    (name) => {
+      expect(matchTextForm(name)).toBeNull();
+    },
+  );
+
+  it('prefers the exact catalogue name', () => {
+    expect(matchTextForm('Leserbrief')?.name).toBe('Leserbrief');
   });
 });
 

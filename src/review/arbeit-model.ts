@@ -53,6 +53,7 @@ export interface ContentReviewModel {
   readonly comments: readonly CommentEntry[];
   readonly summary: string | null;
   readonly message: string | null;
+  readonly checkedAs: string | null;
 }
 
 export type PageActivity = 'reading' | 'correcting' | null;
@@ -142,6 +143,7 @@ export function contentReview(arbeit: Arbeit, review: ReviewState): ContentRevie
     comments,
     summary: summaryText(comments.filter((comment) => comment.status === 'open')),
     message: work.message,
+    checkedAs: work.checkedAs ?? null,
   };
 }
 
