@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ModelRole } from '../app/types.ts';
-import { CloudCallError, type CloudClient, type CloudInput, type CloudView } from './client.ts';
+import {
+  CloudCallError,
+  type CloudClient,
+  type CloudInput,
+  type CloudView,
+  type RemoteModel,
+} from './client.ts';
 import type { CloudErrorClass } from './errors.ts';
 
 export type CloudOutcome =
@@ -8,10 +14,15 @@ export type CloudOutcome =
   | { readonly state: 'consent' }
   | { readonly state: 'error'; readonly error: CloudErrorClass };
 
+export type ModelsOutcome =
+  | { readonly state: 'ok'; readonly models: readonly RemoteModel[] }
+  | { readonly state: 'error'; readonly error: CloudErrorClass };
+
 export interface CloudModel {
   readonly available: boolean;
   readonly steps: CloudView['steps'];
   readonly use: (role: ModelRole, input: CloudInput, confirmed: boolean) => Promise<CloudOutcome>;
+  readonly models: (input: CloudInput) => Promise<ModelsOutcome>;
   readonly setKey: (role: ModelRole, key: string) => Promise<CloudErrorClass | null>;
   readonly clear: (role: ModelRole) => Promise<void>;
 }
@@ -61,6 +72,21 @@ export function useCloud(client: CloudClient | null): CloudModel {
     [client],
   );
 
+  const models = useCallback(
+    async (input: CloudInput): Promise<ModelsOutcome> => {
+      if (client === null) return { state: 'error', error: 'notConfigured' };
+      try {
+        return {
+          state: 'ok',
+          models: await client.models(input.template, input.baseUrl, input.key),
+        };
+      } catch (error) {
+        return { state: 'error', error: errorClass(error) };
+      }
+    },
+    [client],
+  );
+
   const setKey = useCallback(
     async (role: ModelRole, key: string): Promise<CloudErrorClass | null> => {
       if (client === null) return 'notConfigured';
@@ -87,7 +113,7 @@ export function useCloud(client: CloudClient | null): CloudModel {
   );
 
   return useMemo(
-    () => ({ available: client !== null, steps: view.steps, use, setKey, clear }),
-    [client, view.steps, use, setKey, clear],
+    () => ({ available: client !== null, steps: view.steps, use, models, setKey, clear }),
+    [client, view.steps, use, models, setKey, clear],
   );
 }

@@ -21,6 +21,11 @@ export interface CloudView {
   readonly steps: Readonly<Partial<Record<ModelRole, CloudStep>>>;
 }
 
+export interface RemoteModel {
+  readonly id: string;
+  readonly displayName: string;
+}
+
 export interface CloudInput {
   readonly template: string;
   readonly baseUrl: string;
@@ -53,6 +58,8 @@ export function createCloudClient(invoke: Invoke = tauriInvoke) {
       call<CloudView>('cloud_use', { step, ...input, confirmed }),
     setKey: (step: ModelRole, key: string) => call<CloudView>('cloud_set_key', { step, key }),
     clear: (step: ModelRole) => call<CloudView>('cloud_clear', { step }),
+    models: (template: string, baseUrl: string, key: string | null) =>
+      call<readonly RemoteModel[]>('cloud_models', { template, baseUrl, key }),
     check: (step: ModelRole) => call<undefined>('cloud_check', { step }),
   };
 }
