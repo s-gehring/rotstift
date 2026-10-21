@@ -249,17 +249,17 @@ describe('SetupDialog focus', () => {
 });
 
 describe('SetupDialog warnings', () => {
-  it('warns in one sentence when the machine has less memory than recommended', async () => {
+  it('warns in one sentence about the model that needs the most memory', async () => {
     await mount({ roles: BOTH }, { hardware: { totalRamBytes: 4 * GIB, freeDiskBytes: 100e9 } });
     await vi.waitFor(() =>
       expect(container.querySelector('.setup-warning')?.textContent).toBe(
-        'Dieser Rechner hat 4,0 GB Arbeitsspeicher, empfohlen sind 8 GB.',
+        'Gemma 4 E2B it (Q4_0) braucht etwa 3,6 GB, dieser Rechner hat 4,0 GB Arbeitsspeicher.',
       ),
     );
     expect(container.querySelectorAll('.setup-warning')).toHaveLength(1);
   });
 
-  it('does not warn about memory at the recommended size or above', async () => {
+  it('does not warn about the default models on 8 GB', async () => {
     await mount({ roles: BOTH }, { hardware: { totalRamBytes: 8 * GIB, freeDiskBytes: 100e9 } });
     await vi.waitFor(() => expect(rows()).toEqual(['missing', 'missing']));
     expect(container.querySelector('.setup-warning')).toBeNull();

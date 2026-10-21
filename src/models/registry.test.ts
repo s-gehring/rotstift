@@ -19,7 +19,6 @@ import {
   estimateRamBytes,
   exceedsMemory,
   findModel,
-  isLowOnMemory,
   modelSource,
   recommendModel,
   totalBytes,
@@ -67,12 +66,6 @@ describe('registry', () => {
       host: 'huggingface.co',
       repository: expect.stringMatching(/^[^/]+\/[^/]+$/u),
     });
-  });
-
-  it('warns below the recommended memory with a tolerance for reserved memory', () => {
-    expect(isLowOnMemory(model, model.recommendedRamGb * GIB)).toBe(false);
-    expect(isLowOnMemory(model, model.recommendedRamGb * GIB * 0.95)).toBe(false);
-    expect(isLowOnMemory(model, 4 * GIB)).toBe(true);
   });
 
   it('keeps GLM-OCR as the default and lists the stronger model second', () => {

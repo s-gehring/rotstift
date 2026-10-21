@@ -159,7 +159,7 @@ Die Faktoren sind an den gemessenen Peaks kalibriert, nicht an der Dateigröße 
 
 Die Erkennung ohne Repack ist mit fünf Seiten je Modell gemessen. Qwen3-VL mit Repack lag in einer älteren Messung mit mehr Bild-Tokens bei 6,4 GB, die Schätzung (5,67 GB) liegt dort darunter; gewarnt wird auf 8 GB trotzdem.
 
-Neben jedem Eintrag steht „braucht etwa X GB“. Übersteigt der Bedarf den Arbeitsspeicher abzüglich 3,5 GiB für System und App (auf 8 GiB also 4,5 GiB oder 4,83 GB), ist der Text rot. Gemma 4 E4B (5,47 GB) und Qwen3-VL (5,67 GB) sind auf 8 GB markiert, GLM-OCR (3,35 GB) und Gemma 4 E2B (3,63 GB) nicht. Gesperrt wird nichts. Der Einrichtungsdialog warnt weiter nach `recommendedRamGb`.
+Neben jedem Eintrag steht „braucht etwa X GB“. Übersteigt der Bedarf den Arbeitsspeicher abzüglich 3,5 GiB für System und App (auf 8 GiB also 4,5 GiB oder 4,83 GB), ist der Text rot. Gemma 4 E4B (5,47 GB) und Qwen3-VL (5,67 GB) sind auf 8 GB markiert, GLM-OCR (3,35 GB) und Gemma 4 E2B (3,63 GB) nicht. Gesperrt wird nichts. Der Einrichtungsdialog nutzt dieselbe Schätzung und nennt das Modell mit dem größten Bedarf.
 
 ### Fehler am Schritt, ein Klick zurück
 

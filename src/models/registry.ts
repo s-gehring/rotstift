@@ -2,7 +2,6 @@ import { z } from 'zod';
 import registryJson from '../../src-tauri/models.json';
 
 const GIB = 1024 ** 3;
-const LOW_RAM_TOLERANCE = 0.9;
 
 const fileSchema = z.strictObject({
   name: z.string().min(1),
@@ -215,14 +214,6 @@ export function modelFiles(model: AnyModelInfo) {
 
 export function totalBytes(model: AnyModelInfo): number {
   return modelFiles(model).reduce((sum, file) => sum + file.bytes, 0);
-}
-
-export function recommendedRamBytes(model: AnyModelInfo): number {
-  return model.recommendedRamGb * GIB;
-}
-
-export function isLowOnMemory(model: AnyModelInfo, totalRamBytes: number): boolean {
-  return totalRamBytes < recommendedRamBytes(model) * LOW_RAM_TOLERANCE;
 }
 
 const DEFAULT_IDS: ReadonlySet<string> = new Set([DEFAULT_MODEL_ID, DEFAULT_CORRECTOR_ID]);
