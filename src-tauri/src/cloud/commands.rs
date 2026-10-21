@@ -6,10 +6,12 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::oneshot;
 
+use super::anthropic::{self, RemoteModel};
 use super::config::{Choice, Config, Consent};
 use super::endpoint::{self, pinned_addresses};
 use super::keys::{self, KeyStore, Keys};
-use super::templates::{self, KeyNeed, TokenField};
+use super::send::Job;
+use super::templates::{self, Api, KeyNeed, TokenField};
 use super::{CONSENT_VERSION, CloudError, CloudState, ErrorClass, Step};
 use crate::diagnostics;
 use crate::llm::ChatRequest;
@@ -62,6 +64,17 @@ fn body(request: ChatRequest, model: &str, token_field: TokenField) -> Result<Va
     }
     object.insert("model".to_owned(), Value::String(model.to_owned()));
     Ok(value)
+}
+
+fn with_default_tokens(mut request: Value, step: Step, api: Api) -> Value {
+    if api == Api::Anthropic
+        && let Some(object) = request.as_object_mut()
+    {
+        object
+            .entry("max_tokens")
+            .or_insert_with(|| json!(anthropic::default_max_tokens(step)));
+    }
+    request
 }
 
 fn probe(step: Step) -> Value {
@@ -310,6 +323,7 @@ impl CloudState {
         if !resolved.confirmed() {
             return Err(ErrorClass::ConsentMissing.into());
         }
+        let request = with_default_tokens(request, step, resolved.template.api);
         let parsed = ChatRequest::parse(request).map_err(|_| ErrorClass::InvalidRequest)?;
         if parsed.has_images() && step != Step::Transcriber {
             return Err(ErrorClass::InvalidRequest.into());
@@ -329,6 +343,10 @@ impl CloudState {
             Vec::new()
         };
         let body = body(parsed, &choice.model, resolved.template.token_field)?;
+        let body = match resolved.template.api {
+            Api::Openai => body,
+            Api::Anthropic => anthropic::request(&body)?,
+        };
         let bytes = body.to_string().len();
         let started = Instant::now();
         let send = self.sender.post(endpoint, &pinned, key.as_deref(), &body);
@@ -363,6 +381,78 @@ impl CloudState {
             }),
         );
         result.map_err(CloudError::from)
+    }
+
+    pub async fn models(
+        &self,
+        template_id: &str,
+        base_url: &str,
+        key: Option<String>,
+    ) -> Result<Vec<RemoteModel>, CloudError> {
+        let template = templates::find(template_id).ok_or(ErrorClass::NotConfigured)?;
+        if template.api != Api::Anthropic {
+            return Err(ErrorClass::InvalidRequest.into());
+        }
+        let base_url = endpoint::normalize(base_url);
+        let endpoint = endpoint::parse(template, &base_url)?;
+        let key = match clean_key(key) {
+            Some(key) => key,
+            None => self
+                .keys
+                .get(&keys::account(&base_url))
+                .await
+                .map(|(key, _)| key)
+                .ok_or(ErrorClass::KeyMissing)?,
+        };
+        let started = Instant::now();
+        let mut models = Vec::new();
+        let mut after: Option<String> = None;
+        let mut result = Ok(());
+        let mut attempts = 0;
+        let mut status = None;
+        for _ in 0..anthropic::MODELS_MAX_PAGES {
+            let outcome = self
+                .sender
+                .run(
+                    &endpoint,
+                    &[],
+                    Some(&key),
+                    Job::Models {
+                        after: after.as_deref(),
+                    },
+                )
+                .await;
+            attempts += outcome.attempts;
+            status = outcome.status;
+            let page = outcome
+                .result
+                .and_then(|value| anthropic::models_page(&value));
+            match page {
+                Ok(page) => {
+                    models.extend(page.models);
+                    after = page.next;
+                    if after.is_none() {
+                        break;
+                    }
+                }
+                Err(class) => {
+                    result = Err(class);
+                    break;
+                }
+            }
+        }
+        diagnostics::record(
+            "cloud_models",
+            json!({
+                "template": template.id,
+                "ms": started.elapsed().as_millis() as u64,
+                "attempts": attempts,
+                "status": status,
+                "outcome": match &result { Ok(()) => "ok", Err(class) => class.name() },
+            }),
+        );
+        result?;
+        Ok(models)
     }
 
     pub async fn check(&self, step: Step) -> Result<(), CloudError> {
@@ -416,6 +506,16 @@ pub async fn cloud_clear(
     step: Step,
 ) -> Result<CloudView, CloudError> {
     state.clear(step).await
+}
+
+#[tauri::command]
+pub async fn cloud_models(
+    state: State<'_, CloudState>,
+    template: String,
+    base_url: String,
+    key: Option<String>,
+) -> Result<Vec<RemoteModel>, CloudError> {
+    state.models(&template, &base_url, key).await
 }
 
 #[tauri::command]

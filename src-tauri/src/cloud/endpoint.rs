@@ -4,13 +4,14 @@ use reqwest::Url;
 use url::Host;
 
 use super::ErrorClass;
-use super::templates::Template;
+use super::templates::{Api, Template};
 
 #[derive(Debug, Clone)]
 pub struct Endpoint {
     pub base: Url,
     pub host: String,
     pub loopback: bool,
+    pub api: Api,
 }
 
 impl Endpoint {
@@ -18,14 +19,25 @@ impl Endpoint {
         self.base.scheme() == "https"
     }
 
-    pub fn chat_url(&self) -> Url {
+    fn url(&self, tail: &[&str]) -> Url {
         let mut url = self.base.clone();
         url.path_segments_mut()
             .map(|mut segments| {
-                segments.pop_if_empty().push("chat").push("completions");
+                segments.pop_if_empty().extend(tail);
             })
             .ok();
         url
+    }
+
+    pub fn chat_url(&self) -> Url {
+        match self.api {
+            Api::Openai => self.url(&["chat", "completions"]),
+            Api::Anthropic => self.url(&["messages"]),
+        }
+    }
+
+    pub fn models_url(&self) -> Url {
+        self.url(&["models"])
     }
 
     pub fn needs_pinning(&self) -> bool {
@@ -72,6 +84,7 @@ pub fn parse(template: &Template, base_url: &str) -> Result<Endpoint, ErrorClass
         base,
         host,
         loopback,
+        api: template.api,
     })
 }
 
@@ -125,6 +138,24 @@ mod tests {
         );
         assert_eq!(
             parse(mistral, "https://evil.example/v1").unwrap_err(),
+            ErrorClass::InvalidAddress
+        );
+    }
+
+    #[test]
+    fn anthropic_talks_to_messages_and_models() {
+        let anthropic = find("anthropic").unwrap();
+        let endpoint = parse(anthropic, "https://api.anthropic.com/v1").unwrap();
+        assert_eq!(
+            endpoint.chat_url().as_str(),
+            "https://api.anthropic.com/v1/messages"
+        );
+        assert_eq!(
+            endpoint.models_url().as_str(),
+            "https://api.anthropic.com/v1/models"
+        );
+        assert_eq!(
+            parse(anthropic, "http://api.anthropic.com/v1").unwrap_err(),
             ErrorClass::InvalidAddress
         );
     }

@@ -52,6 +52,13 @@ async function submit() {
   });
 }
 
+async function load() {
+  await act(async () => {
+    button('Modelle laden')?.click();
+    await Promise.resolve();
+  });
+}
+
 function fill(template: string, address?: string) {
   change(field('template'), template);
   if (address !== undefined) change(field('address'), address);
@@ -129,5 +136,76 @@ describe('CloudModelForm', () => {
     change(field('template'), 'custom');
     expect(field('address')).not.toBeNull();
     expect(button('Verwenden')?.disabled).toBe(true);
+  });
+
+  describe('with a provider that lists its models', () => {
+    const listed = [
+      { id: 'claude-a', displayName: 'Claude A' },
+      { id: 'claude-b', displayName: 'claude-b' },
+    ];
+
+    it('offers the list without preselecting a model', async () => {
+      const models = vi.fn<CloudModel['models']>(() =>
+        Promise.resolve({ state: 'ok', models: listed }),
+      );
+      const use = sequence({ state: 'ok' });
+      render(testCloud({ available: true, use, models }));
+      change(field('template'), 'anthropic');
+      expect(field('model')).toBeNull();
+      expect(button('Modelle laden')?.disabled).toBe(true);
+      change(field('key'), 'fake-test-key');
+      await load();
+      expect(models).toHaveBeenCalledExactlyOnceWith({
+        template: 'anthropic',
+        baseUrl: 'https://api.anthropic.com/v1',
+        model: '',
+        key: 'fake-test-key',
+      });
+      const select = field('model');
+      expect(select).toBeInstanceOf(HTMLSelectElement);
+      expect(select?.value).toBe('');
+      expect([...(select?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([
+        'Modell wählen',
+        'Claude A (claude-a)',
+        'claude-b',
+      ]);
+      expect(button('Verwenden')?.disabled).toBe(true);
+      change(select, 'claude-b');
+      await submit();
+      expect(use).toHaveBeenCalledExactlyOnceWith(
+        'corrector',
+        expect.objectContaining({ template: 'anthropic', model: 'claude-b' }),
+        false,
+      );
+    });
+
+    it('shows a failed list as an error and keeps the form closed', async () => {
+      const models = vi.fn<CloudModel['models']>(() =>
+        Promise.resolve({ state: 'error', error: 'auth' }),
+      );
+      render(testCloud({ available: true, models }));
+      change(field('template'), 'anthropic');
+      change(field('key'), 'fake-test-key');
+      await load();
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        'Der Anbieter hat den Schlüssel abgelehnt.',
+      );
+      expect(field('model')).toBeNull();
+      expect(button('Verwenden')?.disabled).toBe(true);
+    });
+
+    it('forgets the list when the provider changes', async () => {
+      const models = vi.fn<CloudModel['models']>(() =>
+        Promise.resolve({ state: 'ok', models: listed }),
+      );
+      render(testCloud({ available: true, models }));
+      change(field('template'), 'anthropic');
+      change(field('key'), 'fake-test-key');
+      await load();
+      change(field('model'), 'claude-a');
+      change(field('template'), 'mistral');
+      expect(field('model')).toBeInstanceOf(HTMLInputElement);
+      expect(field('model')?.value).toBe('');
+    });
   });
 });

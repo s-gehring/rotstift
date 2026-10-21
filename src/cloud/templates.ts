@@ -7,6 +7,7 @@ const templateSchema = z.strictObject({
   baseUrl: z.url().nullable(),
   key: z.enum(['required', 'optional']),
   tokenField: z.enum(['max_tokens', 'max_completion_tokens']),
+  api: z.enum(['openai', 'anthropic']).default('openai'),
 });
 
 export type CloudTemplate = z.infer<typeof templateSchema>;

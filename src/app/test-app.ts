@@ -79,6 +79,7 @@ export function testCloud(overrides: Partial<CloudModel> = {}): CloudModel {
     available: false,
     steps: {},
     use: () => Promise.resolve({ state: 'ok' }),
+    models: () => Promise.resolve({ state: 'ok', models: [] }),
     setKey: () => Promise.resolve(null),
     clear: () => Promise.resolve(),
     ...overrides,

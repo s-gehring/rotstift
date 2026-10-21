@@ -5,7 +5,9 @@ use reqwest::{Client, ClientBuilder, StatusCode, header, redirect};
 use serde_json::Value;
 
 use super::ErrorClass;
+use super::anthropic;
 use super::endpoint::Endpoint;
+use super::templates::Api;
 
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 
@@ -26,6 +28,12 @@ impl Default for Policy {
             max_retry_after: Duration::from_secs(30),
         }
     }
+}
+
+#[derive(Clone, Copy)]
+pub enum Job<'a> {
+    Chat(&'a Value),
+    Models { after: Option<&'a str> },
 }
 
 pub struct Outcome {
@@ -86,7 +94,7 @@ fn classify(status: StatusCode) -> ErrorClass {
 
 fn retryable(status: Option<u16>, class: ErrorClass) -> bool {
     match status {
-        Some(code) => matches!(code, 408 | 429 | 500 | 502 | 503 | 504),
+        Some(code) => matches!(code, 408 | 429 | 500 | 502 | 503 | 504 | 529),
         None => class == ErrorClass::Network,
     }
 }
@@ -122,8 +130,11 @@ async fn read_limited(mut response: reqwest::Response) -> Result<Vec<u8>, ErrorC
     Ok(body)
 }
 
-fn completion(body: &[u8]) -> Result<Value, ErrorClass> {
+fn completion(api: Api, body: &[u8]) -> Result<Value, ErrorClass> {
     let value: Value = serde_json::from_slice(body).map_err(|_| ErrorClass::InvalidResponse)?;
+    if api == Api::Anthropic {
+        return anthropic::response(&value);
+    }
     let has_message = value
         .pointer("/choices/0/message")
         .is_some_and(Value::is_object);
@@ -160,18 +171,40 @@ impl Sender {
         client: &Client,
         endpoint: &Endpoint,
         key: Option<&str>,
-        body: &Value,
+        job: Job<'_>,
     ) -> Result<Value, Failure> {
         #[cfg_attr(not(test), allow(unused_mut))]
-        let mut url = endpoint.chat_url();
+        let mut url = match job {
+            Job::Chat(_) => endpoint.chat_url(),
+            Job::Models { after } => {
+                let mut url = endpoint.models_url();
+                {
+                    let mut query = url.query_pairs_mut();
+                    query.append_pair("limit", &anthropic::MODELS_PAGE_SIZE.to_string());
+                    if let Some(after) = after {
+                        query.append_pair("after_id", after);
+                    }
+                }
+                url
+            }
+        };
         #[cfg(test)]
         if let Some(address) = self.route_to {
+            url.set_scheme("http").ok();
             url.set_ip_host(address.ip()).ok();
             url.set_port(Some(address.port())).ok();
         }
-        let mut request = client.post(url).json(body);
+        let mut request = match job {
+            Job::Chat(body) => client.post(url).json(body),
+            Job::Models { .. } => client.get(url),
+        };
         if let Some(key) = key {
-            request = request.bearer_auth(key);
+            request = match endpoint.api {
+                Api::Openai => request.bearer_auth(key),
+                Api::Anthropic => request
+                    .header("x-api-key", key)
+                    .header("anthropic-version", anthropic::VERSION),
+            };
         }
         let response = request.send().await.map_err(|error| Failure {
             class: transport(&error),
@@ -192,7 +225,13 @@ impl Sender {
             retry_after: None,
         };
         let bytes = read_limited(response).await.map_err(failed)?;
-        completion(&bytes).map_err(failed)
+        match job {
+            Job::Chat(_) => completion(endpoint.api, &bytes),
+            Job::Models { .. } => {
+                serde_json::from_slice(&bytes).map_err(|_| ErrorClass::InvalidResponse)
+            }
+        }
+        .map_err(failed)
     }
 
     pub async fn post(
@@ -201,6 +240,16 @@ impl Sender {
         pinned: &[SocketAddr],
         key: Option<&str>,
         body: &Value,
+    ) -> Outcome {
+        self.run(endpoint, pinned, key, Job::Chat(body)).await
+    }
+
+    pub async fn run(
+        &self,
+        endpoint: &Endpoint,
+        pinned: &[SocketAddr],
+        key: Option<&str>,
+        job: Job<'_>,
     ) -> Outcome {
         let client = match self.client(endpoint, pinned) {
             Ok(client) => client,
@@ -215,7 +264,7 @@ impl Sender {
         let mut attempts = 0;
         loop {
             attempts += 1;
-            let failure = match self.attempt(&client, endpoint, key, body).await {
+            let failure = match self.attempt(&client, endpoint, key, job).await {
                 Ok(value) => {
                     return Outcome {
                         result: Ok(value),

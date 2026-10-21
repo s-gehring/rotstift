@@ -48,6 +48,7 @@ function fakeClient(overrides: Partial<CloudClient> = {}): CloudClient {
     setKey: vi.fn<CloudClient['setKey']>(() => Promise.resolve(CONFIGURED)),
     clear: vi.fn<CloudClient['clear']>(() => Promise.resolve(EMPTY)),
     check: vi.fn<CloudClient['check']>(() => Promise.resolve(undefined)),
+    models: vi.fn<CloudClient['models']>(() => Promise.resolve([])),
     ...overrides,
   };
 }
@@ -118,5 +119,25 @@ describe('useCloud', () => {
     expect(outcome).toEqual({ state: 'error', error: 'auth' });
     expect(client.clear).toHaveBeenCalledWith('corrector');
     expect(cloud.current?.steps).toEqual({});
+  });
+
+  it('lists models without storing anything and reports errors by class', async () => {
+    const listed = [{ id: 'claude-x', displayName: 'Claude X' }];
+    const client = fakeClient({
+      models: vi
+        .fn<CloudClient['models']>()
+        .mockResolvedValueOnce(listed)
+        .mockRejectedValueOnce(new CloudCallError('auth')),
+    });
+    const cloud = await mount(client);
+    const input = { ...INPUT, template: 'anthropic', baseUrl: 'https://api.anthropic.com/v1' };
+    expect(await cloud.current?.models(input)).toEqual({ state: 'ok', models: listed });
+    expect(client.models).toHaveBeenCalledWith(
+      'anthropic',
+      'https://api.anthropic.com/v1',
+      'fake-test-key',
+    );
+    expect(await cloud.current?.models(input)).toEqual({ state: 'error', error: 'auth' });
+    expect(client.use).not.toHaveBeenCalled();
   });
 });
