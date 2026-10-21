@@ -33,7 +33,16 @@ GLM-OCR, gerenderte Seiten, 64 gestrichene und 2044 normale Wörter. WER ist die
 
 GLM-OCR ist auf die festen Aufgaben „Text Recognition:“, „Formula Recognition:“ und „Table Recognition:“ trainiert und folgt freien Anweisungen nicht. Die Lesegenauigkeit ändert sich mit keiner Variante, aber es gibt auch nichts zu gewinnen.
 
-QWEN_PLACEHOLDER
+Gegenprobe mit Qwen3-VL 4B, der 16-GB-Option, die freien Anweisungen folgt (1536 px, simon-pc, 37 s je Seite):
+
+| Prompt und Verfahren                           | erkannt | abgeschrieben | ausgelassen | Fehlalarme | Wortzahl daneben je Seite | WER   |
+| ---------------------------------------------- | ------- | ------------- | ----------- | ---------- | ------------------------- | ----- |
+| Registry-Prompt                                | 0       | 40            | 24          | 0          | 2,69 (2,1 %)              | 4,5 % |
+| Registry-Prompt plus „Gestrichenes in `<del>`“ | 7       | 38            | 19          | 1          | 2,56 (2,0 %)              | 4,5 % |
+| Registry-Prompt, Tinte                         | 20      | 20            | 24          | 9          | 1,38 (1,1 %)              | 3,9 % |
+| `<del>`-Prompt und Tinte                       | 20      | 25            | 19          | 5          | 1,63 (1,3 %)              | 4,0 % |
+
+Qwen3-VL setzt `<del>` nur bei 7 von 64 Wörtern, die Lesegenauigkeit bleibt dabei gleich. Die Tinte allein findet mit dem unveränderten Prompt genauso viele, eine Kombination bringt hier also nichts. Qwen lässt mehr gestrichene Wörter von selbst weg als GLM-OCR (24 statt 15).
 
 ### Tinte (b)
 
@@ -70,7 +79,7 @@ Die Schwellen sind auf denselben Seiten abgestimmt, die Zahlen sind also eher op
 
 ### Kombination (c)
 
-Da GLM-OCR nichts kennzeichnet, ist die Kombination gleich der Tinte allein. Mit einem Modell, das `<del>` setzt, ließen sich beide Quellen vereinen (`eval/strike.ts --method both`).
+Da GLM-OCR nichts kennzeichnet, ist die Kombination gleich der Tinte allein. Mit Qwen3-VL und `<del>`-Prompt erkennt die Kombination 20 Wörter, genauso viele wie die Tinte mit dem unveränderten Prompt (Tabelle oben). Ein eigener Prompt lohnt sich deshalb für keines der beiden Modelle. `eval/strike.ts --method both` misst die Kombination für künftige Modelle.
 
 ## Was eingebaut ist
 
