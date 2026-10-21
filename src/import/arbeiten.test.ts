@@ -4,6 +4,7 @@ import {
   defaultArbeitName,
   findPage,
   flattenPages,
+  restoreArbeiten,
   type Arbeit,
 } from './arbeiten.ts';
 import type { ImportPage } from './pages.ts';
@@ -137,6 +138,18 @@ describe('arbeitenReducer', () => {
     expect(arbeitenReducer(start, { type: 'merge', ids: ['a', 'zzz'] })).toBe(start);
   });
 
+  it('splits an Arbeit at a page and moves it and all following pages to a new Arbeit', () => {
+    const next = arbeitenReducer(start, { type: 'split-from', pageId: 'a2', newArbeitId: 'n' });
+    expect(ids(next).slice(0, 3)).toEqual(['a:a1', 'n:a2,a3', 'b:b1']);
+    expect(next[1]?.name).toBe('A (ab Seite 2)');
+  });
+
+  it('does not split at the first page', () => {
+    expect(arbeitenReducer(start, { type: 'split-from', pageId: 'a1', newArbeitId: 'n' })).toBe(
+      start,
+    );
+  });
+
   it('clears everything', () => {
     expect(arbeitenReducer(start, { type: 'clear' })).toEqual([]);
     const empty: readonly Arbeit[] = [];
@@ -154,5 +167,49 @@ describe('flattenPages and findPage', () => {
   it('finds the Arbeit and the index of a page', () => {
     expect(findPage(arbeiten, 'a2')).toMatchObject({ index: 1, arbeit: { id: 'a' } });
     expect(findPage(arbeiten, 'zzz')).toBeUndefined();
+  });
+});
+
+describe('restoreArbeiten', () => {
+  const snapshot = [arbeit('a', 'a1', 'a2', 'a3'), arbeit('b', 'b1'), arbeit('c', 'c1', 'c2')];
+
+  it('brings back a removed Arbeit at its old position', () => {
+    const current = [snapshot[0]!, snapshot[2]!];
+    expect(ids(restoreArbeiten(current, snapshot))).toEqual(ids(snapshot));
+  });
+
+  it('brings back a removed page at its old index', () => {
+    const current = [
+      { ...snapshot[0]!, pages: [snapshot[0]!.pages[0]!, snapshot[0]!.pages[2]!] },
+      snapshot[1]!,
+      snapshot[2]!,
+    ];
+    expect(ids(restoreArbeiten(current, snapshot))).toEqual(ids(snapshot));
+  });
+
+  it('restores everything after clear', () => {
+    expect(ids(restoreArbeiten([], snapshot))).toEqual(ids(snapshot));
+  });
+
+  it('keeps changes made after the removal', () => {
+    const current = [
+      { ...snapshot[0]!, name: 'Neu', pages: [snapshot[0]!.pages[0]!] },
+      arbeit('d', 'd1'),
+    ];
+    const restored = restoreArbeiten(current, snapshot);
+    expect(ids(restored)).toEqual(['a:a1,a2,a3', 'b:b1', 'c:c1,c2', 'd:d1']);
+    expect(restored[0]?.name).toBe('Neu');
+  });
+
+  it('does not duplicate pages that moved to another Arbeit meanwhile', () => {
+    const current = [
+      { ...snapshot[0]!, pages: [snapshot[0]!.pages[0]!] },
+      { ...snapshot[1]!, pages: [snapshot[1]!.pages[0]!, snapshot[0]!.pages[1]!] },
+    ];
+    expect(ids(restoreArbeiten(current, snapshot))).toEqual(['a:a1,a3', 'b:b1,a2', 'c:c1,c2']);
+  });
+
+  it('returns an equal list when nothing is missing', () => {
+    expect(ids(restoreArbeiten(snapshot, snapshot))).toEqual(ids(snapshot));
   });
 });
