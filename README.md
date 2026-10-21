@@ -8,18 +8,18 @@ Lehrkräfte erzielen mit Cloud-KI gute Ergebnisse beim Korrigieren, dürfen Sch�
 
 ## Stand
 
-Version 0.2 zählt die Wörter handschriftlicher Texte und berichtigt sie als Vorschau, komplett offline:
+Rotstift erkennt handschriftliche Texte, zählt ihre Wörter und korrigiert sie, komplett offline. Der Ablauf hat drei Schritte: Arbeiten laden, „Korrigieren“ (oder „Nur Wörter zählen“), Ergebnisse prüfen und exportieren. Das Bedienkonzept steht in [ADR 0005](docs/adr/0005-bedienkonzept.md).
 
-- Bilder (PNG, JPEG, WebP) und PDFs per Drag and drop laden, Seiten drehen, sortieren und entfernen. Jede Datei wird eine Arbeit (eine Schülerin oder ein Schüler) und heißt wie die Datei, der Name lässt sich direkt ändern. Seitenweise gescannte Arbeiten lassen sich zusammenführen, einzelne Seiten in eine andere Arbeit verschieben.
-- „Wörter zählen“ liest jede Seite mit einem lokalen KI-Modell (GLM-OCR) und zeigt die Wortzahl je Seite, je Arbeit, für die ganze Klasse und im Durchschnitt. Der erkannte Text lässt sich korrigieren, die Zahlen passen sich sofort an.
-- Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Arbeit. Leere Seiten zählen mit 0 Wörtern. Ist eine Arbeit nur teilweise gezählt, steht das überall dabei, statt einer zu niedrigen Summe.
-- „Als CSV speichern“ legt eine Tabelle (Name, Seiten, Wörter, Hinweis, Gesamtzeile) an, die deutsches Excel direkt öffnet (UTF-8 mit BOM, Semikolon). „In die Zwischenablage kopieren“ liefert dieselbe Tabelle tabulatorgetrennt. „Als PDF speichern“ und „Klassen-PDF speichern“ legen die Seiten mit Wortzahlen als PDF ab. Den Speicherort wählt man immer im Systemdialog.
-- **„Berichtigen“ (Vorschau):** Nach Wahl eines Korrekturprofils (derzeit Deutsch, Englisch, Französisch, Spanisch und „Sachfach“ für alle Fächer, in denen nur die deutsche Sprachrichtigkeit korrigiert wird) erkennt Rotstift alle Seiten, korrigiert den Text mit einem zweiten lokalen Modell (Gemma 4 E2B) und schreibt die Korrekturzeichen aus [ADR 0002](docs/adr/0002-korrekturschema.md) wie mit rotem Fineliner auf das Original: Unterstreichung, Verbesserung darüber, Fehlerzeichen (etwa R, Z, G, A) am Rand. Dazu kommen eine Fehlerliste je Seite, eine Statistik je Arbeit und für die Klasse sowie „Als PDF speichern“ und „Klassen-PDF mit Korrekturen speichern“.
-- **„Unsicher gelesen“:** Wo die Texterkennung selbst unsicher war, setzt Rotstift keine rote Marke, sondern unterstreicht die Stelle in der Prüfansicht grau gepunktet. Antippen zeigt den Vorschlag, die Lehrkraft übernimmt ihn als Fehler oder verwirft ihn. Solche Stellen fehlen in Statistik und PDF, solange sie nicht übernommen sind.
+- **Laden:** Bilder (PNG, JPEG, WebP) und PDFs ins Fenster ziehen. Jede Datei wird eine Arbeit (eine Schülerin oder ein Schüler) und heißt wie die Datei. Über das „…“-Menü einer Arbeit lässt sie sich umbenennen, mit einer anderen zusammenführen oder entfernen. Seiten lassen sich drehen, umsortieren (auch per Ziehen), in eine andere Arbeit verschieben, und „Ab hier neue Arbeit“ trennt einen Stapel, der als ein PDF gescannt wurde. Entfernen lässt sich rückgängig machen.
+- **Korrigieren:** Nach Wahl des Fachs (Deutsch, Englisch, Französisch, Spanisch und „Sachfach“ für alle Fächer, in denen nur die deutsche Sprachrichtigkeit korrigiert wird) liest Rotstift alle Seiten mit einem lokalen KI-Modell (GLM-OCR), korrigiert den Text mit einem zweiten (Gemma 4 E2B) und schreibt die Korrekturzeichen aus [ADR 0002](docs/adr/0002-korrekturschema.md) wie mit rotem Fineliner auf das Original: Unterstreichung, Verbesserung darüber, Fehlerzeichen (etwa R, Z, G, A) am Rand. Ein Fortschrittsbalken zeigt die Restzeit.
+- **Prüfen:** Ein Klick auf eine Arbeit öffnet sie groß, mit den Fehlern je Seite in einer Spalte daneben. Pfeiltasten blättern durch die Klasse. Den erkannten Text kann man je Seite bearbeiten, Wortzahl und Korrektur folgen. Die Klassenübersicht zeigt Wörter, Fehler und Fehlerarten je Arbeit und für die Klasse.
+- **Unsicher gelesen:** Wo die Texterkennung selbst unsicher war, setzt Rotstift keine rote Marke, sondern unterstreicht die Stelle grau gepunktet. Die Lehrkraft übernimmt den Vorschlag als Fehler oder verwirft ihn. Solche Stellen fehlen in Statistik und PDF, solange sie nicht übernommen sind.
+- **Nur Wörter zählen:** Erkennt die Seiten ohne Korrektur und braucht kein Korrekturmodell. Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Arbeit. Leere Seiten zählen mit 0 Wörtern. Ist eine Arbeit nur teilweise gezählt, steht „mind.“ vor der Zahl.
+- **Exportieren:** PDF je Arbeit oder für die ganze Klasse, eine Tabelle als CSV, die deutsches Excel direkt öffnet (UTF-8 mit BOM, Semikolon), oder dieselbe Tabelle in die Zwischenablage. Den Speicherort wählt man im Systemdialog.
 
 Genauigkeit der Wortzahl: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag sie im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Mit einem oder zwei Strichen durchgestrichene Wörter erkennt Rotstift an der Tinte, zählt sie nicht mit und korrigiert sie nicht. Im erkannten Text stehen sie als `~~Wort~~`, so lässt sich eine Streichung auch von Hand setzen oder entfernen. Etwa die Hälfte der gestrichenen Wörter wird so erkannt, Gekritzel und Überschreibungen meist nicht ([Messung](docs/evaluations/2026-10-durchgestrichen.md)).
 
-Genauigkeit der Berichtigung: Auf selbst geschriebenen, getippten Schülertexten findet die Korrektur 86 % der Fehler, 97 % der Markierungen stimmen ([Messung](docs/evaluations/2026-10-fehlermarkierung.md)). Auf Handschrift kommen Lesefehler der Texterkennung hinzu. Auf fehlerfreien Seiten bleiben dank der Lesesicherheit rund 1 bis 2 rote Fehlalarme je 100 Wörter, dazu etwa 10 Stellen „unsicher gelesen“ ([Messung](docs/evaluations/2026-10-lesefehler.md)). Deshalb ist „Berichtigen“ als Vorschau gekennzeichnet, und jedes PDF trägt den Hinweis, die automatische Korrektur zu prüfen.
+Genauigkeit der Korrektur: Auf selbst geschriebenen, getippten Schülertexten findet die Korrektur 86 % der Fehler, 97 % der Markierungen stimmen ([Messung](docs/evaluations/2026-10-fehlermarkierung.md)). Auf Handschrift kommen Lesefehler der Texterkennung hinzu. Auf fehlerfreien Seiten bleiben dank der Lesesicherheit rund 1 bis 2 rote Fehlalarme je 100 Wörter, dazu etwa 10 Stellen „unsicher gelesen“ ([Messung](docs/evaluations/2026-10-lesefehler.md)). Deshalb trägt jedes PDF den Hinweis, die automatische Korrektur zu prüfen.
 
 Geschwindigkeit: Die Texterkennung braucht nur auf der CPU rund 12 Sekunden pro Seite auf einem Apple M4 Pro (4 Threads), unter Linux auf einem Ryzen 7 5700X 27 Sekunden mit 4 und 44 Sekunden mit 2 Threads, auf einfachen Laptops entsprechend länger ([Messung](docs/evaluations/2026-10-linux-simon-pc.md)). Mit der Grafikeinheit von Apple Silicon 2 bis 4 Sekunden. Die Korrektur kostet je Seite noch einmal rund 4 Sekunden auf dem M4 Pro und 17 Sekunden auf dem Ryzen. Erkennung und Korrektur laufen nacheinander und nie gleichzeitig, damit 8 GB Arbeitsspeicher reichen.
 
@@ -27,23 +27,20 @@ Geplant:
 
 - Weniger Stellen „unsicher gelesen“ durch eine genauere Texterkennung, Schwelle auf echter Schülerhandschrift prüfen.
 - Durchgestrichenes zuverlässiger erkennen, auch Gekritzel und Überschreibungen.
-- Weitere Fächer und Sprachen als Korrekturprofile, Statistik nach Schwere der Fehler.
-- Signierte Installer für Windows und macOS.
+- Statistik nach Schwere der Fehler.
+- Signierte Installer für Windows und macOS, vorbereitet in [docs/signieren.md](docs/signieren.md).
 
 ## Erster Start
 
-Zum Wörterzählen liest Rotstift die Handschrift mit einem KI-Modell, das auf dem eigenen Rechner läuft. Das Standardmodell GLM-OCR (rund 1,4 GB) wird beim ersten Mal heruntergeladen:
+Rotstift arbeitet mit KI-Modellen, die auf dem eigenen Rechner laufen. Sie werden einmalig heruntergeladen, wenn sie zum ersten Mal gebraucht werden:
 
-1. Seiten laden und auf „Texterkennung einrichten“ klicken. Solange das Modell fehlt, ist „Wörter zählen“ ausgegraut.
-2. Im Dialog stehen Größe und Quelle. Der Download ist einmalig, danach arbeitet Rotstift komplett offline, und es werden keine Schülerdaten übertragen.
-3. Der Download zeigt Fortschritt und Restzeit, lässt sich abbrechen und später an derselben Stelle fortsetzen. Rotstift prüft die Datei per SHA256, bevor sie benutzt wird.
-4. Unter „Texterkennung verwalten“ lässt sich das Modell wieder löschen.
+1. Arbeiten laden und auf „Korrigieren“ klicken. Fehlen Modelle, öffnet sich „Einmalige Einrichtung“ mit der Gesamtgröße: GLM-OCR (rund 1,4 GB) für die Texterkennung und Gemma 4 E2B (rund 2,8 GB) für die Korrektur. „Nur Wörter zählen“ braucht nur GLM-OCR.
+2. „Herunterladen“ lädt alles in einem Schritt, mit Fortschritt und Restzeit. Ein abgebrochener Download setzt später an derselben Stelle fort. Rotstift prüft jede Datei per SHA256, bevor sie benutzt wird. Danach startet der Lauf von selbst, und Rotstift arbeitet komplett offline. Es werden keine Schülerdaten übertragen.
+3. Unter ⚙ „Einstellungen“ lassen sich die Modelle ansehen, löschen oder aus Dateien importieren.
 
-Ab 16 GB Arbeitsspeicher bietet Rotstift zusätzlich Qwen3-VL 4B (rund 3 GB) an, im Einrichtungsdialog und unter „Texterkennung verwalten“. Es zählt genauer, braucht aber etwa doppelt so lange und ist nur zum Wörterzählen gedacht. Beide Modelle können nebeneinander installiert sein, die Wahl bleibt gespeichert. Beim Wechsel wird der laufende Erkennungsprozess beendet, bereits gezählte Seiten behalten ihr Ergebnis. Der Wechsel ist gesperrt, solange gezählt wird, die Texterkennung startet oder ein Modell geladen, geprüft, importiert oder gelöscht wird. Wird das gewählte Modell gelöscht, gilt wieder GLM-OCR.
+Ab 16 GB Arbeitsspeicher bietet Rotstift in den Einstellungen zusätzlich Qwen3-VL 4B (rund 3 GB) als Texterkennung an. Es zählt genauer, braucht aber etwa doppelt so lange und ist nur zum Wörterzählen gedacht, weil es beim Abschreiben gelegentlich Fehler der Schüler verbessert. Beide Modelle können nebeneinander installiert sein, die Wahl bleibt gespeichert. Während eines Laufs oder solange ein Modell geladen, geprüft, importiert oder gelöscht wird, ist der Wechsel gesperrt. Wird das gewählte Modell gelöscht, gilt wieder GLM-OCR.
 
-Zum Berichtigen braucht Rotstift ein zweites Modell, Gemma 4 E2B (rund 2,8 GB). Beim ersten „Berichtigen“ öffnet sich „Korrekturmodell einrichten“ mit denselben Möglichkeiten wie oben: Download mit Fortsetzen, Prüfung per SHA256, Import aus Datei. Verwaltet wird es unter „Korrektur verwalten“.
-
-Rechner ohne Internet (etwa in Schulen): Die Modelldateien (`.gguf`) auf einem anderen Rechner von Hugging Face herunterladen, per USB-Stick übertragen und im Dialog über „Modell aus Datei importieren“ auswählen. Rotstift erkennt die Dateien am Hash und übernimmt nur passende.
+Rechner ohne Internet (etwa in Schulen): Die Modelldateien (`.gguf`) auf einem anderen Rechner von Hugging Face herunterladen, per USB-Stick übertragen und in der Einrichtung oder den Einstellungen über „Aus Datei importieren …“ auswählen. Rotstift erkennt die Dateien am Hash und übernimmt nur passende.
 
 Die Modelle stecken in `src-tauri/models.json` (Quelle auf einen Commit festgelegt, SHA256 und Größe je Datei, Startparameter, Prompt). Dort werden sie auch getauscht, sonst ist keine Codeänderung nötig. Der Download akzeptiert nur `https` und Hugging Face als Host (samt deren CDN). Die Dateien liegen im App-Datenverzeichnis unter `models/`.
 
@@ -90,7 +87,7 @@ pnpm dev
 | `pnpm test`             | Vitest einmal ausführen (`pnpm test:watch` beobachtet)                           |
 | `pnpm test:integration` | Echter Sidecar auf Beispielseiten (braucht Modell und Datensatz, siehe Test)     |
 
-Ein Tag `v*` baut über `.github/workflows/release.yml` Installer für alle Plattformen als Release-Entwurf.
+Ein Tag `v*` baut über `.github/workflows/release.yml` Installer für alle Plattformen als Release-Entwurf. Vorher die Desktop-App nach [docs/praxistest.md](docs/praxistest.md) mit echten Modellen durchgehen.
 
 ## Struktur
 
