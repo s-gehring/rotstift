@@ -24,6 +24,6 @@ Alle automatischen Tests laufen in Node. Fehler, die nur in der echten Desktop-A
 | Exportieren: Diese Arbeit als PDF, Klassen-PDF, Tabelle (CSV), Tabelle kopieren | Systemdialog mit vorgeschlagenem Namen, Dateien öffnen sich in Vorschau bzw. Excel, Toast „Gespeichert als …“ |
 | „Nur Wörter zählen“ auf neu geladenen Seiten                                    | Wortzahlen je Arbeit, kein Korrekturmodell nötig                                                              |
 | ⚙ Einstellungen: Protokoll öffnen und kopieren                                  | Protokoll ohne Schülertexte oder Dateinamen                                                                   |
-| App beenden                                                                     | Kein llama-server-Prozess bleibt zurück (`pgrep -fl llama`)                                                   |
+| App beenden                                                                     | Kein llama-server-Prozess bleibt zurück (`pgrep -fl llama-server`)                                            |
 
 Abweichungen als Issue festhalten, mit Betriebssystem, Modell und dem kopierten Protokoll.

@@ -48,6 +48,7 @@ export function testModelSetup<T extends AnyModelInfo>(
     error: null,
     loadError: null,
     samples: [],
+    baseline: 0,
     select: resolved,
     download: resolved,
     cancel: resolved,

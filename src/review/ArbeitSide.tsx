@@ -32,6 +32,7 @@ export interface ArbeitSideProps {
   readonly onMarkHover: (mark: PageMark | null) => void;
   readonly onMarkSelect: (mark: PageMark) => void;
   readonly onHintHover: (hint: PageHint | null) => void;
+  readonly onHintReveal: (hint: PageHint) => void;
   readonly onHint: (pageId: string, index: number, status: HintStatus) => void;
   readonly onEdit: (pageId: string, text: string) => void;
   readonly onEditDone: () => void;
@@ -122,6 +123,7 @@ function HintGroup({
   selected,
   onToggle,
   onHover,
+  onReveal,
   onHint,
 }: {
   readonly pageId: string;
@@ -131,6 +133,7 @@ function HintGroup({
   readonly selected: { readonly index: number; readonly seq: number } | null;
   readonly onToggle: (open: boolean) => void;
   readonly onHover: (hint: PageHint | null) => void;
+  readonly onReveal: (hint: PageHint) => void;
   readonly onHint: (index: number, status: HintStatus) => void;
 }) {
   const list = useRef<HTMLUListElement>(null);
@@ -138,7 +141,9 @@ function HintGroup({
     if (selected === null || !open) return;
     const item = list.current?.querySelector<HTMLElement>(`[data-hint="${selected.index}"]`);
     item?.scrollIntoView({ block: 'nearest' });
-    item?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    item
+      ?.querySelector<HTMLButtonElement>('.side-hint-actions button')
+      ?.focus({ preventScroll: true });
   }, [selected, open]);
   if (hints.length === 0) return null;
   return (
@@ -160,7 +165,13 @@ function HintGroup({
             onPointerEnter={() => onHover({ pageId, index: hint.index })}
             onPointerLeave={() => onHover(null)}
           >
-            <span className="side-hint-text">{hint.text}</span>
+            <button
+              type="button"
+              className="side-hint-text"
+              onClick={() => onReveal({ pageId, index: hint.index })}
+            >
+              {hint.text}
+            </button>
             <span className="side-hint-actions">
               {hint.status === 'open' ? (
                 <>
@@ -252,6 +263,7 @@ export function ArbeitSide({
   onMarkHover,
   onMarkSelect,
   onHintHover,
+  onHintReveal,
   onHint,
   onEdit,
   onEditDone,
@@ -290,6 +302,7 @@ export function ArbeitSide({
                 selected={selectedHint?.pageId === id ? selectedHint : null}
                 onToggle={(open) => onToggleGroup(id, open)}
                 onHover={onHintHover}
+                onReveal={onHintReveal}
                 onHint={(index, status) => onHint(id, index, status)}
               />
             </>

@@ -164,6 +164,54 @@ describe('SetupDialog content', () => {
   });
 });
 
+describe('SetupDialog partly downloaded models', () => {
+  const PRESENT = 950_000_000;
+
+  it('lists and sums only what is still to be loaded', async () => {
+    await mount({ roles: BOTH }, { present: { [transcriber.id]: PRESENT } });
+    const listed = [...container.querySelectorAll('.setup-models li')].map((row) =>
+      [...row.querySelectorAll('span')].map((cell) => cell.textContent.trim()),
+    );
+    expect(listed).toEqual([
+      ['Texterkennung', '485 MB', ''],
+      ['Korrektur', '2,8 GB', ''],
+      ['Zusammen', '3,3 GB', ''],
+    ]);
+  });
+
+  it('measures the progress against the part that is loaded now', async () => {
+    const fake = await mount(
+      { roles: ['transcriber'] },
+      { present: { [transcriber.id]: PRESENT } },
+    );
+    await click(button('Herunterladen'));
+    await vi.waitFor(() => expect(rows()).toEqual(['downloading']));
+    emit(fake, progress(transcriber.id, PRESENT + 100_000_000, 1_434_837_056));
+    expect(container.querySelector('.setup-progress-text')?.textContent).toBe('100 MB von 485 MB');
+    const bar = progressBar();
+    expect(bar?.getAttribute('aria-valuenow')).toBe('100000000');
+    expect(bar?.getAttribute('aria-valuemax')).toBe(String(1_434_837_056 - PRESENT));
+  });
+
+  it('checks the free disk space against the missing part only', async () => {
+    await mount(
+      { roles: ['transcriber'] },
+      {
+        present: { [transcriber.id]: PRESENT },
+        hardware: { totalRamBytes: 16 * GIB, freeDiskBytes: 600_000_000 },
+      },
+    );
+    expect(container.querySelector('.setup-warning')).toBeNull();
+  });
+});
+
+describe('SetupDialog focus', () => {
+  it('puts the focus on Herunterladen when it opens', async () => {
+    await mount({ roles: BOTH });
+    expect(document.activeElement).toBe(button('Herunterladen'));
+  });
+});
+
 describe('SetupDialog warnings', () => {
   it('warns in one sentence when the machine has less memory than recommended', async () => {
     await mount({ roles: BOTH }, { hardware: { totalRamBytes: 4 * GIB, freeDiskBytes: 100e9 } });
@@ -204,7 +252,7 @@ describe('SetupDialog warnings', () => {
 });
 
 describe('SetupDialog download', () => {
-  it('downloads only the roles that are not ready and counts finished roles into the progress', async () => {
+  it('downloads only the roles that are not ready and leaves finished roles out of the progress', async () => {
     const fake = await mount({ roles: BOTH }, { states: { [transcriber.id]: 'ready' } }, [
       'ready',
       'missing',
@@ -221,10 +269,10 @@ describe('SetupDialog download', () => {
     });
     const bar = progressBar();
     expect(bar?.getAttribute('aria-label')).toBe('Fortschritt der Einrichtung');
-    expect(bar?.getAttribute('aria-valuenow')).toBe(String(1_434_837_056 + 1_000_000_000));
-    expect(bar?.getAttribute('aria-valuemax')).toBe(String(1_434_837_056 + 2_841_481_184));
-    expect(bar?.getAttribute('aria-valuetext')).toBe('2,4 GB von 4,3 GB');
-    expect(container.querySelector('.setup-progress-text')?.textContent).toBe('2,4 GB von 4,3 GB');
+    expect(bar?.getAttribute('aria-valuenow')).toBe('1000000000');
+    expect(bar?.getAttribute('aria-valuemax')).toBe('2841481184');
+    expect(bar?.getAttribute('aria-valuetext')).toBe('1,0 GB von 2,8 GB');
+    expect(container.querySelector('.setup-progress-text')?.textContent).toBe('1,0 GB von 2,8 GB');
 
     emit(fake, { modelId: corrector.id, state: 'done' });
     await vi.waitFor(() => expect(rows()).toEqual(['ready', 'ready']));

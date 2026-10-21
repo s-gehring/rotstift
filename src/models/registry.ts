@@ -173,20 +173,11 @@ export function choiceModels(
   return models.filter((model) => model.id === active.id || offered.includes(model));
 }
 
-export interface ModelNote {
-  readonly speed: string;
-  readonly accuracy: string;
-}
-
-const MODEL_NOTES: Readonly<Record<string, ModelNote>> = {
-  'qwen3-vl-4b-q4': {
-    speed: 'Etwa doppelt so langsam wie GLM-OCR.',
-    accuracy:
-      'Zählt die Wörter genauer, im Test weichen sie im Mittel um 0,9 statt 1,6 % ab. Nur zum Wörterzählen geeignet, weil es beim Abschreiben gelegentlich Fehler der Schüler verbessert.',
-  },
+const MODEL_NOTES: Readonly<Record<string, string>> = {
+  'qwen3-vl-4b-q4': 'Zählt genauer, braucht doppelt so lange. Nur zum Wörterzählen.',
 };
 
-export function modelNote(model: AnyModelInfo): ModelNote | null {
+export function modelNote(model: AnyModelInfo): string | null {
   return MODEL_NOTES[model.id] ?? null;
 }
 

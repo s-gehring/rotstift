@@ -202,10 +202,9 @@ describe('registry', () => {
     expect(parse(transcriber, { ...corrector, request: correctorRequest })).toThrow(ZodError);
   });
 
-  it('describes speed and accuracy of the stronger model only', () => {
+  it('describes the stronger model in one short line only', () => {
     const note = modelNote(findModel('qwen3-vl-4b-q4') ?? model);
-    expect(note?.speed).toContain('doppelt so langsam');
-    expect(note?.accuracy).toContain('Wörterzählen');
+    expect(note).toBe('Zählt genauer, braucht doppelt so lange. Nur zum Wörterzählen.');
     expect(modelNote(model)).toBeNull();
   });
 });

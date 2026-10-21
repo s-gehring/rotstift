@@ -326,17 +326,52 @@ describe('SettingsDialog with live model state', () => {
     expect(text).toContain('GLM-OCR (Q8_0)');
     expect(text).toContain('Qwen3-VL 4B Instruct (Q4_K_M)');
     expect(text).toContain('3,0 GB');
-    expect(text).toContain('Etwa doppelt so langsam');
+    expect(text).toContain('Zählt genauer, braucht doppelt so lange. Nur zum Wörterzählen.');
+    expect(container.querySelectorAll('.settings-model-note')).toHaveLength(1);
 
     await click(radios(section('transcriber'))[1]);
     expect(fake.select).toHaveBeenCalledExactlyOnceWith(QWEN_ID);
     await vi.waitFor(() =>
       expect(radios(section('transcriber')).map((radio) => radio.checked)).toEqual([false, true]),
     );
-    expect(section('transcriber').querySelector('.settings-model-name')?.textContent).toBe(
-      'Qwen3-VL 4B Instruct (Q4_K_M)',
+    expect(
+      radios(section('transcriber'))
+        .find((radio) => radio.checked)
+        ?.closest('.settings-model')
+        ?.querySelector('.settings-model-name')?.textContent,
+    ).toBe('Qwen3-VL 4B Instruct (Q4_K_M)');
+    expect(stateTexts()[1]).toBe('Nicht eingerichtet');
+  });
+
+  it('lists every model of a choice once with size, state and Löschen', async () => {
+    const fake = await mountLive(
+      {},
+      { hardware: BIG, states: { [transcriber.id]: 'ready', [QWEN_ID]: 'ready' } },
     );
-    expect(stateTexts()[0]).toBe('Nicht eingerichtet');
+    await vi.waitFor(() => expect(radios(section('transcriber'))).toHaveLength(2));
+    const rows = [...section('transcriber').querySelectorAll('.settings-model')];
+    expect(rows.map((row) => row.querySelector('.settings-model-name')?.textContent)).toEqual([
+      'GLM-OCR (Q8_0)',
+      'Qwen3-VL 4B Instruct (Q4_K_M)',
+    ]);
+    expect(rows.map((row) => row.querySelector('.settings-model-state')?.textContent)).toEqual([
+      'Bereit',
+      'Bereit',
+    ]);
+    expect(rows.map((row) => buttonLabels(row))).toEqual([['Löschen'], ['Löschen']]);
+    expect(section('transcriber').textContent.match(/GLM-OCR/g)).toHaveLength(1);
+
+    await click(buttonIn(rows[1] ?? container, 'Löschen'));
+    expect(section('transcriber').textContent).toContain(
+      'Qwen3-VL 4B Instruct (Q4_K_M) wirklich löschen?',
+    );
+    await click(
+      buttonIn(
+        section('transcriber').querySelector('[role="alertdialog"]') ?? container,
+        'Löschen',
+      ),
+    );
+    expect(fake.remove).toHaveBeenCalledExactlyOnceWith(QWEN_ID);
   });
 
   it.each([
@@ -344,8 +379,8 @@ describe('SettingsDialog with live model state', () => {
     ['unknown memory', null],
   ])('offers no model choice with %s', async (_label, hardware) => {
     await mountLive({}, { hardware, states: { [transcriber.id]: 'ready' } });
-    expect(container.querySelector('.model-choice')).toBeNull();
     expect(radios(container)).toHaveLength(0);
+    expect(section('transcriber').querySelectorAll('.settings-model')).toHaveLength(1);
   });
 
   it('blocks switching while another model is being handled', async () => {
