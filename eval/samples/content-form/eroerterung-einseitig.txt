@@ -1,0 +1,34 @@
+Fach: Deutsch
+Form: Lineare Erörterung
+Aufgabe: Erörtere die Frage, ob Handys an Schulen verboten werden sollten. Wäge Argumente dafür und dagegen ab und begründe deine Meinung.
+Mangel: content | Gegenargumente fehlen | gegenargument, gegenseite, contra, kontra, gegenposition, andere seite, einseitig, nur pro, abwäg, gegenmeinung, ausgewogen, gegenüberstell | @*
+Mangel: content | Argument ohne Beleg | beleg, beispiel, begründ, unbelegt, nachweis, erläuter, ausgeführt, zu kurz, vertief, pauschal | @Außerdem sind Handys schlecht
+Mangel: form | Schluss mit Fazit fehlt | schluss, fazit, abschluss, eigene meinung, stellungnahme | @last
+---
+In vielen Schulen wird darüber gestritten, ob Schülerinnen
+und Schüler ihr Handy mit in den Unterricht bringen dürfen.
+Einige Schulen haben es schon verboten. Ich möchte im
+Folgenden untersuchen, ob ein Verbot sinnvoll ist.
+Ein wichtiges Argument für ein Verbot ist, dass Handys im
+Unterricht ablenken. Wenn eine Nachricht ankommt, schauen
+viele sofort nach und hören der Lehrerin nicht mehr zu. In
+meiner Klasse passiert das fast jede Stunde. Wer abgelenkt
+ist, versteht den Stoff schlechter und muss zu Hause mehr
+nacharbeiten.
+Ein weiteres Argument ist, dass auf dem Schulhof weniger
+gespielt und geredet wird. In den Pausen sitzen viele nur
+noch mit dem Handy in der Ecke. Früher haben wir Fußball
+gespielt, heute schauen alle Videos. Ein Verbot würde dazu
+führen, dass die Kinder wieder miteinander sprechen und
+sich bewegen.
+Außerdem sind Handys schlecht für die Gesundheit und
+machen süchtig.
+Ein drittes Argument ist das Cybermobbing. Mit dem Handy
+werden heimlich Fotos von Mitschülern gemacht und in
+Gruppen verschickt. Das kann für die Betroffenen sehr
+schlimm sein. An unserer Schule gab es letztes Jahr einen
+solchen Fall, über den sogar die Zeitung berichtet hat.
+Wenn Handys verboten wären, könnten solche Fotos während
+der Schulzeit gar nicht erst entstehen.
+Auch für die Lehrkräfte wäre ein Verbot eine Erleichterung,
+weil sie nicht ständig ermahnen müssten.

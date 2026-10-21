@@ -1,0 +1,28 @@
+Fach: Deutsch
+Form: Beschreibung
+Aufgabe: Beschreibe deinen Schulweg so genau, dass jemand, der neu in der Stadt ist, ihn allein finden kann.
+Mangel: content | Thema verfehlt | thema, aufgabe, schulweg, verfehlt, am thema vorbei, aufgabenstellung, ferien, urlaub, nicht beschrieben | @*
+Mangel: form | Erzählung statt Beschreibung | erzähl, beschreib, präsens, präteritum, tempus, erlebnis, sachlich | @*
+---
+In den Sommerferien sind wir mit dem Auto nach Italien
+gefahren. Die Fahrt hat fast zwölf Stunden gedauert, weil
+wir am Brenner lange im Stau standen. Mein kleiner Bruder
+hat die ganze Zeit gefragt, wann wir endlich da sind.
+Wir hatten eine Ferienwohnung in einem kleinen Dorf am
+Gardasee. Vom Balkon aus konnte man das Wasser und die
+Berge sehen. Jeden Morgen bin ich mit meinem Vater zum
+Bäcker gelaufen und habe frische Brötchen geholt. Der
+Bäcker hat uns schon nach drei Tagen erkannt und immer
+ein kleines Gebäck für meinen Bruder dazugelegt.
+Am liebsten waren wir am Strand. Das Wasser war kalt, aber
+sehr klar. Man konnte die Fische zwischen den Steinen
+sehen. Einmal haben wir ein Tretboot gemietet und sind bis
+zu einer kleinen Insel gefahren. Auf dem Rückweg kam Wind
+auf, und wir mussten ganz schön strampeln.
+An einem Tag sind wir mit der Seilbahn auf den Monte Baldo
+gefahren. Oben lag sogar noch etwas Schnee, obwohl es im
+Tal über dreißig Grad warm war. Wir haben Gleitschirmfliegern
+zugesehen, die vom Gipfel gestartet sind.
+Am letzten Abend gab es im Dorf ein Fest mit Musik und
+Feuerwerk. Ich war traurig, dass die Ferien schon vorbei
+waren, und freue mich schon auf das nächste Jahr.

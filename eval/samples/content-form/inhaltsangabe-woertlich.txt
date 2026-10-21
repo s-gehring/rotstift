@@ -1,0 +1,32 @@
+Fach: Deutsch
+Form: Inhaltsangabe
+Aufgabe: Schreibe eine Inhaltsangabe zur Fabel „Der Fuchs und der Rabe“ von Äsop.
+Mangel: form | Einleitungssatz fehlt | einleitung, titel, autor, textsorte, äsop, basissatz, einleitungssatz | @first
+Mangel: form | Präteritum statt Präsens | präsens, präteritum, tempus, zeitform, vergangenheit, gegenwart | @first
+Mangel: form | Wörtliche Rede | wörtliche rede, direkte rede, zitat, indirekte rede, wörtlich, anführungszeichen | @Oh, du schöner
+Mangel: form | Persönliche Wertung | wertung, meinung, persönlich, subjektiv, sachlich, eigene meinung | @Ich finde die Geschichte
+---
+Ein Rabe hatte ein Stück Käse gestohlen und setzte sich
+damit auf einen hohen Ast. Ein Fuchs kam vorbei und roch
+den Käse. Er wollte ihn unbedingt haben, aber er konnte
+nicht auf den Baum klettern. Deshalb überlegte er sich
+eine List.
+Er stellte sich unter den Baum und rief: „Oh, du schöner
+Rabe! Deine Federn glänzen wie Seide. Wenn deine Stimme
+genauso schön ist, bist du der König aller Vögel.“
+Der Rabe fühlte sich geschmeichelt. Er wollte dem Fuchs
+zeigen, wie schön er singen konnte, und öffnete den
+Schnabel. Dabei fiel der Käse hinunter. Der Fuchs schnappte
+ihn sofort und lief damit in den Wald.
+Bevor er verschwand, rief er dem Raben noch zu: „Du hast
+zwar eine Stimme, aber keinen Verstand!“ Der Rabe saß
+traurig auf seinem Ast und hatte nichts mehr zu essen.
+Er ärgerte sich, dass er auf die Schmeichelei
+hereingefallen war, und schwor sich, nie wieder einem
+Fuchs zu glauben.
+Die Fabel zeigt, dass man Schmeichlern nicht trauen soll,
+weil sie oft nur etwas von einem wollen. Wer zu eitel ist,
+verliert am Ende das, was er hat.
+Ich finde die Geschichte sehr lustig, aber auch ein bisschen
+gemein, weil der Rabe eigentlich nichts falsch gemacht hat.
+Der Fuchs ist für mich der Böse in der Geschichte.
