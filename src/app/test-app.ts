@@ -8,6 +8,7 @@ import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createRunner } from '../pipeline/runner.ts';
 import { IDLE_ENGINE } from '../review/engine-phase.ts';
 import { createReviewFlow } from '../review/review-flow.ts';
+import { fixedWeighting, type WeightingModel } from '../stats/use-weighting.ts';
 import type { Toasts } from '../ui/Toast.tsx';
 import { KLASSE } from './navigation.ts';
 import type {
@@ -47,6 +48,7 @@ export function testModelSetup<T extends AnyModelInfo>(
     error: null,
     loadError: null,
     samples: [],
+    baseline: 0,
     select: resolved,
     download: resolved,
     cancel: resolved,
@@ -90,6 +92,7 @@ export interface TestAppParts {
   readonly navigation?: Partial<Navigation>;
   readonly run?: Partial<RunController>;
   readonly subject?: Partial<Subject>;
+  readonly weighting?: WeightingModel;
   readonly work?: Work;
   readonly models?: Partial<Models>;
   readonly toasts?: Toasts;
@@ -140,6 +143,7 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       ...parts.run,
     },
     subject: { profile: DEUTSCH, profiles: BUILT_IN_PROFILES, select: noop, ...parts.subject },
+    weighting: parts.weighting ?? fixedWeighting(),
     work: parts.work ?? testWork(),
     models: {
       transcriber,

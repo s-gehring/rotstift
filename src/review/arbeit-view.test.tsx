@@ -164,6 +164,7 @@ describe('the head of an Arbeit', () => {
     expect(query('h1')?.textContent).toBe('Aufsatz Ada');
     expect(query('.detail-position')?.textContent).toBe('1 von 2');
     expect(query('.detail-figures')?.textContent).toBe('10 Wörter · 1 Fehler');
+    expect(query('.detail-figures')?.title).toBe('1 gewichtete Fehler · Fehlerquotient 10,0');
     expect(button('Vorherige Arbeit').disabled).toBe(true);
     expect(button('Nächste Arbeit').disabled).toBe(false);
   });
@@ -230,6 +231,31 @@ describe('the keyboard', () => {
   });
 });
 
+function stubScroll() {
+  const scrolled: (number | undefined)[] = [];
+  const rects = new Map<Element, DOMRect>();
+  const rect = vi
+    .spyOn(Element.prototype, 'getBoundingClientRect')
+    .mockImplementation(function measure(this: Element) {
+      return rects.get(this) ?? new DOMRect(0, 0, 0, 0);
+    });
+  const scrollBy = vi
+    .spyOn(window, 'scrollBy')
+    .mockImplementation((options?: ScrollToOptions | number) => {
+      scrolled.push(typeof options === 'object' ? options.top : undefined);
+    });
+  return {
+    scrolled,
+    place: (element: Element | null, top: number, height: number) => {
+      if (element !== null) rects.set(element, new DOMRect(0, top, 100, height));
+    },
+    restore: () => {
+      rect.mockRestore();
+      scrollBy.mockRestore();
+    },
+  };
+}
+
 describe('the errors next to the pages', () => {
   it('lists the errors of every page', async () => {
     await corrected();
@@ -254,6 +280,71 @@ describe('the errors next to the pages', () => {
     expect(query('.side-mark')?.classList.contains('is-active')).toBe(true);
     pointer(query('.annotated-page__mark'), 'pointerout');
     expect(query('.side-mark')?.classList.contains('is-active')).toBe(false);
+  });
+});
+
+describe('revealing a place on the page', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('scrolls the mark of a clicked error to the middle and highlights it for a moment', async () => {
+    await corrected();
+    const scroll = stubScroll();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1000);
+      scroll.place(query('.detail-head'), 0, 100);
+      scroll.place(query('.annotated-page [data-mark-key]'), 1900, 20);
+      act(() => query('.side-mark')?.click());
+      expect(scroll.scrolled).toEqual([1910 - 550]);
+      expect(query('.annotated-page__mark.is-active')?.getAttribute('data-mark-key')).toBe('1:0');
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(query('.annotated-page__mark.is-active')).toBeNull();
+    } finally {
+      scroll.restore();
+    }
+  });
+
+  it('scrolls to the page when the mark is not drawn', async () => {
+    await corrected();
+    const scroll = stubScroll();
+    try {
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1000);
+      for (const mark of all('.annotated-page__mark')) mark.remove();
+      scroll.place(query('.sheet'), 3000, 400);
+      act(() => query('.side-mark')?.click());
+      expect(scroll.scrolled).toEqual([3200 - 500]);
+    } finally {
+      scroll.restore();
+    }
+  });
+
+  it('scrolls an uncertain reading to the middle and highlights it when its entry is clicked', async () => {
+    await withHint();
+    const scroll = stubScroll();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1000);
+      scroll.place(query('.annotated-page .hint-spot'), 2000, 40);
+      act(() => {
+        const group = details();
+        if (group !== null) group.open = true;
+        group?.dispatchEvent(new Event('toggle'));
+      });
+      act(() => query('.side-hint-text')?.click());
+      expect(scroll.scrolled).toEqual([2020 - 500]);
+      expect(query('.hint-spot')?.hasAttribute('data-selected')).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(query('.hint-spot')?.hasAttribute('data-selected')).toBe(false);
+    } finally {
+      scroll.restore();
+    }
   });
 });
 

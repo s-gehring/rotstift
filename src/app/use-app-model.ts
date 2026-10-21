@@ -14,6 +14,7 @@ import { useWordCount } from '../results/use-word-count.ts';
 import { useMonitorPhase } from '../review/engine-phase.ts';
 import type { ReviewFlow } from '../review/review-flow.ts';
 import { useReview } from '../review/use-review.ts';
+import { useWeighting } from '../stats/use-weighting.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts';
 import {
@@ -118,6 +119,7 @@ export function useAppModel(): AppModel {
     [transcriberPhase, correctorPhase],
   );
   const { profile, select: selectProfile } = useProfileChoice();
+  const weighting = useWeighting();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
   const review = useReview(count.runner, pages, corrector);
   const navigation = useNavigation(importState.arbeiten);
@@ -266,6 +268,7 @@ export function useAppModel(): AppModel {
       cancel,
     },
     subject: { profile, profiles: BUILT_IN_PROFILES, select: selectProfile },
+    weighting,
     work: {
       count,
       review,

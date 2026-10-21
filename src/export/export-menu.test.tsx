@@ -534,10 +534,12 @@ describe('the corrected PDF', () => {
     const [csv, fileName] = vi.mocked(saveCsv).mock.calls[0] ?? [];
     const [head, ada] = csv?.replace('\uFEFF', '').split('\r\n') ?? [];
     expect(head).toBe(
-      `Name;Seiten;Wörter;Fehler;Fehler je 100 Wörter;${DEUTSCH.allowedTypes.join(';')};Hinweis`,
+      `Name;Seiten;Wörter;Fehler;Fehler je 100 Wörter;Gewichtete Fehler;Fehlerquotient;${DEUTSCH.allowedTypes.join(';')};Hinweis`,
     );
-    expect(ada?.split(';').slice(0, 5)).toEqual([
+    expect(ada?.split(';').slice(0, 7)).toEqual([
       'Ada',
+      '1',
+      expect.any(String),
       '1',
       expect.any(String),
       '1',

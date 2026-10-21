@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useApp } from '../app/app-context.tsx';
 import { ExportMenu } from '../export/ExportMenu.tsx';
 import { hasResults } from '../export/has-results.ts';
@@ -14,7 +14,8 @@ import { buildArbeitModel, type ArbeitFigures, type PageModel } from './arbeit-m
 import { ArbeitPage } from './ArbeitPage.tsx';
 import { ArbeitSide, type PageHint, type PageMark } from './ArbeitSide.tsx';
 import { setDisplay, useDisplay, type Display } from './display.ts';
-import { errorsText } from './summary.ts';
+import { formatWeighted } from '../stats/weighting.ts';
+import { errorsText, formatRate } from './summary.ts';
 import './review.css';
 
 const DISPLAY_OPTIONS = [
@@ -41,10 +42,36 @@ function figuresText({ words, errors, partial }: ArbeitFigures): string {
   return parts.join(' · ');
 }
 
-function scrollToMark(mark: PageMark) {
-  const sheet = document.querySelector(`[data-page="${CSS.escape(mark.pageId)}"]`);
-  const target = sheet?.querySelector(`[data-mark-key="${CSS.escape(mark.key)}"]`) ?? sheet;
-  target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+function quotientTitle({ weighted, quotient, partial }: ArbeitFigures): string | undefined {
+  if (weighted === null || quotient === null) return undefined;
+  const prefix = partial ? 'mind. ' : '';
+  return `${prefix}${formatWeighted(weighted)} gewichtete Fehler · Fehlerquotient ${formatRate(quotient)}`;
+}
+
+const FLASH_MS = 1600;
+
+function scrollToSpot(pageId: string, selector: string) {
+  const sheet = document.querySelector(`[data-page="${CSS.escape(pageId)}"]`);
+  const target = sheet?.querySelector(selector) ?? sheet;
+  if (target === null) return;
+  const rect = target.getBoundingClientRect();
+  const visibleTop = document.querySelector('.detail-head')?.getBoundingClientRect().bottom ?? 0;
+  const visibleCenter = visibleTop + (window.innerHeight - visibleTop) / 2;
+  window.scrollBy({ top: rect.top + rect.height / 2 - visibleCenter, behavior: 'smooth' });
+}
+
+function useFlash(): (clear: () => void) => void {
+  const timer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+  return (clear) => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(clear, FLASH_MS);
+  };
 }
 
 interface Confirm {
@@ -68,9 +95,32 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
 
+  const flashMark = useFlash();
+  const flashHint = useFlash();
+
   useEffect(() => {
     if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0 });
   }, []);
+
+  const revealMark = (mark: PageMark) => {
+    scrollToSpot(mark.pageId, `[data-mark-key="${CSS.escape(mark.key)}"]`);
+    setActiveMark(mark);
+    flashMark(() =>
+      setActiveMark((current) =>
+        current?.pageId === mark.pageId && current.key === mark.key ? null : current,
+      ),
+    );
+  };
+
+  const revealHint = (hint: PageHint) => {
+    scrollToSpot(hint.pageId, `[data-hint="${hint.index}"]`);
+    setActiveHint(hint);
+    flashHint(() =>
+      setActiveHint((current) =>
+        current?.pageId === hint.pageId && current.index === hint.index ? null : current,
+      ),
+    );
+  };
 
   const canRetry = corrected ? work.canRetryReview : work.canRetryCount;
   const retryHint = run.running ? AFTER_RUN : canRetry ? null : NO_MODEL;
@@ -170,8 +220,9 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
           })
         }
         onMarkHover={setActiveMark}
-        onMarkSelect={scrollToMark}
+        onMarkSelect={revealMark}
         onHintHover={setActiveHint}
+        onHintReveal={revealHint}
         onHint={(pageId, index, status) => work.review.flow.setHint(pageId, index, status)}
         onEdit={(pageId, text) => work.count.runner.edit(pageId, text)}
         onEditDone={() => setEditing(null)}
@@ -205,7 +256,7 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
 }
 
 export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
-  const { importState, navigation, work, run } = useApp();
+  const { importState, navigation, work, run, weighting } = useApp();
   const { back, next, prev, position } = navigation;
   const display = useDisplay();
   const headingId = useId();
@@ -227,7 +278,12 @@ export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
 
   const arbeit = importState.arbeiten.find((candidate) => candidate.id === arbeitId);
   if (arbeit === undefined) return null;
-  const model = buildArbeitModel(arbeit, work.review.state, work.count.state.entries);
+  const model = buildArbeitModel(
+    arbeit,
+    work.review.state,
+    work.count.state.entries,
+    work.review.state.profile === null ? null : weighting.of(work.review.state.profile),
+  );
   const figures = figuresText(model.figures);
   const headerExports =
     !run.running &&
@@ -262,7 +318,11 @@ export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
           </span>
         )}
         <span className="detail-spacer" />
-        {figures !== '' && <span className="detail-figures">{figures}</span>}
+        {figures !== '' && (
+          <span className="detail-figures" title={quotientTitle(model.figures)}>
+            {figures}
+          </span>
+        )}
         {model.corrected && (
           <Segmented
             label="Darstellung"

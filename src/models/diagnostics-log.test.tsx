@@ -53,6 +53,17 @@ describe('DiagnosticsLog', () => {
     expect(fake.read).not.toHaveBeenCalled();
   });
 
+  it('scrolls the entries to the newest line when opened', async () => {
+    const heights = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(4000);
+    try {
+      act(() => root.render(<DiagnosticsLog source={source(['alt', 'neu'])} />));
+      await openLog();
+      expect(container.querySelector('.diagnostics-entries')?.scrollTop).toBe(4000);
+    } finally {
+      heights.mockRestore();
+    }
+  });
+
   it('shows the entries and copies them for an email', async () => {
     const lines = [
       '{"event":"page_done","totalMs":1200}',

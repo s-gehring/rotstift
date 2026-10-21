@@ -1,7 +1,15 @@
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { PageEntry } from '../pipeline/runner.ts';
+import type { CorrectionProfile } from '../annotations/profile.ts';
+import type { Transcript } from '../annotations/transcript.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import {
+  combineWeighted,
+  weightedStatistics,
+  type WeightedStatistics,
+  type Weighting,
+} from '../stats/weighting.ts';
 import { isStale, type ReviewPage, type ReviewState } from './review-flow.ts';
 
 export type Entries = Readonly<Record<string, PageEntry>>;
@@ -20,6 +28,7 @@ export interface ArbeitReview {
   readonly complete: boolean;
   readonly preview: boolean;
   readonly statistics: Statistics | null;
+  readonly transcripts: readonly Transcript[];
 }
 
 export interface ClassReview {
@@ -106,6 +115,7 @@ export function summarizeArbeit(
     open: 0,
   };
   const corrected: Statistics[] = [];
+  const transcripts: Transcript[] = [];
   let preview = false;
   for (const page of arbeit.pages) {
     const review = state.pages[page.id];
@@ -113,6 +123,7 @@ export function summarizeArbeit(
     counts[condition] += 1;
     if (condition === 'corrected' && review?.result) {
       corrected.push(review.result.statistics);
+      transcripts.push(review.result.transcript);
       preview ||= review.result.preview;
     }
   }
@@ -128,7 +139,27 @@ export function summarizeArbeit(
     complete: counts.corrected + counts.empty === arbeit.pages.length,
     preview,
     statistics: combineStatistics(corrected),
+    transcripts,
   };
+}
+
+export function weighArbeit(
+  arbeit: ArbeitReview,
+  profile: CorrectionProfile,
+  weighting: Weighting,
+): WeightedStatistics | null {
+  if (arbeit.statistics === null) return null;
+  return weightedStatistics(arbeit.statistics.words, arbeit.transcripts, profile, weighting);
+}
+
+export function weighClass(
+  arbeiten: readonly ArbeitReview[],
+  profile: CorrectionProfile,
+  weighting: Weighting,
+): WeightedStatistics | null {
+  return combineWeighted(
+    arbeiten.flatMap((arbeit) => weighArbeit(arbeit, profile, weighting) ?? []),
+  );
 }
 
 export function summarizeClass(

@@ -8,7 +8,8 @@ import { isOutdated } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
 import { buildResults } from '../results/summary.ts';
 import type { ReviewImage, ReviewState } from './review-flow.ts';
-import { pageCondition, summarizeArbeit, type Entries } from './summary.ts';
+import type { Weighting } from '../stats/weighting.ts';
+import { pageCondition, summarizeArbeit, weighArbeit, type Entries } from './summary.ts';
 
 export interface MarkEntry {
   readonly key: string;
@@ -51,6 +52,8 @@ export interface PageModel {
 export interface ArbeitFigures {
   readonly words: number | null;
   readonly errors: number | null;
+  readonly weighted: number | null;
+  readonly quotient: number | null;
   readonly partial: boolean;
 }
 
@@ -84,6 +87,7 @@ export function buildArbeitModel(
   arbeit: Arbeit,
   review: ReviewState,
   entries: Entries,
+  weighting: Weighting | null = null,
 ): ArbeitModel {
   const corrected = arbeit.pages.some((page) => review.pages[page.id] !== undefined);
   const result = buildResults([arbeit], entries)[0];
@@ -155,15 +159,23 @@ export function buildArbeitModel(
   let figures: ArbeitFigures;
   if (corrected) {
     const summary = summarizeArbeit(arbeit, review, entries);
+    const weighted =
+      review.profile === null || weighting === null
+        ? null
+        : weighArbeit(summary, review.profile, weighting);
     figures = {
       words: summary.statistics?.words ?? null,
       errors: summary.statistics?.errors ?? null,
+      weighted: weighted?.weighted ?? null,
+      quotient: weighted?.quotient ?? null,
       partial: !summary.complete,
     };
   } else {
     figures = {
       words: result === undefined || result.countedPages === 0 ? null : result.words,
       errors: null,
+      weighted: null,
+      quotient: null,
       partial: result !== undefined && result.countedPages < result.pageCount,
     };
   }

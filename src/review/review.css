@@ -247,21 +247,34 @@
   background: var(--color-hover);
 }
 
-.side-hint-text {
+.detail-side button.side-hint-text {
   display: block;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   text-decoration: underline dotted;
   text-underline-offset: 0.2em;
   overflow-wrap: anywhere;
 }
 
-.side-hint[data-status='accepted'] .side-hint-text {
+.detail-side .side-hint[data-status='accepted'] button.side-hint-text {
   color: var(--color-red-text);
   text-decoration: none;
 }
 
-.side-hint[data-status='dismissed'] .side-hint-text {
+.detail-side .side-hint[data-status='dismissed'] button.side-hint-text {
   color: var(--color-text-muted);
   text-decoration: line-through;
+}
+
+.detail-side button.side-hint-text:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .side-hint-actions {
