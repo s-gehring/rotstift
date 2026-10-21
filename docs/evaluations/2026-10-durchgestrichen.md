@@ -23,13 +23,13 @@ Frage: Wie geht die Texterkennung mit durchgestrichenen Wörtern um, und wie erk
 
 GLM-OCR, gerenderte Seiten, 64 gestrichene und 2044 normale Wörter. WER ist die Wortfehlerrate ohne Gestrichenes.
 
-| Prompt                                                              | erkannt | abgeschrieben | ausgelassen | Wortzahl daneben je Seite | WER   |
-| ------------------------------------------------------------------- | ------- | ------------- | ----------- | ------------------------- | ----- |
-| `Text Recognition:` (Registry)                                      | 0       | 49            | 15          | 3,13 (2,4 %)              | 7,4 % |
-| … `Mark crossed-out words with <del></del>.`                        | 0       | 49            | 15          | 3,06 (2,4 %)              | 7,4 % |
-| … mit `~~` statt `<del>`                                            | 0       | 49            | 15          | 3,06 (2,4 %)              | 7,3 % |
-| … `Omit crossed-out words.`                                         | 0       | 49            | 15          | 3,06 (2,4 %)              | 7,3 % |
-| Deutsche Anweisung, Gestrichenes in `<del>`                         | 0       | 47            | 17          | 3,00 (2,3 %)              | 7,3 % |
+| Prompt                                       | erkannt | abgeschrieben | ausgelassen | Wortzahl daneben je Seite | WER   |
+| -------------------------------------------- | ------- | ------------- | ----------- | ------------------------- | ----- |
+| `Text Recognition:` (Registry)               | 0       | 49            | 15          | 3,13 (2,4 %)              | 7,4 % |
+| … `Mark crossed-out words with <del></del>.` | 0       | 49            | 15          | 3,06 (2,4 %)              | 7,4 % |
+| … mit `~~` statt `<del>`                     | 0       | 49            | 15          | 3,06 (2,4 %)              | 7,3 % |
+| … `Omit crossed-out words.`                  | 0       | 49            | 15          | 3,06 (2,4 %)              | 7,3 % |
+| Deutsche Anweisung, Gestrichenes in `<del>`  | 0       | 47            | 17          | 3,00 (2,3 %)              | 7,3 % |
 
 GLM-OCR ist auf die festen Aufgaben „Text Recognition:“, „Formula Recognition:“ und „Table Recognition:“ trainiert und folgt freien Anweisungen nicht. Die Lesegenauigkeit ändert sich mit keiner Variante, aber es gibt auch nichts zu gewinnen.
 
@@ -47,22 +47,22 @@ QWEN_PLACEHOLDER
 
 Gerenderte Seiten, Transkript von GLM-OCR:
 
-| Strich            | gestrichen | erkannt | abgeschrieben, nicht erkannt | von GLM-OCR ausgelassen |
-| ----------------- | ---------- | ------- | ---------------------------- | ----------------------- |
-| Ein Strich        | 32         | 18      | 8                            | 6                       |
-| Zwei Striche      | 16         | 9       | 2                            | 5                       |
-| Gekritzel         | 16         | 6       | 6                            | 4                       |
-| **Gesamt**        | **64**     | **33**  | **16**                       | **15**                  |
+| Strich       | gestrichen | erkannt | abgeschrieben, nicht erkannt | von GLM-OCR ausgelassen |
+| ------------ | ---------- | ------- | ---------------------------- | ----------------------- |
+| Ein Strich   | 32         | 18      | 8                            | 6                       |
+| Zwei Striche | 16         | 9       | 2                            | 5                       |
+| Gekritzel    | 16         | 6       | 6                            | 4                       |
+| **Gesamt**   | **64**     | **33**  | **16**                       | **15**                  |
 
-| Messung                              | ohne Tinte   | mit Tinte    |
-| ------------------------------------ | ------------ | ------------ |
-| Fehlalarme gerendert (2044 Wörter)   | 0            | 7 (0,3 %)    |
-| Fehlalarme ScaDS (7556 Wörter)       | 0            | 6 (0,08 %)   |
-| Wortzahl ScaDS daneben je Seite      | 1,38         | 1,40         |
-| Wortzahl gerendert                   | 2094 (+2,4 %) | 2054 (+0,5 %) |
-| Wortzahl daneben je Seite            | 3,13         | 1,13         |
-| WER ohne Gestrichenes                | 7,4 %        | 5,9 %        |
-| Zeit je Seite (Mac, M4 Pro)          | –            | 0,11 bis 0,15 s |
+| Messung                            | ohne Tinte    | mit Tinte       |
+| ---------------------------------- | ------------- | --------------- |
+| Fehlalarme gerendert (2044 Wörter) | 0             | 7 (0,3 %)       |
+| Fehlalarme ScaDS (7556 Wörter)     | 0             | 6 (0,08 %)      |
+| Wortzahl ScaDS daneben je Seite    | 1,38          | 1,40            |
+| Wortzahl gerendert                 | 2094 (+2,4 %) | 2054 (+0,5 %)   |
+| Wortzahl daneben je Seite          | 3,13          | 1,13            |
+| WER ohne Gestrichenes              | 7,4 %         | 5,9 %           |
+| Zeit je Seite (Mac, M4 Pro)        | –             | 0,11 bis 0,15 s |
 
 Nicht erkannt werden vor allem kurze Wörter (der Strich ist kürzer als dreimal die x-Höhe), Striche, die über oder unter der Kernzone liegen, und Gekritzel. Ein Merkmal für Gekritzel (Dichte der Richtungswechsel) trennte auf echter Handschrift nicht von normaler Schrift und ist deshalb nicht eingebaut. Die 7 Fehlalarme sind fast alle das Nachbarwort eines gestrichenen Wortes („~~Üer~~ Über“, „~~Dnan~~ dann“): Der Strich ragt hinein, oder die Zuordnung verrutscht, weil GLM-OCR das gestrichene Wort verlesen oder mit dem Nachbarn verschmolzen hat. Auf ScaDS sind die 6 Fehlalarme lange Verbindungs- und Querstriche der Schreibschrift (etwa der Anstrich von „öffentlichen“ oder der f-Strich in „Schiffs“), 4 davon auf einer Seite (044). Eine echte Streichung ist nicht darunter. Sie senken die Wortzahl um 6 (7624 statt 7630, richtig wären 7556), an ihrer Genauigkeit ändert das kaum etwas (im Mittel 1,40 statt 1,38 Wörter je Seite daneben, die Abweichung kommt von Lesefehlern).
 
