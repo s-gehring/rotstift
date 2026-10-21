@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILT_IN_PROFILES } from '../annotations/profile.ts';
+import { createCloudClient } from '../cloud/client.ts';
+import { cloudBlockedMessage, cloudUsable, remoteTranscriber } from '../cloud/remote.ts';
+import { useCloud } from '../cloud/use-cloud.ts';
 import { needsAssignment, needsFormName } from '../content-form/review.ts';
 import { useCorrectionScope } from '../correction/use-correction-scope.ts';
 import { useCorrector, useReviewer } from '../correction/use-corrector.ts';
@@ -36,6 +39,7 @@ import {
 import type { AppModel, ModelRole, Navigation, Route, RunKind, ScopeField } from './types.ts';
 
 const modelClient = browserModelClient();
+const cloudClient = modelClient === null ? null : createCloudClient();
 
 interface SetupState {
   readonly open: boolean;
@@ -98,25 +102,38 @@ export function useAppModel(): AppModel {
   const importState = useImportPages({
     onProblem: (text) => showToast(text, { tone: 'error' }),
   });
+  const cloud = useCloud(cloudClient);
+  const transcriberCloud = cloud.steps.transcriber ?? null;
   const transcriberSetup = useModelSetup(modelClient);
   const { model } = transcriberSetup;
   const modelState = transcriberSetup.status?.state;
-  const availability = useMemo<ModelAvailability | null>(
-    () => (modelState === undefined ? null : { model, state: modelState }),
-    [model, modelState],
-  );
-  const transcriber = useTranscriber(availability, () => {
+  const availability = useMemo<ModelAvailability | null>(() => {
+    if (transcriberCloud !== null) {
+      return cloudUsable(transcriberCloud)
+        ? { model: remoteTranscriber(transcriberCloud), state: 'ready', remote: true }
+        : null;
+    }
+    return modelState === undefined ? null : { model, state: modelState };
+  }, [model, modelState, transcriberCloud]);
+  const resolvedTranscriber = useTranscriber(availability, () => {
     void transcriberSetup.refresh();
   });
+  const transcriber = useMemo(
+    () =>
+      transcriberCloud !== null && !cloudUsable(transcriberCloud)
+        ? { state: 'unavailable' as const, message: cloudBlockedMessage(transcriberCloud) }
+        : resolvedTranscriber,
+    [transcriberCloud, resolvedTranscriber],
+  );
   const count = useWordCount(importState.pages, transcriber);
   const transcriberPhase = useEnginePhase(transcriber);
-  const correction = useCorrector(modelClient);
+  const correction = useCorrector(modelClient, undefined, cloud.steps.corrector ?? null);
   const corrector = correction.status;
   const correctorSetup = correction.setup.setup;
   const correctorPhase = useMonitorPhase(
     corrector?.state === 'ready' ? corrector.engine : undefined,
   );
-  const contentForm = useReviewer(modelClient);
+  const contentForm = useReviewer(modelClient, undefined, cloud.steps.reviewer ?? null);
   const reviewer = contentForm.status;
   const reviewerSetup = contentForm.setup.setup;
   const reviewerPhase = useMonitorPhase(reviewer?.state === 'ready' ? reviewer.engine : undefined);
@@ -311,6 +328,7 @@ export function useAppModel(): AppModel {
       transcriber: transcriberSetup,
       corrector: correctorSetup,
       reviewer: reviewerSetup,
+      cloud,
       switchLocked: {
         transcriber: isSwitchLocked(count.state, transcriberPhase) || reviewing,
         corrector: reviewing,

@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import packageInfo from '../../package.json';
 import { useApp } from '../app/app-context.tsx';
 import type { ModelRole } from '../app/types.ts';
+import { CloudKeyForm, CloudModelForm } from '../cloud/CloudModelForm.tsx';
+import { privacyNote } from '../cloud/remote.ts';
+import { findTemplate } from '../cloud/templates.ts';
+import type { CloudModel } from '../cloud/use-cloud.ts';
 import { Button } from '../ui/Button.tsx';
 import { Dialog } from '../ui/Dialog.tsx';
 import { DiagnosticsLog } from './DiagnosticsLog.tsx';
@@ -173,21 +177,66 @@ function CustomModelForm({
   );
 }
 
+function CloudRow({
+  role,
+  cloud,
+  locked,
+}: {
+  readonly role: ModelRole;
+  readonly cloud: CloudModel;
+  readonly locked: boolean;
+}) {
+  const step = cloud.steps[role];
+  if (step === undefined) return null;
+  const needsKey = step.key === null && findTemplate(step.template)?.key === 'required';
+  return (
+    <>
+      <div className="settings-model">
+        <label className="settings-model-label">
+          <input type="radio" name={`model-choice-${role}`} checked readOnly />
+          <span className="settings-model-text">
+            <span className="settings-model-line">
+              <span className="settings-model-name">{step.model}</span>
+              <span className="settings-model-state" data-state="cloud">
+                {step.template === 'server' ? 'Eigener Server' : 'Cloud'}
+              </span>
+            </span>
+            <span className="settings-model-note">
+              {step.label === step.host ? step.host : `${step.label} · ${step.host}`}
+            </span>
+            {step.key === 'session' && (
+              <span className="settings-model-note">Schlüssel gilt nur bis zum Beenden.</span>
+            )}
+          </span>
+        </label>
+        <Button variant="quiet" disabled={locked} onClick={() => void cloud.clear(role)}>
+          Ausschalten
+        </Button>
+      </div>
+      {needsKey && <CloudKeyForm role={role} cloud={cloud} />}
+    </>
+  );
+}
+
 function ModelSection({
   role,
   setup,
+  cloud,
   locked,
   sharedWith = null,
   onSetup,
 }: {
   readonly role: ModelRole;
   readonly setup: ModelSetup<AnyModelInfo>;
+  readonly cloud: CloudModel;
   readonly locked: boolean;
   readonly sharedWith?: ModelRole | null;
   readonly onSetup: () => void;
 }) {
   const [confirming, setConfirming] = useState<AnyModelInfo | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addingCloud, setAddingCloud] = useState(false);
+  const remote = cloud.steps[role] !== undefined;
   const keep = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (confirming !== null) keep.current?.focus();
@@ -197,7 +246,7 @@ function ModelSection({
   const busy = state !== null && BUSY.has(state);
   const ram = setup.state.hardware?.totalRamBytes ?? null;
   const rows = setup.models;
-  const choice = rows.length > 1;
+  const choice = rows.length > 1 || remote;
   const headingId = `settings-${role}`;
   const source = customSource(model);
   const switchDisabled = locked || hasRunningJob(setup.state);
@@ -207,6 +256,7 @@ function ModelSection({
       <h3 id={headingId}>{ROLE_NAME[role]}</h3>
       <fieldset className="model-choice" disabled={switchDisabled}>
         <legend className="visually-hidden">{ROLE_NAME[role]}</legend>
+        <CloudRow role={role} cloud={cloud} locked={locked} />
         {rows.map((candidate) => {
           const candidateState = setup.state.statuses[candidate.id]?.state ?? null;
           const candidateBusy = candidateState !== null && BUSY.has(candidateState);
@@ -222,8 +272,13 @@ function ModelSection({
                   <input
                     type="radio"
                     name={`model-choice-${role}`}
-                    checked={candidate.id === model.id}
-                    onChange={() => void setup.select(candidate.id)}
+                    checked={!remote && candidate.id === model.id}
+                    onChange={() => {
+                      void (async () => {
+                        if (remote) await cloud.clear(role);
+                        await setup.select(candidate.id);
+                      })();
+                    }}
                   />
                 )}
                 <span className="settings-model-text">
@@ -301,6 +356,8 @@ function ModelSection({
         </div>
       ) : adding ? (
         <CustomModelForm role={role} setup={setup} onDone={() => setAdding(false)} />
+      ) : addingCloud ? (
+        <CloudModelForm role={role} cloud={cloud} onDone={() => setAddingCloud(false)} />
       ) : (
         <div className="settings-actions">
           {state === 'unverified' && (
@@ -321,6 +378,11 @@ function ModelSection({
           <Button variant="quiet" disabled={switchDisabled} onClick={() => setAdding(true)}>
             Eigenes Modell …
           </Button>
+          {cloud.available && (
+            <Button variant="quiet" disabled={switchDisabled} onClick={() => setAddingCloud(true)}>
+              Cloud-Modell …
+            </Button>
+          )}
         </div>
       )}
     </section>
@@ -329,8 +391,11 @@ function ModelSection({
 
 export function SettingsDialog() {
   const { models } = useApp();
-  const { settings, transcriber, corrector, reviewer, switchLocked, setup } = models;
-  const reviewerShared = reviewer.model.id === corrector.model.id;
+  const { settings, transcriber, corrector, reviewer, cloud, switchLocked, setup } = models;
+  const reviewerShared =
+    reviewer.model.id === corrector.model.id &&
+    cloud.steps.corrector === undefined &&
+    cloud.steps.reviewer === undefined;
   const available = transcriber.available;
   return (
     <Dialog open={settings.open} onClose={settings.close} title="Einstellungen" size="md">
@@ -339,12 +404,14 @@ export function SettingsDialog() {
           <ModelSection
             role="transcriber"
             setup={transcriber}
+            cloud={cloud}
             locked={switchLocked.transcriber}
             onSetup={() => setup.show(['transcriber'])}
           />
           <ModelSection
             role="corrector"
             setup={corrector}
+            cloud={cloud}
             locked={switchLocked.corrector}
             sharedWith={reviewerShared ? 'reviewer' : null}
             onSetup={() => setup.show(['corrector'])}
@@ -352,6 +419,7 @@ export function SettingsDialog() {
           <ModelSection
             role="reviewer"
             setup={reviewer}
+            cloud={cloud}
             locked={switchLocked.reviewer}
             sharedWith={reviewerShared ? 'corrector' : null}
             onSetup={() => setup.show(['reviewer'])}
@@ -363,7 +431,7 @@ export function SettingsDialog() {
       )}
       <WeightingSettings />
       <p className="settings-about">
-        Rotstift {packageInfo.version} · Alles bleibt auf diesem Rechner.
+        Rotstift {packageInfo.version} · {privacyNote(cloud.steps)}
       </p>
     </Dialog>
   );

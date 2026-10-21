@@ -1,0 +1,122 @@
+// @vitest-environment happy-dom
+import { act, useEffect } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CloudCallError, type CloudClient, type CloudInput, type CloudView } from './client.ts';
+import { useCloud, type CloudModel } from './use-cloud.ts';
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  container = document.createElement('div');
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+});
+
+const EMPTY: CloudView = { steps: {} };
+const CONFIGURED: CloudView = {
+  steps: {
+    corrector: {
+      template: 'mistral',
+      label: 'Mistral AI',
+      baseUrl: 'https://api.mistral.ai/v1',
+      host: 'api.mistral.ai',
+      model: 'mistral-small-latest',
+      loopback: false,
+      confirmed: true,
+      key: 'system',
+    },
+  },
+};
+const INPUT: CloudInput = {
+  template: 'mistral',
+  baseUrl: 'https://api.mistral.ai/v1',
+  model: 'mistral-small-latest',
+  key: 'fake-test-key',
+};
+
+function fakeClient(overrides: Partial<CloudClient> = {}): CloudClient {
+  return {
+    config: vi.fn<CloudClient['config']>(() => Promise.resolve(EMPTY)),
+    use: vi.fn<CloudClient['use']>(() => Promise.resolve(CONFIGURED)),
+    setKey: vi.fn<CloudClient['setKey']>(() => Promise.resolve(CONFIGURED)),
+    clear: vi.fn<CloudClient['clear']>(() => Promise.resolve(EMPTY)),
+    check: vi.fn<CloudClient['check']>(() => Promise.resolve(undefined)),
+    ...overrides,
+  };
+}
+
+async function mount(client: CloudClient | null) {
+  const latest: { current: CloudModel | null } = { current: null };
+  function Probe() {
+    const cloud = useCloud(client);
+    useEffect(() => {
+      latest.current = cloud;
+    });
+    return null;
+  }
+  await act(async () => {
+    root.render(<Probe />);
+    await Promise.resolve();
+  });
+  if (latest.current === null) throw new Error('not mounted');
+  return latest;
+}
+
+describe('useCloud', () => {
+  it('is unavailable outside the desktop app', async () => {
+    const cloud = await mount(null);
+    expect(cloud.current?.available).toBe(false);
+    expect(await cloud.current?.use('corrector', INPUT, false)).toEqual({
+      state: 'error',
+      error: 'notConfigured',
+    });
+  });
+
+  it('asks for consent without checking the provider', async () => {
+    const client = fakeClient({
+      use: vi.fn<CloudClient['use']>(() => Promise.reject(new CloudCallError('consentMissing'))),
+    });
+    const cloud = await mount(client);
+    expect(await cloud.current?.use('corrector', INPUT, false)).toEqual({ state: 'consent' });
+    expect(client.check).not.toHaveBeenCalled();
+  });
+
+  it('checks a confirmed choice and shows it', async () => {
+    const client = fakeClient({
+      config: vi
+        .fn<CloudClient['config']>()
+        .mockResolvedValueOnce(EMPTY)
+        .mockResolvedValue(CONFIGURED),
+    });
+    const cloud = await mount(client);
+    let outcome;
+    await act(async () => {
+      outcome = await cloud.current?.use('corrector', INPUT, true);
+    });
+    expect(outcome).toEqual({ state: 'ok' });
+    expect(client.use).toHaveBeenCalledWith('corrector', INPUT, true);
+    expect(client.check).toHaveBeenCalledWith('corrector');
+    expect(cloud.current?.steps.corrector?.label).toBe('Mistral AI');
+  });
+
+  it('switches the step off again when the check fails', async () => {
+    const client = fakeClient({
+      check: vi.fn<CloudClient['check']>(() => Promise.reject(new CloudCallError('auth'))),
+    });
+    const cloud = await mount(client);
+    let outcome;
+    await act(async () => {
+      outcome = await cloud.current?.use('corrector', INPUT, true);
+    });
+    expect(outcome).toEqual({ state: 'error', error: 'auth' });
+    expect(client.clear).toHaveBeenCalledWith('corrector');
+    expect(cloud.current?.steps).toEqual({});
+  });
+});

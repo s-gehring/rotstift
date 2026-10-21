@@ -2,6 +2,7 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CloudStep } from '../cloud/client.ts';
 import type { SidecarCorrector } from '../llm/sidecar-corrector.ts';
 import type { ModelClient } from '../models/client.ts';
 import type { CreateCorrector } from '../models/corrector-setup.ts';
@@ -53,11 +54,13 @@ let latest: CorrectorChoice | null = null;
 function Probe({
   client,
   create,
+  cloud = null,
 }: {
   readonly client: ModelClient | null;
   readonly create: CreateCorrector;
+  readonly cloud?: CloudStep | null;
 }) {
-  const choice = useCorrector(client, create);
+  const choice = useCorrector(client, create, cloud);
   useEffect(() => {
     latest = choice;
   });
@@ -78,9 +81,13 @@ function ReviewerProbe({
   return null;
 }
 
-async function render(client: ModelClient | null, Component = Probe) {
+async function render(
+  client: ModelClient | null,
+  Component: typeof Probe = Probe,
+  cloud: CloudStep | null = null,
+) {
   const create = vi.fn<CreateCorrector>(() => sidecar);
-  act(() => root.render(<Component client={client} create={create} />));
+  act(() => root.render(<Component client={client} create={create} cloud={cloud} />));
   await act(async () => {
     await tick();
     await tick();
@@ -117,6 +124,32 @@ describe('useCorrector', () => {
       corrector: sidecar,
       preview: false,
       engine: sidecar.engine,
+    });
+  });
+
+  it('corrects through the cloud step without loading the local model', async () => {
+    const step: CloudStep = {
+      template: 'mistral',
+      label: 'Mistral AI',
+      baseUrl: 'https://api.mistral.ai/v1',
+      host: 'api.mistral.ai',
+      model: 'mistral-small-latest',
+      loopback: false,
+      confirmed: true,
+      key: 'system',
+    };
+    const create = await render(fakeClient('ready'), Probe, step);
+    expect(create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: 'cloud-corrector' }),
+      expect.objectContaining({ engine: expect.anything(), client: expect.anything() }),
+    );
+    expect(latest?.status).toMatchObject({ state: 'ready', corrector: sidecar });
+
+    const blocked = await render(fakeClient('ready'), Probe, { ...step, key: null });
+    expect(blocked).not.toHaveBeenCalled();
+    expect(latest?.status).toEqual({
+      state: 'unavailable',
+      message: 'Für Mistral AI fehlt der Schlüssel. Bitte in den Einstellungen eingeben.',
     });
   });
 

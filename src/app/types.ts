@@ -1,4 +1,5 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import type { CloudModel } from '../cloud/use-cloud.ts';
 import type { CorrectorStatus } from '../correction/provider.ts';
 import type { CorrectionScope } from '../correction/scope.ts';
 import type { ImportPage } from '../import/pages.ts';
@@ -101,6 +102,7 @@ export interface Models {
   readonly transcriber: ModelSetup;
   readonly corrector: ModelSetup<CorrectorInfo>;
   readonly reviewer: ModelSetup<CorrectorInfo>;
+  readonly cloud: CloudModel;
   readonly switchLocked: Readonly<Record<ModelRole, boolean>>;
   readonly setup: SetupRequest;
   readonly settings: SettingsRequest;

@@ -1,3 +1,4 @@
+mod cloud;
 mod diagnostics;
 mod llm;
 #[cfg(target_os = "macos")]
@@ -22,6 +23,7 @@ pub fn run() {
             diagnostics::init(app.handle());
             llm::commands::stop_orphaned_sidecars(app.handle());
             models::commands::init_custom_models(app.handle());
+            cloud::commands::init(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -31,6 +33,13 @@ pub fn run() {
             llm::commands::llm_status,
             llm::commands::llm_chat,
             llm::commands::llm_cancel,
+            cloud::commands::cloud_config,
+            cloud::commands::cloud_use,
+            cloud::commands::cloud_set_key,
+            cloud::commands::cloud_clear,
+            cloud::commands::cloud_check,
+            cloud::commands::cloud_chat,
+            cloud::commands::cloud_cancel,
             diagnostics::commands::diag_log,
             diagnostics::commands::diag_heartbeat,
             diagnostics::commands::diag_read,

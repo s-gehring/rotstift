@@ -78,7 +78,13 @@ describe('resolveTranscriber', () => {
     const desktop = env(false, true);
     const onUnavailable = vi.fn<() => void>();
     await resolveTranscriber(desktop, { model, state: 'ready' }, onUnavailable);
-    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, onUnavailable);
+    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, onUnavailable, false);
+  });
+
+  it('builds a remote transcriber for a cloud step', async () => {
+    const desktop = env(false, true);
+    await resolveTranscriber(desktop, { model, state: 'ready', remote: true });
+    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, undefined, true);
   });
 
   it('asks for the setup while the model is missing, downloading or corrupt', async () => {
@@ -96,7 +102,7 @@ describe('resolveTranscriber', () => {
     const desktop = env(false, true);
     const status = await resolveTranscriber(desktop, { model, state: 'ready' });
     expect(status).toMatchObject({ state: 'ready', demo: false });
-    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, undefined);
+    expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, undefined, false);
     expect(desktop.loadDemo).not.toHaveBeenCalled();
     expect(status?.state === 'ready' && status.engine?.getPhase()).toBe('idle');
   });

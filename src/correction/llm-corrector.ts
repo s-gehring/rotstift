@@ -1,4 +1,5 @@
 import { CATALOG } from '../annotations/catalog.ts';
+import { cloudUnavailable, describeCloudError } from '../cloud/errors.ts';
 import { LlmCallError } from '../llm/client.ts';
 import type { LlmClient } from '../llm/client.ts';
 import type { ChatMessage, LlmError } from '../llm/types.ts';
@@ -204,6 +205,11 @@ export function describeLlmError(error: LlmError): CorrectError {
         kind: 'failed',
         message: `Das Korrekturmodell hat einen internen Fehler gemeldet (${error.kind})`,
       };
+    case 'cloud':
+      if (error.detail === 'cancelled') return { kind: 'cancelled' };
+      return cloudUnavailable(error.detail)
+        ? { kind: 'unavailable', message: describeCloudError(error.detail) }
+        : { kind: 'failed', message: describeCloudError(error.detail) };
     default: {
       const unreachable: never = error;
       return unreachable;

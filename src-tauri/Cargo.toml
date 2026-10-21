@@ -25,7 +25,9 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "nat
 sha2 = "0.11"
 sysinfo = { version = "0.39", default-features = false, features = ["system", "disk"] }
 tauri-plugin-dialog = "2"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "rt", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "sync", "time"] }
+keyring = "4"
+url = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

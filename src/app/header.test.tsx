@@ -8,7 +8,7 @@ import type { Arbeit } from '../import/arbeiten.ts';
 import { page, setupReview, waitFor } from '../review/test-support.ts';
 import { AppProvider } from './app-context.tsx';
 import { Header } from './Header.tsx';
-import { testAppModel, testWork, type TestAppParts } from './test-app.ts';
+import { testAppModel, testCloud, testWork, type TestAppParts } from './test-app.ts';
 import type { RunController, Subject } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -78,6 +78,34 @@ describe('Header', () => {
     expect(labels()).toEqual(['']);
     expect(container.querySelector('.demo-tag')).toBeNull();
     click(button('Einstellungen'));
+    expect(show).toHaveBeenCalledOnce();
+  });
+
+  it('shows the cloud sign only while a step runs remotely and opens the settings', () => {
+    render({});
+    expect(container.querySelector('.cloud-sign')).toBeNull();
+    const show = vi.fn<() => void>();
+    const step = {
+      template: 'mistral',
+      label: 'Mistral AI',
+      baseUrl: 'https://api.mistral.ai/v1',
+      host: 'api.mistral.ai',
+      model: 'mistral-small-latest',
+      loopback: false,
+      confirmed: true,
+      key: 'system',
+    } as const;
+    render({
+      models: {
+        cloud: testCloud({ steps: { transcriber: step } }),
+        settings: { open: false, show, close: vi.fn<() => void>() },
+      },
+    });
+    const sign = container.querySelector<HTMLButtonElement>('.cloud-sign');
+    expect(sign?.getAttribute('aria-label')).toBe(
+      'Texterkennung über Mistral AI, Korrektur lokal, Inhalt und Form lokal',
+    );
+    click(sign ?? undefined);
     expect(show).toHaveBeenCalledOnce();
   });
 

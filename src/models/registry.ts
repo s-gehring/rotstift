@@ -153,7 +153,7 @@ export function defaultReviewer(): CorrectorInfo {
 
 export type Sourced<T extends AnyModelInfo> = T & { readonly source?: CustomSource };
 
-function template(role: FileRole): AnyModelInfo {
+export function template(role: FileRole): AnyModelInfo {
   const found = ALL_MODELS.find((model) => model.id === REGISTRY.customTemplates[role]);
   if (found === undefined) throw new Error(`Die Modellliste enthält keine Vorlage für ${role}.`);
   return found;

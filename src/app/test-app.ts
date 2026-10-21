@@ -1,3 +1,4 @@
+import type { CloudModel } from '../cloud/use-cloud.ts';
 import { DEUTSCH, BUILT_IN_PROFILES } from '../annotations/profile.ts';
 import { DEFAULT_SCOPE } from '../correction/scope.ts';
 import { flattenPages } from '../import/arbeiten.ts';
@@ -69,6 +70,17 @@ export function testModelSetup<T extends AnyModelInfo>(
     refresh: resolved,
     verifyAgain: resolved,
     clearError: noop,
+    ...overrides,
+  };
+}
+
+export function testCloud(overrides: Partial<CloudModel> = {}): CloudModel {
+  return {
+    available: false,
+    steps: {},
+    use: () => Promise.resolve({ state: 'ok' }),
+    setKey: () => Promise.resolve(null),
+    clear: () => Promise.resolve(),
     ...overrides,
   };
 }
@@ -172,6 +184,7 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       transcriber,
       corrector,
       reviewer,
+      cloud: testCloud(),
       switchLocked: { transcriber: false, corrector: false, reviewer: false },
       setup: { open: false, roles: [], pendingRun: null, show: noop, close: noop },
       settings: { open: false, show: noop, close: noop },

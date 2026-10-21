@@ -1,14 +1,14 @@
 # Rotstift
 
-Desktop-App für Windows, macOS und Linux, die Schülerarbeiten (Scans, Fotos, PDFs) mit einem lokalen KI-Modell korrigiert und die Anmerkungen wie mit rotem Fineliner zwischen die Zeilen des Originals schreibt. Alle Daten bleiben auf dem eigenen Rechner.
+Desktop-App für Windows, macOS und Linux, die Schülerarbeiten (Scans, Fotos, PDFs) mit einem lokalen KI-Modell korrigiert und die Anmerkungen wie mit rotem Fineliner zwischen die Zeilen des Originals schreibt. Alle Daten bleiben auf dem eigenen Rechner, solange kein Cloud-Modell eingeschaltet ist.
 
 ## Hintergrund
 
-Lehrkräfte erzielen mit Cloud-KI gute Ergebnisse beim Korrigieren, dürfen Schülerarbeiten aus Datenschutzgründen aber nicht an externe Dienste geben. Rotstift läuft vollständig lokal, auch auf einfachen Laptops mit 8 GB RAM ohne Grafikkarte. Auf stärkeren Rechnern lassen sich größere Modelle wählen.
+Lehrkräfte erzielen mit Cloud-KI gute Ergebnisse beim Korrigieren, dürfen Schülerarbeiten aus Datenschutzgründen aber nicht an externe Dienste geben. Rotstift läuft standardmäßig vollständig lokal, auch auf einfachen Laptops mit 8 GB RAM ohne Grafikkarte. Auf stärkeren Rechnern lassen sich größere Modelle wählen.
 
 ## Stand
 
-Rotstift erkennt handschriftliche Texte, zählt ihre Wörter und korrigiert sie, komplett offline. Der Ablauf hat drei Schritte: Arbeiten laden, „Korrigieren“ (oder „Nur Wörter zählen“), Ergebnisse prüfen und exportieren. Das Bedienkonzept steht in [ADR 0005](docs/adr/0005-bedienkonzept.md).
+Rotstift erkennt handschriftliche Texte, zählt ihre Wörter und korrigiert sie, ohne Cloud-Modell komplett offline. Der Ablauf hat drei Schritte: Arbeiten laden, „Korrigieren“ (oder „Nur Wörter zählen“), Ergebnisse prüfen und exportieren. Das Bedienkonzept steht in [ADR 0005](docs/adr/0005-bedienkonzept.md).
 
 - **Laden:** Bilder (PNG, JPEG, WebP) und PDFs ins Fenster ziehen. Jede Datei wird eine Arbeit (eine Schülerin oder ein Schüler) und heißt wie die Datei. Über das „…“-Menü einer Arbeit lässt sie sich umbenennen, mit einer anderen zusammenführen oder entfernen. Seiten lassen sich drehen, umsortieren (auch per Ziehen), in eine andere Arbeit verschieben, und „Ab hier neue Arbeit“ trennt einen Stapel, der als ein PDF gescannt wurde. Entfernen lässt sich rückgängig machen.
 - **Korrigieren:** Nach Wahl des Fachs (Deutsch, Englisch, Französisch, Spanisch und „Sachfach“ für alle Fächer, in denen nur die deutsche Sprachrichtigkeit korrigiert wird) liest Rotstift alle Seiten mit einem lokalen KI-Modell (GLM-OCR), korrigiert den Text mit einem zweiten (Gemma 4 E2B) und schreibt die Korrekturzeichen aus [ADR 0002](docs/adr/0002-korrekturschema.md) wie mit rotem Fineliner auf das Original: Unterstreichung, Verbesserung darüber, Fehlerzeichen (etwa R, Z, G, A) am Rand. Ein Fortschrittsbalken zeigt die Restzeit.
@@ -35,10 +35,12 @@ Geplant:
 Rotstift arbeitet mit KI-Modellen, die auf dem eigenen Rechner laufen. Sie werden einmalig heruntergeladen, wenn sie zum ersten Mal gebraucht werden:
 
 1. Arbeiten laden und auf „Korrigieren“ klicken. Fehlen Modelle, öffnet sich „Einmalige Einrichtung“ mit der Gesamtgröße: GLM-OCR (rund 1,4 GB) für die Texterkennung und Gemma 4 E2B (rund 2,8 GB) für die Korrektur. „Nur Wörter zählen“ braucht nur GLM-OCR.
-2. „Herunterladen“ lädt alles in einem Schritt, mit Fortschritt und Restzeit. Ein abgebrochener Download setzt später an derselben Stelle fort. Rotstift prüft jede Datei per SHA256, bevor sie benutzt wird. Danach startet der Lauf von selbst, und Rotstift arbeitet komplett offline. Es werden keine Schülerdaten übertragen.
+2. „Herunterladen“ lädt alles in einem Schritt, mit Fortschritt und Restzeit. Ein abgebrochener Download setzt später an derselben Stelle fort. Rotstift prüft jede Datei per SHA256, bevor sie benutzt wird. Danach startet der Lauf von selbst, und Rotstift arbeitet offline. Es werden keine Schülerdaten übertragen.
 3. Unter ⚙ „Einstellungen“ lassen sich die Modelle ansehen, löschen oder aus Dateien importieren.
 
 Ab 16 GB Arbeitsspeicher bietet Rotstift in den Einstellungen zusätzlich Qwen3-VL 4B (rund 3 GB) als Texterkennung an. Es zählt genauer, braucht aber etwa doppelt so lange und ist nur zum Wörterzählen gedacht, weil es beim Abschreiben gelegentlich Fehler der Schüler verbessert. Beide Modelle können nebeneinander installiert sein, die Wahl bleibt gespeichert. Während eines Laufs oder solange ein Modell geladen, geprüft, importiert oder gelöscht wird, ist der Wechsel gesperrt. Wird das gewählte Modell gelöscht, gilt wieder GLM-OCR.
+
+Wer einen Vertrag mit einem KI-Anbieter oder einen eigenen Server hat, kann in den Einstellungen je Schritt über „Cloud-Modell …“ ein entferntes Modell wählen (OpenAI-kompatibel, etwa IONOS, Mistral AI, STACKIT oder OpenAI). Das ist standardmäßig aus, Einzelheiten unter „Datenschutz“. Die Entscheidung steht in [ADR 0009](docs/adr/0009-cloud-modelle.md).
 
 Rechner ohne Internet (etwa in Schulen): Die Modelldateien (`.gguf`) auf einem anderen Rechner von Hugging Face herunterladen, per USB-Stick übertragen und in der Einrichtung oder den Einstellungen über „Aus Datei importieren …“ auswählen. Rotstift erkennt die Dateien am Hash und übernimmt nur passende.
 
@@ -46,7 +48,9 @@ Die Modelle stecken in `src-tauri/models.json` (Quelle auf einen Commit festgele
 
 ## Datenschutz
 
-- Keine Telemetrie, keine Cloud-Dienste. Netzwerkzugriff nur zum einmaligen Herunterladen von Modellen von Hugging Face.
+- Keine Telemetrie. Ohne Cloud-Modell greift Rotstift nur zum einmaligen Herunterladen von Modellen von Hugging Face aufs Netz.
+- Cloud-Modelle sind standardmäßig aus. Wird für einen Schritt eines gewählt, sendet Rotstift die Daten dieses Schritts (Seitenbilder bei der Erkennung, erkannten Text bei den übrigen Schritten) an den gewählten Anbieter. Vorher erscheint ein Hinweis, der nur mit „Verwenden“ weitergeht (nicht bei einem Server auf demselben Rechner). Ein graues Wolkenzeichen neben „Korrigieren“ zeigt, solange ein Schritt nicht lokal läuft. Für Datenschutz und Verträge mit dem Anbieter ist die Lehrkraft beziehungsweise die Schule verantwortlich.
+- Cloud-Aufrufe laufen nur über den Rust-Teil der App, nur über HTTPS (HTTP nur zu eigenen Servern im lokalen Netz und ohne Schlüssel) und ohne Weiterleitungen. Der Schlüssel liegt im Schlüsselbund des Systems, sonst nur bis zum Beenden im Speicher. Das Protokoll enthält nur Anbieter, Schritt, Dauer und Fehlerklasse, nie Inhalte oder Schlüssel.
 - Die Modelle laufen über einen eingebetteten llama.cpp-Server auf dem eigenen Rechner. Er lauscht nur auf `127.0.0.1` und verlangt einen zufälligen Schlüssel, den nur die App kennt.
 - Der Quellcode ist offen, damit Schulen und Datenschutzbeauftragte das prüfen können.
 
