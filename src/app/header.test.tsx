@@ -4,10 +4,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ENGLISCH } from '../annotations/profile.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
-import { page } from '../review/test-support.ts';
+import { page, setupReview, waitFor } from '../review/test-support.ts';
 import { AppProvider } from './app-context.tsx';
 import { Header } from './Header.tsx';
-import { testAppModel, type TestAppParts } from './test-app.ts';
+import { testAppModel, testWork, type TestAppParts } from './test-app.ts';
 import type { RunController, Subject } from './types.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -181,5 +181,18 @@ describe('Header', () => {
     render({ run: { done: { count: false, correct: false } } });
     expect(button('Korrigieren')).toBeDefined();
     expect(button('Exportieren')).toBeUndefined();
+  });
+
+  it('keeps the export reachable next to the main action while pages are still open', async () => {
+    const { runner, h } = setupReview(['a', 'b']);
+    h.transcripts.b = { ok: false, error: { kind: 'failed', message: 'leer' } };
+    runner.start();
+    await waitFor(() => runner.getState().batch === null);
+    render({
+      run: { done: { count: false, correct: false } },
+      work: testWork({ count: { runner, state: runner.getState() } }),
+    });
+    expect(button('Exportieren')?.className).toContain('btn-secondary');
+    expect(button('Korrigieren')?.className).toContain('btn-primary');
   });
 });
