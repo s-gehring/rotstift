@@ -193,7 +193,7 @@ export function ArbeitRow({
             </span>
           ))}
         </span>
-        <Menu label={`Weitere Aktionen für ${arbeit.name}`} items={items} />
+        <Menu label={`Weitere Aktionen für ${arbeit.name}`} items={items} className="arbeit-menu" />
       </div>
       {problems.length > 0 && activity === null && (
         <p className="arbeit-problem">

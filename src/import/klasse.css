@@ -46,14 +46,21 @@
 .arbeit-rows {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .arbeit-row {
-  padding: var(--space-3) var(--space-4);
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'name thumbs figures menu'
+    '. problem problem problem';
+  align-items: start;
+  column-gap: var(--space-3);
+  padding: 6px var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface);
@@ -72,16 +79,13 @@
 }
 
 .arbeit-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--control-height);
+  display: contents;
 }
 
 .arbeit-head .arbeit-name {
-  flex: 0 1 auto;
+  grid-area: name;
+  display: block;
   min-width: 0;
-  max-width: 50%;
   height: auto;
   margin: 0;
   padding: 0;
@@ -91,6 +95,7 @@
   color: var(--color-text);
   font: inherit;
   font-weight: 600;
+  line-height: 56px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -110,17 +115,20 @@
 }
 
 .arbeit-name-field {
-  flex: 0 1 280px;
-  min-width: 120px;
+  grid-area: name;
+  align-self: center;
+  min-width: 0;
   font-weight: 600;
 }
 
 .arbeit-figures {
-  flex: 1;
+  grid-area: figures;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-3);
+  min-height: 56px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -129,11 +137,19 @@
   color: var(--color-text);
 }
 
+.arbeit-head .arbeit-menu {
+  grid-area: menu;
+  align-self: center;
+  min-height: 56px;
+  align-items: center;
+}
+
 .arbeit-problem {
+  grid-area: problem;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin: var(--space-2) 0 0;
+  margin: 0;
   color: var(--color-red-text);
 }
 
@@ -145,10 +161,11 @@
 }
 
 .thumbs {
+  grid-area: thumbs;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: var(--space-3) 0 0;
+  gap: var(--space-1);
+  margin: 0;
   padding: 0;
   list-style: none;
   cursor: default;
@@ -156,7 +173,7 @@
 
 .thumb {
   position: relative;
-  width: 68px;
+  width: 42px;
   border-radius: var(--radius);
   cursor: grab;
 }
@@ -181,7 +198,7 @@
   width: 100%;
   height: auto;
   margin: 0;
-  padding: 4px;
+  padding: 2px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-raised);
@@ -201,8 +218,8 @@
 .thumb-stage {
   position: relative;
   display: block;
-  width: 60px;
-  height: 80px;
+  width: 36px;
+  height: 50px;
 }
 
 .thumb-stage img {
@@ -215,23 +232,24 @@
 
 .thumb-number {
   position: absolute;
-  left: 6px;
-  top: 6px;
-  min-width: 16px;
-  padding: 0 4px;
+  left: 3px;
+  bottom: 3px;
+  min-width: 12px;
+  padding: 0 2px;
   border-radius: 3px;
   background: color-mix(in srgb, var(--color-bg) 82%, transparent);
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: 16px;
+  font-size: 10px;
+  line-height: 12px;
   text-align: center;
 }
 
 .thumb-actions {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
+  top: 2px;
+  right: 2px;
   display: flex;
+  flex-direction: column;
   gap: 2px;
   opacity: 0;
   transition: opacity 120ms ease;
@@ -244,14 +262,38 @@
 }
 
 .thumb-actions .icon-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: var(--color-raised);
 }
 
 .thumb-actions .icon {
   width: 14px;
   height: 14px;
+}
+
+@media (max-width: 700px) {
+  .arbeit-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name figures menu'
+      'thumbs thumbs thumbs'
+      'problem problem problem';
+  }
+
+  .arbeit-head .arbeit-name {
+    line-height: 36px;
+  }
+
+  .arbeit-figures,
+  .arbeit-head .arbeit-menu {
+    min-height: 36px;
+  }
+
+  .arbeit-row > .arbeit-problem,
+  .thumbs {
+    margin-top: var(--space-1);
+  }
 }
 
 .arbeit-row .menu.submenu {

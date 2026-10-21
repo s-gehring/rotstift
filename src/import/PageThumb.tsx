@@ -3,8 +3,8 @@ import { IconButton } from '../ui/IconButton.tsx';
 import { MENU_SEPARATOR, Menu, type MenuEntry } from '../ui/Menu.tsx';
 import { rotatedSize, type ImportPage } from './pages.ts';
 
-const STAGE_WIDTH = 60;
-const STAGE_HEIGHT = 80;
+const STAGE_WIDTH = 36;
+const STAGE_HEIGHT = 50;
 export const DRAG_TYPE = 'application/x-rotstift-page';
 export const NEW_ARBEIT = 'new';
 
