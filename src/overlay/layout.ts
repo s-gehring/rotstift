@@ -2,6 +2,14 @@ import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Mark, Transcript, TranscriptLine } from '../annotations/transcript.ts';
 import { estimateTextWidth, FIX_EM_PER_UNIT, textUnits } from './char-width.ts';
+import {
+  bendPath,
+  frameLift,
+  gapAbove,
+  placeLine,
+  type LineFrame,
+  type PlacedLine,
+} from './geometry.ts';
 import { proportionalLocator, type TextLocator, type XSpan } from './locator.ts';
 import type { OverlayItem, OverlayModel, PageSize, StrokeItem, TextItem } from './model.ts';
 import { fitRow, sizeLadder } from './pack.ts';
@@ -14,7 +22,7 @@ export interface LayoutOptions {
   readonly locator?: TextLocator;
 }
 
-type LocatedLine = TranscriptLine & { readonly bbox: NonNullable<TranscriptLine['bbox']> };
+type LocatedLine = PlacedLine;
 
 type Column =
   | { readonly mode: 'margin'; readonly left: number; readonly right: number }
@@ -55,7 +63,9 @@ const MIN_FIX_PIXELS = 9;
 const MIN_CODE_FRACTION = 0.4;
 const MIN_EDGE_CODE_PIXELS = 6;
 
-function hasBox(line: TranscriptLine): line is LocatedLine {
+function hasBox(
+  line: TranscriptLine,
+): line is TranscriptLine & { readonly bbox: NonNullable<TranscriptLine['bbox']> } {
   return line.bbox !== undefined;
 }
 
@@ -65,18 +75,18 @@ export function layoutOverlay(transcript: Transcript, options: LayoutOptions): O
     throw new RangeError('Die Seitengröße muss größer als 0 sein.');
   }
   const locator = options.locator ?? proportionalLocator;
-  const lines = transcript.lines.filter(hasBox);
+  const lines = transcript.lines.filter(hasBox).flatMap(placeLine);
   const skippedLines = transcript.lines
     .filter((line) => !hasBox(line) && line.marks.length > 0)
     .map((line) => line.number);
   const frame = buildFrame(page, lines);
   const items: OverlayItem[] = [];
-  let previousBottom = 0;
+  let previous: LineFrame | null = null;
   for (const line of lines) {
     if (line.marks.length > 0) {
-      items.push(...layoutLine(line, previousBottom, frame, profile, locator));
+      items.push(...layoutLine(line, previous, frame, profile, locator));
     }
-    previousBottom = line.bbox.y + line.bbox.height;
+    previous = line.frame;
   }
   return { page, items, skippedLines };
 }
@@ -91,7 +101,7 @@ function buildFrame(page: PageSize, lines: readonly LocatedLine[]): Frame {
     Math.max(...lines.map((line) => line.bbox.x + line.bbox.width)),
     page.width - pad,
   );
-  const meanHeight = lines.reduce((sum, line) => sum + line.bbox.height, 0) / lines.length;
+  const meanHeight = lines.reduce((sum, line) => sum + line.frame.height, 0) / lines.length;
   const free = page.width - textRight - pad;
   if (free >= Math.max(page.width * 0.04, meanHeight * 1.6)) {
     const left = textRight + Math.min(free * 0.2, meanHeight * 0.8);
@@ -112,14 +122,15 @@ function buildFrame(page: PageSize, lines: readonly LocatedLine[]): Frame {
 
 function layoutLine(
   line: LocatedLine,
-  previousBottom: number,
+  previous: LineFrame | null,
   frame: Frame,
   profile: CorrectionProfile,
   locator: TextLocator,
 ): OverlayItem[] {
-  const { bbox } = line;
-  const height = bbox.height;
-  const entries = line.marks.map((mark, index) => toEntry(line, mark, index, profile, locator));
+  const height = line.frame.height;
+  const entries = line.marks.map((mark, k) =>
+    toEntry(line, mark, line.markIndices[k] ?? k, profile, locator),
+  );
   const items: OverlayItem[] = [];
   for (const entry of entries) {
     items.push(drawMark(line, entry, frame.page));
@@ -133,12 +144,12 @@ function layoutLine(
       boost: /[\p{L}\p{N}]/u.test(entry.mark.correction) ? 1 : 1.9,
     }));
 
-  const gap = Math.max(0, bbox.y - previousBottom);
+  const gap = Math.max(0, gapAbove(line.frame, previous));
   const bandSize = (gap - height * (FIX_LIFT + 0.02)) / FIX_ASCENT;
   const minFix = Math.max(height * MIN_FIX_FRACTION, MIN_FIX_PIXELS);
   const preferred = Math.min(height * FIX_PREFERRED, bandSize);
   const codeSize = Math.max(Math.min(preferred, height * CODE_PREFERRED), minFix);
-  const bandBaseline = bbox.y - height * FIX_LIFT;
+  const bandBaseline = (x: number) => line.frame.top(x) - height * FIX_LIFT;
   const bandUsable = preferred >= minFix;
 
   const moved = new Set<number>();
@@ -186,14 +197,15 @@ function layoutLine(
       const start = result.starts[position] ?? frame.pad;
       const random = createRandom(seedFor(line.number, fix.entry.index, 7));
       const size = result.size * fix.boost;
+      const middle = start + estimateTextWidth(fix.text, size) / 2;
       items.push({
         kind: 'text',
         role: 'fix',
         text: fix.text,
         x: start,
-        y: bandBaseline + spread(random, result.size * 0.05),
+        y: bandBaseline(middle) + spread(random, result.size * 0.05),
         size,
-        rotate: spread(random, 1.8),
+        rotate: spread(random, 1.8) + line.frame.angle(middle),
         anchor: 'start',
         line: line.number,
         mark: fix.entry.index,
@@ -231,8 +243,8 @@ function toEntry(
 }
 
 function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
-  const { bbox } = line;
-  const height = bbox.height;
+  const height = line.frame.height;
+  const lift = frameLift(line.frame);
   const random = createRandom(seedFor(line.number, entry.index, 3));
   const width = Math.min(Math.max(height * 0.05, 1.2), 3.5);
   const wobble = Math.max(0.5, height * 0.012);
@@ -247,13 +259,19 @@ function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
   } as const;
 
   const keep = (d: string) =>
-    clampPath(d, width / 2, width / 2, page.width - width / 2, page.height - width / 2);
+    clampPath(
+      bendPath(d, line.frame),
+      width / 2,
+      width / 2,
+      page.width - width / 2,
+      page.height - width / 2,
+    );
 
   if (entry.mark.kind === 'omission') {
     return {
       ...base,
       role: 'caret',
-      d: keep(caret(x0, bbox.y + height * BASELINE, height * 0.17, height * 0.26, random, wobble)),
+      d: keep(caret(x0, lift + height * BASELINE, height * 0.17, height * 0.26, random, wobble)),
     };
   }
   if (entry.mark.correction === '') {
@@ -261,7 +279,7 @@ function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
     return {
       ...base,
       role: 'strike',
-      d: keep(hand(x0 - pad, x1 + pad, bbox.y + height * STRIKE, random, wobble)),
+      d: keep(hand(x0 - pad, x1 + pad, lift + height * STRIKE, random, wobble)),
     };
   }
   const original = entry.mark.original;
@@ -270,20 +288,20 @@ function drawMark(line: LocatedLine, entry: Entry, page: PageSize): StrokeItem {
     return {
       ...base,
       role: 'ring',
-      d: keep(ring((x0 + x1) / 2, bbox.y + height * 0.55, rx, height * 0.56, random, wobble)),
+      d: keep(ring((x0 + x1) / 2, lift + height * 0.55, rx, height * 0.56, random, wobble)),
     };
   }
   const pad = height * 0.04;
   return {
     ...base,
     role: 'underline',
-    d: keep(hand(x0 - pad, x1 + pad, bbox.y + height * UNDERLINE, random, wobble)),
+    d: keep(hand(x0 - pad, x1 + pad, lift + height * UNDERLINE, random, wobble)),
   };
 }
 
 interface CodeSpace {
   readonly codeSize: number;
-  readonly bandBaseline: number;
+  readonly bandBaseline: (x: number) => number;
   readonly bandSize: number;
   readonly bandUsable: boolean;
 }
@@ -389,34 +407,36 @@ function codesItems(
   frame: Frame,
   space: CodeSpace,
 ): TextItem[] {
-  const { bbox } = line;
+  const height = line.frame.height;
   const column = frame.column;
   const random = createRandom(seedFor(line.number, 99, 5));
   const common = {
     kind: 'text',
     role: 'code',
-    rotate: spread(random, 1.2),
     line: line.number,
     mark: null,
     title: entries.map((entry) => entry.title).join(', '),
   } as const;
-  const baseline = bbox.y + bbox.height * BASELINE;
+  const tilt = spread(random, 1.2);
+  const rotate = (x: number) => tilt + line.frame.angle(x);
+  const baseline = (x: number) => line.frame.top(x) + height * BASELINE;
 
   if (column.mode === 'margin') {
-    const minimum = bbox.height * MIN_CODE_FRACTION;
-    const rowsRoom = Math.floor((bbox.height * ROW_ROOM) / (minimum * ROW_HEIGHT_EM));
+    const minimum = height * MIN_CODE_FRACTION;
+    const rowsRoom = Math.floor((height * ROW_ROOM) / (minimum * ROW_HEIGHT_EM));
     const fitted = fitCodeRows(
       entries,
       moved,
       column.right - column.left,
-      bbox.height * CODE_PREFERRED,
+      height * CODE_PREFERRED,
       minimum,
       Math.min(MAX_CODE_ROWS, Math.max(1, rowsRoom)),
     );
     const step = fitted.size * ROW_HEIGHT_EM;
-    const first = baseline - (step * (fitted.rows.length - 1)) / 2;
+    const first = baseline(line.frame.right) - (step * (fitted.rows.length - 1)) / 2;
     return fitted.rows.map((text, row) => ({
       ...common,
+      rotate: tilt,
       text,
       x: column.left,
       y: first + row * step,
@@ -431,9 +451,10 @@ function codesItems(
       return [
         {
           ...common,
+          rotate: tilt,
           text: beside.text,
           x: frame.page.width - frame.pad,
-          y: baseline,
+          y: baseline(line.frame.right),
           size: beside.size,
           anchor: 'end',
         },
@@ -449,9 +470,10 @@ function codesItems(
   return [
     {
       ...common,
+      rotate: rotate(column.right),
       text: fitted.text,
       x: column.right,
-      y: space.bandBaseline,
+      y: space.bandBaseline(column.right),
       size: fitted.size,
       anchor: 'end',
     },

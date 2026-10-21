@@ -20,6 +20,8 @@ export interface VariantScore {
   readonly missing: number;
   readonly wrong: number;
   readonly spurious: number;
+  readonly rough: number;
+  readonly roughCorrect: number;
 }
 
 const EXTRA_LINES = [
@@ -121,8 +123,15 @@ export function scoreVariant(
   let missing = 0;
   let wrong = 0;
   let spurious = 0;
+  let rough = 0;
+  let roughCorrect = 0;
   variant.expected.forEach((box, index) => {
-    const line = found[index] ?? null;
+    const located = found[index] ?? null;
+    if (located?.rough === true) {
+      rough += 1;
+      if (box !== null && iou(box, located.bbox) >= 0.5) roughCorrect += 1;
+    }
+    const line = located?.rough === true ? null : located;
     if (box === null) {
       if (line !== null) spurious += 1;
       return;
@@ -132,7 +141,7 @@ export function scoreVariant(
     else if (iou(box, line.bbox) >= 0.5) correct += 1;
     else wrong += 1;
   });
-  return { name: variant.name, expected, correct, missing, wrong, spurious };
+  return { name: variant.name, expected, correct, missing, wrong, spurious, rough, roughCorrect };
 }
 
 export function sumScores(scores: readonly VariantScore[]): VariantScore {
@@ -143,6 +152,8 @@ export function sumScores(scores: readonly VariantScore[]): VariantScore {
     missing: 0,
     wrong: 0,
     spurious: 0,
+    rough: 0,
+    roughCorrect: 0,
   };
   for (const score of scores) {
     total.expected += score.expected;
@@ -150,6 +161,8 @@ export function sumScores(scores: readonly VariantScore[]): VariantScore {
     total.missing += score.missing;
     total.wrong += score.wrong;
     total.spurious += score.spurious;
+    total.rough += score.rough;
+    total.roughCorrect += score.roughCorrect;
   }
   return total;
 }

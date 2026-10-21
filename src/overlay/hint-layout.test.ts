@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Mark, Transcript } from '../annotations/transcript.ts';
+import type { Bbox, Mark, Transcript } from '../annotations/transcript.ts';
+import type { LineBox } from '../layout/types.ts';
 import type { ReadingHint } from '../correction/uncertain-reading.ts';
 import { layoutHints, markText } from './hint-layout.ts';
 import type { TextLocator } from './locator.ts';
+
+const lineBox = (box: LineBox): Bbox => box;
 
 const charLocator: TextLocator = {
   span: (line, start, end) => ({
@@ -38,6 +41,8 @@ const error = (offset: number, original: string, correction: string): Mark => ({
   offset,
 });
 
+const paragraphRow = (k: number) => ({ x: 100, y: 50 + k * 60, width: 200, height: 40 });
+
 describe('layoutHints', () => {
   it('underlines the whole word of an error and the word before a missing sign', () => {
     const spots = layoutHints(
@@ -64,5 +69,30 @@ describe('layoutHints', () => {
     expect(
       markText({ kind: 'omission', type: 'Z', original: '', correction: ',', offset: 2 }),
     ).toBe('fehlt: „,“');
+  });
+
+  it('puts a hint on the row of a paragraph line that holds the word', () => {
+    const paragraph: Transcript = {
+      lines: [
+        {
+          number: 1,
+          text: 'eins zwei drei vier',
+          bbox: lineBox({
+            x: 100,
+            y: 50,
+            width: 200,
+            height: 100,
+            rows: [
+              { ...paragraphRow(0), from: 0, to: 0.5 },
+              { ...paragraphRow(1), from: 0.5, to: 1 },
+            ],
+          }),
+          marks: [],
+        },
+      ],
+    };
+    const [spot] = layoutHints(paragraph, [hint(1, error(15, 'vier', 'Vier'))], charLocator);
+    expect(spot?.y).toBe(110);
+    expect(spot?.x).toBe(150);
   });
 });

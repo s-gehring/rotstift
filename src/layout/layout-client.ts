@@ -7,6 +7,7 @@ import type {
   LayoutResponse,
   LayoutTask,
 } from './protocol.ts';
+import { lineLength } from './assign.ts';
 import { findStruckWords } from './strike.ts';
 import type { LayoutResult } from './types.ts';
 
@@ -28,6 +29,45 @@ export interface LayoutLocator {
 interface Pending {
   readonly resolve: (response: LayoutResponse & { ok: true }) => void;
   readonly reject: (error: Error) => void;
+}
+
+export interface LayoutCounts {
+  readonly foundLines: number;
+  readonly transcriptLines: number;
+  readonly assignedLines: number;
+  readonly roughLines: number;
+}
+
+export function countLayout(result: LayoutResult, lines: readonly string[]): LayoutCounts {
+  const located = result.lines.filter((line) => line !== null);
+  const rough = located.filter((line) => line.rough === true).length;
+  return {
+    foundLines: result.detectedLines,
+    transcriptLines: lines.filter((line) => lineLength(line) > 0).length,
+    assignedLines: located.length - rough,
+    roughLines: rough,
+  };
+}
+
+export function observeLocate(
+  locator: LayoutLocator,
+  report: (counts: LayoutCounts | null, durationMs: number) => void,
+  now: () => number = () => performance.now(),
+): LayoutLocator {
+  return {
+    ...locator,
+    async locate(image, lines) {
+      const started = now();
+      try {
+        const result = await locator.locate(image, lines);
+        report(countLayout(result, lines), now() - started);
+        return result;
+      } catch (error) {
+        report(null, now() - started);
+        throw error;
+      }
+    },
+  };
 }
 
 function toMessageImage(image: LayoutInput): { image: LayoutImage; transfer: Transferable[] } {

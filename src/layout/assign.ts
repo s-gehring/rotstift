@@ -1,8 +1,9 @@
 import { align, mismatch, type AlignedGroup, type AlignInput } from './align.ts';
+import { bandHull, shiftBand, sliceBand, topAt } from './band.ts';
 import { item, median } from './signal.ts';
-import type { BBox, LineLocation } from './types.ts';
+import type { BBox, LineBand, LineBox, LineLocation, LineRow } from './types.ts';
 
-export interface Candidate extends BBox {
+export interface Candidate extends LineBox {
   readonly inkCount: number;
   readonly row: number;
 }
@@ -35,12 +36,95 @@ function estimateScale(
   return ratios.length >= 1 ? median(ratios) : previous;
 }
 
-function union(boxes: readonly BBox[]): BBox {
+function union(boxes: readonly LineBox[]): LineBox {
   const x0 = Math.min(...boxes.map((box) => box.x));
   const y0 = Math.min(...boxes.map((box) => box.y));
   const x1 = Math.max(...boxes.map((box) => box.x + box.width));
   const y1 = Math.max(...boxes.map((box) => box.y + box.height));
-  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  const hull: BBox = { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  if (boxes.length === 1 || sideBySide(boxes)) {
+    const band = joinBands(boxes);
+    return band === null ? hull : { ...hull, band };
+  }
+  return { ...hull, rows: stackRows(boxes) };
+}
+
+export function stackRows(boxes: readonly LineBox[]): LineRow[] {
+  const total = boxes.reduce((sum, box) => sum + box.width, 0);
+  let consumed = 0;
+  return boxes.map((box) => {
+    const from = total > 0 ? consumed / total : 0;
+    consumed += box.width;
+    return { ...rowShape(box), from, to: total > 0 ? consumed / total : 1 };
+  });
+}
+
+function rowShape(box: LineBox): BBox & { band?: LineBand } {
+  const shape = { x: box.x, y: box.y, width: box.width, height: box.height };
+  return box.band === undefined ? shape : { ...shape, band: box.band };
+}
+
+function bandHeight(box: LineBox): number {
+  return box.band?.height ?? box.height;
+}
+
+export function splitByLength(box: LineBox, lengths: readonly number[]): LineBox[] {
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  let consumed = 0;
+  return lengths.map((length) => {
+    const from = total > 0 ? consumed / total : 0;
+    consumed += length;
+    return splitBox(box, from, total > 0 ? consumed / total : 1, false);
+  });
+}
+
+function centerAt(box: LineBox, x: number): number {
+  return box.band === undefined ? box.y + box.height / 2 : topAt(box.band, x) + box.band.height / 2;
+}
+
+function sideBySide(boxes: readonly LineBox[]): boolean {
+  const ordered = boxes.toSorted((a, b) => a.x - b.x);
+  for (let k = 1; k < ordered.length; k += 1) {
+    const left = item(ordered, k - 1);
+    const right = item(ordered, k);
+    const edge = left.x + left.width;
+    if (right.x < edge - right.width * 0.2) return false;
+    const height = Math.max(left.band?.height ?? left.height, right.band?.height ?? right.height);
+    if (Math.abs(centerAt(right, right.x) - centerAt(left, edge)) > height * 0.6) return false;
+  }
+  return true;
+}
+
+export function joinBands(boxes: readonly LineBox[]): LineBand | null {
+  if (boxes.length === 1) return boxes[0]?.band ?? null;
+  if (!sideBySide(boxes)) return null;
+  const top: LineBand['top'][number][] = [];
+  let height = 0;
+  for (const box of boxes.toSorted((a, b) => a.x - b.x)) {
+    if (box.band === undefined) return null;
+    top.push(...box.band.top);
+    height = Math.max(height, box.band.height);
+  }
+  return { top, height };
+}
+
+function splitBox(box: LineBox, from: number, to: number, vertical: boolean): LineBox {
+  if (vertical) {
+    const hull = {
+      x: box.x,
+      y: box.y + box.height * from,
+      width: box.width,
+      height: box.height * (to - from),
+    };
+    if (box.band === undefined) return hull;
+    const height = box.band.height;
+    return { ...hull, band: shiftBand(box.band, height * from, height * (to - from)) };
+  }
+  const x0 = box.x + box.width * from;
+  const x1 = box.x + box.width * to;
+  if (box.band === undefined) return { x: x0, y: box.y, width: x1 - x0, height: box.height };
+  const band = sliceBand(box.band, x0, x1);
+  return { ...bandHull(band), band };
 }
 
 function estimatePitch(candidates: readonly Candidate[]): number {
@@ -53,11 +137,29 @@ function estimatePitch(candidates: readonly Candidate[]): number {
   return gaps.length > 0 ? median(gaps) : Math.max(1, heights * 1.2);
 }
 
+export interface Assignment {
+  readonly lines: (LineLocation | null)[];
+  readonly sources: (readonly number[] | null)[];
+  readonly tentative: (LineLocation | null)[];
+  readonly tentativeSources: (readonly number[] | null)[];
+}
+
 export function assignLines(
   candidates: readonly Candidate[],
   transcript: readonly string[],
 ): (LineLocation | null)[] {
+  return assignWithSources(candidates, transcript).lines;
+}
+
+export function assignWithSources(
+  candidates: readonly Candidate[],
+  transcript: readonly string[],
+): Assignment {
   const result: (LineLocation | null)[] = transcript.map(() => null);
+  const sources: (readonly number[] | null)[] = transcript.map(() => null);
+  const tentative: (LineLocation | null)[] = transcript.map(() => null);
+  const tentativeSources: (readonly number[] | null)[] = transcript.map(() => null);
+  const done = { lines: result, sources, tentative, tentativeSources };
   const indices: number[] = [];
   const blanksBefore: number[] = [];
   let blanks = 0;
@@ -72,10 +174,11 @@ export function assignLines(
   });
   const lengths = indices.map((index) => lineLength(transcript[index] ?? ''));
   const widths = candidates.map((candidate) => candidate.width);
-  if (indices.length === 0 || candidates.length === 0) return result;
+  if (indices.length === 0 || candidates.length === 0) return done;
 
   const medianWidth = median(widths);
   const medianHeight = median(candidates.map((candidate) => candidate.height));
+  const medianBand = median(candidates.map(bandHeight));
   const input = (pixelsPerChar: number): AlignInput => ({
     widths,
     rows: candidates.map((candidate) => candidate.row),
@@ -108,34 +211,23 @@ export function assignLines(
       group.marginal *
       Math.exp(-FIT_WEIGHT * mismatch(inkChars, chars)) *
       (grouped ? GROUP_CONFIDENCE : 1);
-    if (group.marginal < (grouped ? MIN_GROUP_MARGINAL : MIN_MARGINAL)) continue;
-
+    const sure = group.marginal >= (grouped ? MIN_GROUP_MARGINAL : MIN_MARGINAL);
+    const target = sure ? result : tentative;
+    for (const index of wanted)
+      (sure ? sources : tentativeSources)[item(indices, index)] = detected;
     if (wanted.length === 1) {
-      result[item(indices, item(wanted, 0))] = { bbox: union(boxes), confidence };
+      target[item(indices, item(wanted, 0))] = { bbox: union(boxes), confidence };
       continue;
     }
     const box = item(boxes, 0);
-    const vertical = wanted.length === 2 && box.height > medianHeight * TALL_BAND_RATIO;
+    const vertical = wanted.length === 2 && bandHeight(box) > medianBand * TALL_BAND_RATIO;
     let consumed = 0;
     wanted.forEach((index, k) => {
       const from = consumed / chars;
       consumed += item(wantedLengths, k);
       const to = consumed / chars;
-      const bbox: BBox = vertical
-        ? {
-            x: box.x,
-            y: box.y + box.height * from,
-            width: box.width,
-            height: box.height * (to - from),
-          }
-        : {
-            x: box.x + box.width * from,
-            y: box.y,
-            width: box.width * (to - from),
-            height: box.height,
-          };
-      result[item(indices, index)] = { bbox, confidence };
+      target[item(indices, index)] = { bbox: splitBox(box, from, to, vertical), confidence };
     });
   }
-  return result;
+  return done;
 }

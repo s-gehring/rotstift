@@ -145,7 +145,7 @@ export function toBboxes(layout: LayoutResult, count: number): (Bbox | undefined
     if (location === null || location === undefined) return undefined;
     const { x, y, width, height } = location.bbox;
     if (!(width > 0 && height > 0)) return undefined;
-    return { x: Math.max(0, x), y: Math.max(0, y), width, height };
+    return { ...location.bbox, x: Math.max(0, x), y: Math.max(0, y) };
   });
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { topAt } from './band.ts';
 import { locateLines } from './locate-lines.ts';
 import { iou, renderPage, sampleLines, type PageSpec } from './synthetic.ts';
 import type { BBox, LineLocation } from './types.ts';
@@ -31,6 +32,20 @@ function score(spec: PageSpec, transcript = spec.lines): Score & { skew: number 
     detected: result.detectedLines,
     skew: result.skewDegrees,
   };
+}
+
+function bandSpread(spec: PageSpec): number {
+  const page = renderPage(spec);
+  const result = locateLines(page.image, spec.lines);
+  const deviations: number[] = [];
+  page.cores.forEach((core, index) => {
+    const band = result.lines[index]?.bbox.band;
+    if (core === null || band === undefined) return;
+    const offsets = core.map((point) => point.y - topAt(band, point.x));
+    const middle = offsets.toSorted((a, b) => a - b)[offsets.length >> 1] ?? 0;
+    deviations.push(...offsets.map((offset) => Math.abs(offset - middle)));
+  });
+  return deviations.reduce((sum, value) => sum + value, 0) / deviations.length;
 }
 
 function overlapOf(truth: BBox | null | undefined, found: LineLocation | null | undefined): number {
@@ -83,6 +98,53 @@ describe('locateLines on synthetic pages', () => {
     });
     expect(outcome.hits).toBe(outcome.total);
     expect(outcome.meanIou).toBeGreaterThan(0.8);
+  });
+
+  it('follows lines that each have their own slope and a slight wave', () => {
+    for (const seed of [1, 2, 3, 4]) {
+      const spec = { ...BASE, seed, lines: sampleLines(seed + 20, 22), lineSlopes: 3, wobble: 6 };
+      const outcome = score(spec);
+      expect(outcome.hits).toBe(outcome.total);
+      expect(outcome.detected).toBe(22);
+      expect(bandSpread(spec)).toBeLessThan(1.5);
+    }
+  });
+
+  it('separates small, dense lines of different slopes', () => {
+    const lines = sampleLines(30, 34, 40, 60);
+    const spec = { ...BASE, pitch: 34, seed: 5, lines, lineSlopes: 2, wobble: 3 };
+    const outcome = score(spec);
+    expect(outcome.hits).toBe(outcome.total);
+    expect(outcome.detected).toBe(34);
+  });
+
+  it('keeps the band level on straight lines', () => {
+    expect(bandSpread({ ...BASE, lines: sampleLines(3, 24) })).toBeLessThan(0.5);
+    expect(
+      bandSpread({ ...BASE, lines: sampleLines(5, 24), ruled: true, skewDegrees: 2.5 }),
+    ).toBeLessThan(0.5);
+  });
+
+  it('spreads a transcript line that holds a whole paragraph over its rows', () => {
+    const lines = sampleLines(12, 10);
+    const page = renderPage({ ...BASE, lines: ['Mein Tag', '', ...lines] });
+    const result = locateLines(page.image, ['Mein Tag', '', lines.join(' ')]);
+    const rows = result.lines[2]?.bbox.rows ?? [];
+    expect(rows).toHaveLength(10);
+    rows.forEach((row, index) => {
+      expect(iou(row, page.truth[index + 2] ?? row)).toBeGreaterThan(0.5);
+    });
+    expect(rows[0]?.from).toBe(0);
+    expect(rows[9]?.to).toBe(1);
+    expect(result.lines[0]?.rough).toBeUndefined();
+  });
+
+  it('places unmatched transcript lines roughly instead of dropping them', () => {
+    const page = renderPage({ ...BASE, lines: sampleLines(13, 12) });
+    const transcript = ['ganz', 'anders', 'als', 'die', 'Seite'];
+    const result = locateLines(page.image, transcript);
+    expect(result.lines.every((line) => line !== null)).toBe(true);
+    expect(result.lines.every((line) => line?.rough === true)).toBe(true);
   });
 
   it('handles a heading, empty lines and stray marks', () => {

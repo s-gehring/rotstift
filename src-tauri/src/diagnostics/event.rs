@@ -16,6 +16,7 @@ const UI_EVENTS: &[&str] = &[
     "page_stalled",
     "page_retry",
     "page_failed",
+    "page_layout",
     "unexpected_cancel",
     "sidecar_recover",
 ];
@@ -215,5 +216,26 @@ mod tests {
         let parsed: Value = serde_json::from_str(&rendered).unwrap();
         assert_eq!(parsed["event"], "batch_start");
         assert_eq!(parsed["src"], "ui");
+    }
+
+    #[test]
+    fn keeps_the_line_counts_of_a_page_layout() {
+        let clean = sanitize_ui(
+            "page_layout",
+            fields(json!({
+                "foundLines": 14,
+                "transcriptLines": 13,
+                "assignedLines": 12,
+                "roughLines": 1,
+                "durationMs": 213,
+                "lines": ["Der Hund bellt."],
+            })),
+        )
+        .unwrap();
+        assert_eq!(clean.len(), 5);
+        assert_eq!(clean["roughLines"], 1);
+        assert_eq!(clean["durationMs"], 213);
+        let failed = sanitize_ui("page_layout", fields(json!({"failed": true}))).unwrap();
+        assert_eq!(failed["failed"], true);
     }
 }

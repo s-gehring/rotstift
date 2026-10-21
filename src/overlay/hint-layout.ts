@@ -1,5 +1,6 @@
 import type { Mark, Transcript, TranscriptLine } from '../annotations/transcript.ts';
 import type { HintStatus, ReadingHint } from '../correction/uncertain-reading.ts';
+import { placeLine, rowFor } from './geometry.ts';
 import { proportionalLocator, type TextLocator } from './locator.ts';
 
 export interface HintSpot {
@@ -46,20 +47,24 @@ export function layoutHints(
   );
   return hints.flatMap((hint, index) => {
     const line = lines.get(hint.line);
-    if (line?.bbox === undefined || hint.status === 'dismissed') return [];
+    const bbox = line?.bbox;
+    if (line === undefined || bbox === undefined || hint.status === 'dismissed') return [];
     const [start, end] = wordRange(line.text, hint.mark);
-    const span = locator.span(line, start, end);
-    const { bbox } = line;
-    const width = Math.max(span.x1 - span.x0, bbox.height * MIN_WIDTH);
+    const row = rowFor(placeLine({ ...line, bbox }), start);
+    if (row === undefined) return [];
+    const span = locator.span(row, start - row.start, end - row.start);
+    const { frame } = row;
+    const width = Math.max(span.x1 - span.x0, frame.height * MIN_WIDTH);
+    const top = frame.top((span.x0 + span.x0 + width) / 2);
     return [
       {
         index,
         status: hint.status,
         x: span.x0,
-        y: bbox.y,
+        y: top,
         width,
-        height: bbox.height,
-        underline: bbox.y + bbox.height * UNDERLINE,
+        height: frame.height,
+        underline: top + frame.height * UNDERLINE,
         mark: hint.mark,
       },
     ];

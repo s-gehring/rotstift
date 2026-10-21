@@ -70,6 +70,19 @@ export function createHeartbeat(
   };
 }
 
+export interface LayoutOutcome {
+  readonly foundLines: number;
+  readonly transcriptLines: number;
+  readonly assignedLines: number;
+  readonly roughLines: number;
+  readonly durationMs: number;
+}
+
+export function logLayout(diagnostics: PipelineDiagnostics, outcome: LayoutOutcome | null): void {
+  if (outcome === null) diagnostics.log('page_layout', { failed: true });
+  else diagnostics.log('page_layout', { ...outcome, durationMs: Math.round(outcome.durationMs) });
+}
+
 export type DiagnosticsEntry = Readonly<Record<string, unknown>>;
 
 export async function readDiagnostics(

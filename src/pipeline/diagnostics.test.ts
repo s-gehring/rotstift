@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createHeartbeat,
   HEARTBEAT_INTERVAL_MS,
+  logLayout,
   readDiagnostics,
   tauriDiagnostics,
   type DiagInvoke,
+  type PipelineDiagnostics,
 } from './diagnostics.ts';
 
 describe('tauriDiagnostics', () => {
@@ -59,5 +61,19 @@ describe('createHeartbeat', () => {
     heart.stop();
     await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS * 3);
     expect(beats).toEqual([true, true, true, false]);
+  });
+});
+
+describe('logLayout', () => {
+  it('logs the line counts with a whole-millisecond duration, or the failure', () => {
+    const log = vi.fn<PipelineDiagnostics['log']>();
+    const diagnostics: PipelineDiagnostics = { log, heartbeat: () => undefined };
+    const counts = { foundLines: 14, transcriptLines: 13, assignedLines: 12, roughLines: 1 };
+    logLayout(diagnostics, { ...counts, durationMs: 212.6 });
+    logLayout(diagnostics, null);
+    expect(log.mock.calls).toEqual([
+      ['page_layout', { ...counts, durationMs: 213 }],
+      ['page_layout', { failed: true }],
+    ]);
   });
 });

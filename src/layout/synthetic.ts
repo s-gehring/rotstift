@@ -1,5 +1,5 @@
 import { item } from './signal.ts';
-import type { BBox, RgbaImage } from './types.ts';
+import type { BBox, Point, RgbaImage } from './types.ts';
 
 export interface PageSpec {
   readonly width: number;
@@ -12,6 +12,7 @@ export interface PageSpec {
   readonly skewDegrees?: number;
   readonly wobble?: number;
   readonly drift?: number;
+  readonly lineSlopes?: number;
   readonly longStrokes?: boolean;
   readonly headings?: readonly number[];
   readonly strays?: number;
@@ -23,6 +24,7 @@ export interface PageSpec {
 export interface SyntheticPage {
   readonly image: RgbaImage;
   readonly truth: readonly (BBox | null)[];
+  readonly cores: readonly (readonly Point[] | null)[];
 }
 
 const WORDS = [
@@ -199,6 +201,10 @@ export function renderPage(spec: PageSpec): SyntheticPage {
 
   const penRadius = Math.max(1, pitch * 0.035);
   const truth: (BBox | null)[] = [];
+  const cores: (Point[] | null)[] = [];
+  const slopeLimit = Math.tan(((spec.lineSlopes ?? 0) * Math.PI) / 180);
+  const swing = () => (slopeLimit > 0 ? (next() * 2 - 1) * slopeLimit : 0);
+  let lineSlope = swing();
   const left = width * (spec.margin === true ? 0.17 : 0.08);
   const advance = pitch * 0.4;
   const headings = new Set(spec.headings ?? []);
@@ -206,15 +212,20 @@ export function renderPage(spec: PageSpec): SyntheticPage {
   spec.lines.forEach((text, index) => {
     if (text.trim() === '') {
       truth.push(null);
+      cores.push(null);
       return;
     }
+    lineSlope = Math.max(-slopeLimit, Math.min(slopeLimit, lineSlope + swing() * 0.5));
+    const slope = lineSlope;
+    const core: Point[] = [];
     const heading = headings.has(index);
     const scale = heading ? 1.5 : 1;
     const box = { x0: width, y0: height, x1: -1, y1: -1 };
     const baseline = top + index * spacing;
     const phase = next() * Math.PI * 2;
     const wobbleAt = (x: number) =>
-      (spec.wobble ?? 0) * Math.sin(x / (width * 0.2) + phase) + (spec.drift ?? 0) * (x - left);
+      (spec.wobble ?? 0) * Math.sin(x / (width * 0.2) + phase) +
+      ((spec.drift ?? 0) + slope) * (x - left);
     let x = left + (spec.indent?.[index] ?? 0) * pitch;
     const xHeight = pitch * 0.34 * scale;
     const struck = new Set(spec.struck?.[index] ?? []);
@@ -244,6 +255,8 @@ export function renderPage(spec: PageSpec): SyntheticPage {
         continue;
       }
       const base = baseline + wobbleAt(x);
+      const [coreX, coreY] = rotate(x + advance * scale * 0.3, base - xHeight * 0.5);
+      core.push({ x: coreX, y: coreY });
       const points: [number, number][] = [];
       const jitter = () => (next() - 0.5) * pitch * 0.04;
       for (let step = 0; step <= 10; step += 1) {
@@ -289,6 +302,7 @@ export function renderPage(spec: PageSpec): SyntheticPage {
         ? null
         : { x: box.x0, y: box.y0, width: box.x1 - box.x0 + 1, height: box.y1 - box.y0 + 1 },
     );
+    cores.push(box.x1 < 0 ? null : core);
   });
 
   for (let i = 0; i < (spec.strays ?? 0); i += 1) {
@@ -316,7 +330,7 @@ export function renderPage(spec: PageSpec): SyntheticPage {
     data[i * 4 + 2] = value;
     data[i * 4 + 3] = 255;
   }
-  return { image: { width, height, data }, truth };
+  return { image: { width, height, data }, truth, cores };
 }
 
 export function iou(a: BBox, b: BBox): number {
