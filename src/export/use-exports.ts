@@ -12,7 +12,7 @@ import { saveCsv } from '../results/save-csv.ts';
 import { saveMessage } from '../results/save-message.ts';
 import { buildResults, classTotals, type ArbeitResult } from '../results/summary.ts';
 import { createReviewExport, PDF_FOOTER } from '../review/export-input.ts';
-import { summarizeArbeit } from '../review/summary.ts';
+import { requestedTypes, summarizeArbeit } from '../review/summary.ts';
 import type { MenuAction } from '../ui/Menu.tsx';
 import { beginExport, cancelExport, endExport, useExportBusy } from './export-job.ts';
 import { canSaveFiles, type SaveOutcome } from './save-file.ts';
@@ -114,7 +114,7 @@ export function useExports(arbeitId?: string): MenuAction[] {
     profile === null
       ? undefined
       : {
-          types: profile.allowedTypes,
+          types: requestedTypes(arbeiten, review),
           arbeiten: summaries,
           profile,
           weighting: weighting.of(profile),

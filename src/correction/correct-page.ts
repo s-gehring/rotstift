@@ -14,11 +14,13 @@ import type { Statistics } from '../stats/statistics.ts';
 import type { CorrectError, Corrector } from './corrector.ts';
 import { deriveMarksDetailed } from './derive.ts';
 import type { DeriveOptions } from './derive.ts';
+import { DEFAULT_SCOPE, scopedProfile, type CorrectionScope } from './scope.ts';
 
 export interface CorrectPageInput {
   readonly lines: readonly string[];
   readonly bboxes?: readonly (Bbox | undefined)[];
   readonly profile: CorrectionProfile;
+  readonly scope?: CorrectionScope;
   readonly corrector: Corrector;
   readonly signal?: AbortSignal;
   readonly maxChangedRun?: DeriveOptions['maxChangedRun'];
@@ -67,14 +69,16 @@ function invalid(detail: string): CorrectPageResult {
 }
 
 export async function correctPage(input: CorrectPageInput): Promise<CorrectPageResult> {
-  const { profile, corrector, bboxes } = input;
+  const { corrector, bboxes } = input;
+  const scope = input.scope ?? DEFAULT_SCOPE;
+  const profile = scopedProfile(input.profile, scope);
   const read = input.lines.map((line) => readStruck(normalizeLine(line)));
   const visible = read.map((line) => visibleLine(line.text, line.struck));
   const lines = visible.map((line) => line.text);
   const signal = input.signal ?? new AbortController().signal;
 
   const answer = lines.some((line) => line !== '')
-    ? await corrector.correct(lines, profile, signal)
+    ? await corrector.correct(lines, input.profile, signal, scope)
     : { ok: true as const, correctedText: lines.join('\n') };
   if (!answer.ok) return answer;
 

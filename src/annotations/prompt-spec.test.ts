@@ -4,6 +4,7 @@ import { CATALOG } from './catalog.ts';
 import { parseTranscript } from './parse.ts';
 import { BUILT_IN_PROFILES, DEUTSCH, ENGLISCH, profileSchema } from './profile.ts';
 import { buildSpecification, renderExample } from './prompt-spec.ts';
+import { DEFAULT_SCOPE } from '../correction/scope.ts';
 
 describe('buildSpecification', () => {
   it('lists every allowed type with name, description and example', () => {
@@ -33,6 +34,22 @@ describe('buildSpecification', () => {
     expect(spec).toContain('- Z (Zeichensetzung)');
     expect(spec).not.toContain('- Sb (');
     expect(spec).not.toContain('Bz');
+  });
+
+  it('is unchanged with the default scope', () => {
+    expect(buildSpecification(DEUTSCH, DEFAULT_SCOPE)).toBe(buildSpecification(DEUTSCH));
+  });
+
+  it('names only the requested types', () => {
+    const spelling = buildSpecification(DEUTSCH, { ...DEFAULT_SCOPE, grammar: false });
+    expect(spelling).toContain('- R (Rechtschreibung)');
+    expect(spelling).toContain('- Z (Zeichensetzung)');
+    expect(spelling).not.toContain('- G (');
+    expect(spelling).not.toContain('- A (');
+    const grammar = buildSpecification(ENGLISCH, { ...DEFAULT_SCOPE, spelling: false });
+    expect(grammar).toContain('- gr (');
+    expect(grammar).not.toContain('- sp (');
+    expect(grammar).not.toContain('- p (');
   });
 
   it('uses the language of the profile', () => {

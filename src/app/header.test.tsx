@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ENGLISCH } from '../annotations/profile.ts';
+import { DEFAULT_SCOPE } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import { page, setupReview, waitFor } from '../review/test-support.ts';
 import { AppProvider } from './app-context.tsx';
@@ -45,6 +46,15 @@ const button = (label: string) =>
   );
 const labels = () => [...container.querySelectorAll('button')].map((b) => b.textContent);
 const subject = () => container.querySelector('select');
+const scopeButton = () => container.querySelector<HTMLButtonElement>('.subject-select > button');
+const checkbox = (label: string) =>
+  [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+    (input) => input.closest('label')?.textContent === label,
+  );
+
+function openScope() {
+  click(scopeButton() ?? undefined);
+}
 
 function click(element: Element | undefined) {
   if (!(element instanceof HTMLElement)) throw new Error('missing button');
@@ -79,6 +89,9 @@ describe('Header', () => {
   it('offers the subject and Korrigieren, with word counting behind the arrow', () => {
     const start = vi.fn<RunController['start']>();
     render({ run: { start } });
+    expect(scopeButton()?.textContent).toBe('Deutsch');
+    expect(subject()).toBeNull();
+    openScope();
     expect(subject()?.closest('label')?.textContent).toContain('Fach');
     expect([...(subject()?.options ?? [])].map((option) => option.textContent)).toEqual([
       'Deutsch',
@@ -108,6 +121,7 @@ describe('Header', () => {
   it('changes the subject', () => {
     const select = vi.fn<Subject['select']>();
     render({ subject: { select } });
+    openScope();
     const field = subject();
     if (field === null) throw new Error('missing select');
     act(() => {
@@ -115,6 +129,62 @@ describe('Header', () => {
       field.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(select).toHaveBeenCalledWith(ENGLISCH);
+  });
+
+  it('chooses the kinds and keeps at least one', () => {
+    const setScope = vi.fn<Subject['setScope']>();
+    render({ subject: { setScope } });
+    openScope();
+    expect(checkbox('Rechtschreibung')?.checked).toBe(true);
+    expect(checkbox('Grammatik')?.checked).toBe(true);
+    click(checkbox('Grammatik'));
+    expect(setScope).toHaveBeenLastCalledWith({ ...DEFAULT_SCOPE, grammar: false });
+
+    render({ subject: { scope: { ...DEFAULT_SCOPE, grammar: false }, setScope } });
+    expect(checkbox('Rechtschreibung')?.disabled).toBe(true);
+    expect(checkbox('Grammatik')?.disabled).toBe(false);
+  });
+
+  it('takes the assignment and shows it on the button', () => {
+    const setScope = vi.fn<Subject['setScope']>();
+    render({ subject: { setScope } });
+    openScope();
+    const field = container.querySelector('textarea');
+    if (field === null) throw new Error('missing textarea');
+    expect(field.closest('label')?.textContent).toContain('Aufgabenstellung');
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(
+        field,
+        'Brief an die Großeltern',
+      );
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(setScope).toHaveBeenLastCalledWith({
+      ...DEFAULT_SCOPE,
+      assignment: 'Brief an die Großeltern',
+    });
+
+    render({ subject: { scope: { ...DEFAULT_SCOPE, assignment: 'Brief' }, setScope } });
+    expect(scopeButton()?.textContent).toBe('Deutsch, mit Aufgabenstellung');
+    expect(scopeButton()?.className).not.toContain('btn-primary');
+  });
+
+  it('closes the choice with Escape and with a click outside', () => {
+    render({});
+    openScope();
+    const field = subject();
+    expect(document.activeElement).toBe(field);
+    act(() => {
+      field?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(subject()).toBeNull();
+    expect(document.activeElement).toBe(scopeButton());
+
+    openScope();
+    act(() => {
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+    expect(subject()).toBeNull();
   });
 
   it('disables the main action while the models are checked or unavailable', () => {
@@ -171,7 +241,7 @@ describe('Header', () => {
     const start = vi.fn<RunController['start']>();
     render({ run: { kind: 'count', done: { count: true, correct: false }, start } });
     expect(button('Exportieren')).toBeDefined();
-    expect(subject()).not.toBeNull();
+    expect(scopeButton()).not.toBeNull();
     expect(button('Korrigieren')?.className).toContain('btn-secondary');
     click(button('Korrigieren'));
     expect(start).toHaveBeenCalledWith('correct');

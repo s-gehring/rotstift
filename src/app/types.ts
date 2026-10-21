@@ -1,5 +1,6 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { CorrectorStatus } from '../correction/provider.ts';
+import type { CorrectionScope } from '../correction/scope.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { useImportPages } from '../import/use-import-pages.ts';
 import type { CorrectorInfo } from '../models/registry.ts';
@@ -63,6 +64,8 @@ export interface Subject {
   readonly profile: CorrectionProfile;
   readonly profiles: readonly CorrectionProfile[];
   readonly select: (profile: CorrectionProfile) => void;
+  readonly scope: CorrectionScope;
+  readonly setScope: (scope: CorrectionScope) => void;
 }
 
 export interface Work {

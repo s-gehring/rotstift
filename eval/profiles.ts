@@ -18,6 +18,7 @@ import type { PageScore } from './mark-metrics.ts';
 import { corrector, localFile } from './ocr-registry.ts';
 import { samplesDir } from './paths.ts';
 import { wilson } from './correct-report.ts';
+import { scopeFromArgs } from './correct-prompts.ts';
 import { launchServer, postJson, record } from './server.ts';
 import { countWords } from '../src/stats/count-words.ts';
 
@@ -61,6 +62,8 @@ export interface ProfileRun {
   profile: string;
   model: string;
   variant: SystemVariant;
+  scope?: string;
+  assignment?: boolean;
   machine: string;
   threads: number;
   peakRssBytes: number;
@@ -79,8 +82,11 @@ async function main() {
       only: { type: 'string' },
       threads: { type: 'string', default: '4' },
       out: { type: 'string' },
+      scope: { type: 'string', default: 'all' },
+      assignment: { type: 'string', default: '' },
     },
   });
+  const scope = scopeFromArgs(values.scope, values.assignment);
   const entry = PROFILE_SETS[values.set ?? ''];
   const variant = SYSTEM_VARIANTS.find((name) => name === values.variant);
   if (!entry || !variant || !values.out) {
@@ -138,6 +144,7 @@ async function main() {
         const result = await correctPage({
           lines,
           profile: entry.profile,
+          scope,
           corrector: createLlmCorrector({ client, config }),
         });
         const seconds = (performance.now() - started) / 1000;
@@ -173,6 +180,8 @@ async function main() {
     profile: entry.profile.id,
     model: model.id,
     variant,
+    scope: values.scope,
+    assignment: scope.assignment !== '',
     machine: `${hostname()} (${cpus()[0]?.model.trim() ?? 'CPU'})`,
     threads,
     peakRssBytes: peak,
@@ -203,7 +212,7 @@ export function summarize(run: ProfileRun): string {
   const failed = run.docs.filter((doc) => !doc.ok).length;
   const seconds = run.docs.reduce((sum, doc) => sum + doc.seconds, 0) / run.docs.length;
   const lines = [
-    `${run.profile} (${run.model}, Prompt ${run.variant}, ${run.threads} Threads)`,
+    `${run.profile} (${run.model}, Prompt ${run.variant}, Umfang ${run.scope ?? 'all'}${run.assignment === true ? ' mit Aufgabenstellung' : ''}, ${run.threads} Threads)`,
     `Seiten ${run.docs.length}, fehlgeschlagen ${failed}, ${seconds.toFixed(1)} s je Seite, Peak-RAM ${(run.peakRssBytes / 1e9).toFixed(1)} GB`,
     `Soll-Fehler ${total.gold}, Marken ${total.predicted}`,
     `Recall (Art und Stelle) ${interval(total.matched, total.gold)}`,

@@ -5,6 +5,7 @@ import { parseTranscript } from '../annotations/parse.ts';
 import { serializeTranscript } from '../annotations/serialize.ts';
 import { correctPage } from './correct-page.ts';
 import { createFakeCorrector } from './fake-corrector.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from './scope.ts';
 
 const LINES = ['Wir sind früh losgefahren weil mein Bruder die', 'Rutche ausprobieren wollte.'];
 const CORRECTED = 'Wir sind früh losgefahren, weil mein Bruder die Rutsche ausprobieren wollte.';
@@ -46,7 +47,37 @@ describe('correctPage', () => {
   it('hands the normalized lines and the profile to the corrector', async () => {
     const corrector = createFakeCorrector((lines) => lines.join(' '));
     await correctPage({ lines: ['  Hallo   Welt ', ''], profile: DEUTSCH, corrector });
-    expect(corrector.calls).toEqual([{ lines: ['Hallo Welt', ''], profile: DEUTSCH }]);
+    expect(corrector.calls).toEqual([
+      { lines: ['Hallo Welt', ''], profile: DEUTSCH, scope: DEFAULT_SCOPE },
+    ]);
+  });
+
+  it('keeps only the marks of the requested kinds', async () => {
+    const lines = ['Die Kinder spielt im Garten weil', 'die Sone scheint.'];
+    const corrected = 'Die Kinder spielen im Garten, weil die Sonne scheint.';
+    const typesFor = async (scope: CorrectionScope) => {
+      const result = await correctPage({
+        lines,
+        profile: DEUTSCH,
+        scope,
+        corrector: createFakeCorrector(corrected),
+      });
+      if (!result.ok) throw new Error('expected success');
+      return {
+        marks: result.transcript.lines.flatMap((line) => line.marks.map((mark) => mark.type)),
+        counted: Object.keys(result.statistics.errorsByType),
+      };
+    };
+    const all = await typesFor(DEFAULT_SCOPE);
+    expect(all).toEqual({ marks: ['G', 'Z', 'R'], counted: ['G', 'Z', 'R'] });
+    expect(await typesFor({ ...DEFAULT_SCOPE, grammar: false })).toEqual({
+      marks: ['Z', 'R'],
+      counted: ['Z', 'R'],
+    });
+    expect(await typesFor({ ...DEFAULT_SCOPE, spelling: false })).toEqual({
+      marks: ['G'],
+      counted: ['G'],
+    });
   });
 
   it('keeps empty lines in place', async () => {

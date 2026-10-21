@@ -2,6 +2,7 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Bbox, Transcript } from '../annotations/transcript.ts';
 import { correctPage, type CorrectPageResult } from '../correction/correct-page.ts';
 import { describeCorrectError, type Corrector } from '../correction/corrector.ts';
+import { DEFAULT_SCOPE, requestedCodes, type CorrectionScope } from '../correction/scope.ts';
 import {
   separateUncertain,
   withAcceptedHints,
@@ -35,6 +36,7 @@ export interface CorrectedPage {
   readonly droppedMarks: number;
   readonly unplacedLines: readonly number[];
   readonly preview: boolean;
+  readonly requested?: readonly string[];
 }
 
 export interface PageWarning {
@@ -214,6 +216,7 @@ export function createReviewFlow(deps: ReviewDeps) {
   let inflight: Promise<unknown> = Promise.resolve();
   let corrector: Corrector | null = null;
   let preview = false;
+  let lastScope: CorrectionScope = DEFAULT_SCOPE;
 
   const commit = (next: ReviewState) => {
     state = next;
@@ -367,6 +370,7 @@ export function createReviewFlow(deps: ReviewDeps) {
   const correctPhase = async (
     readable: readonly Readable[],
     profile: CorrectionProfile,
+    scope: CorrectionScope,
     signal: AbortSignal,
   ) => {
     let finished = 0;
@@ -381,7 +385,14 @@ export function createReviewFlow(deps: ReviewDeps) {
         patch(page.id, { status: 'correcting', message: null, detail: null });
         const bboxes = state.pages[page.id]?.bboxes ?? undefined;
         const work = track(
-          correctPage({ lines, profile, corrector: current, signal, ...(bboxes && { bboxes }) }),
+          correctPage({
+            lines,
+            profile,
+            scope,
+            corrector: current,
+            signal,
+            ...(bboxes && { bboxes }),
+          }),
         );
         const result = await abortable(work, signal).catch((error: unknown): CorrectPageResult => ({
           ok: false,
@@ -397,6 +408,7 @@ export function createReviewFlow(deps: ReviewDeps) {
               hints: separated.hints,
               droppedMarks: result.droppedMarks,
               preview: isPreview,
+              requested: requestedCodes(profile, scope),
             }),
           });
         } else if (result.error.kind === 'cancelled') {
@@ -418,6 +430,7 @@ export function createReviewFlow(deps: ReviewDeps) {
   const process = async (
     targets: readonly ImportPage[],
     profile: CorrectionProfile,
+    scope: CorrectionScope,
     begin: () => void,
   ) => {
     const abort = new AbortController();
@@ -431,6 +444,7 @@ export function createReviewFlow(deps: ReviewDeps) {
           ? blankPage(page.rotation)
           : { ...existing, status: 'waiting', message: null, detail: null };
     }
+    lastScope = scope;
     commit({ ...state, pages, profile, outcome: null, stopping: false });
     try {
       await transcribePhase(targets, begin);
@@ -438,7 +452,7 @@ export function createReviewFlow(deps: ReviewDeps) {
       const readable = collectTranscripts(targets);
       await locatePhase(readable, abort.signal);
       if (aborted()) return;
-      await correctPhase(readable, profile, abort.signal);
+      await correctPhase(readable, profile, scope, abort.signal);
     } finally {
       const cancelled = aborted();
       if (cancelled) {
@@ -469,7 +483,11 @@ export function createReviewFlow(deps: ReviewDeps) {
     },
     getState: () => state,
 
-    start: (pages: readonly ImportPage[], profile: CorrectionProfile): Promise<void> => {
+    start: (
+      pages: readonly ImportPage[],
+      profile: CorrectionProfile,
+      scope: CorrectionScope = DEFAULT_SCOPE,
+    ): Promise<void> => {
       if (active !== null) return Promise.resolve();
       if (state.profile !== null && state.profile.id !== profile.id) {
         commit({ ...state, pages: {} });
@@ -479,17 +497,20 @@ export function createReviewFlow(deps: ReviewDeps) {
         commit({ ...state, profile, outcome: 'finished' });
         return Promise.resolve();
       }
-      return process(targets, profile, () => {
+      return process(targets, profile, scope, () => {
         transcription.start();
       });
     },
 
-    retry: (page: ImportPage, options: { readonly recognize?: boolean } = {}): Promise<void> => {
+    retry: (
+      page: ImportPage,
+      options: { readonly recognize?: boolean; readonly scope?: CorrectionScope } = {},
+    ): Promise<void> => {
       const profile = state.profile;
       if (active !== null || profile === null || state.pages[page.id] === undefined) {
         return Promise.resolve();
       }
-      return process([page], profile, () => {
+      return process([page], profile, options.scope ?? lastScope, () => {
         const entry = transcription.getState().entries[page.id];
         if (options.recognize === true || entry === undefined || needsRecognition(entry, page)) {
           transcription.enqueue(page.id);

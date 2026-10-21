@@ -2,6 +2,7 @@ import { CATALOG, findErrorKind } from './catalog.ts';
 import type { ErrorExample, ErrorKind } from './catalog.ts';
 import type { CorrectionProfile } from './profile.ts';
 import { serializeLine } from './serialize.ts';
+import { DEFAULT_SCOPE, requestedCodes, type CorrectionScope } from '../correction/scope.ts';
 
 export function renderExample(kind: ErrorKind): string {
   const { before, original, correction, after }: ErrorExample = kind.example;
@@ -20,8 +21,11 @@ export function renderExample(kind: ErrorKind): string {
   });
 }
 
-export function buildSpecification(profile: CorrectionProfile): string {
-  const kinds = profile.allowedTypes.map((code) => {
+export function buildSpecification(
+  profile: CorrectionProfile,
+  scope: CorrectionScope = DEFAULT_SCOPE,
+): string {
+  const kinds = requestedCodes(profile, scope).map((code) => {
     const kind = findErrorKind(profile.language, code);
     if (!kind) {
       throw new Error(
