@@ -112,15 +112,17 @@ Der Befehl verkleinert die Seiten je Modell auf `imageMaxEdge` (mit `eval/.venv`
 Misst, wie viele durchgestrichene Wörter erkannt werden, wie viele normale Wörter fälschlich als gestrichen gelten und wie sich das auf die Wortzahl auswirkt. Der Bericht steht in [docs/evaluations/2026-10-durchgestrichen.md](../docs/evaluations/2026-10-durchgestrichen.md).
 
 ```bash
-eval/.venv/bin/python -I eval/samples/render.py --strike 4 --out <Ordner>
+eval/.venv/bin/python -I eval/samples/render.py --strike 8 --seed 4 --out <Ordner>
 eval/.venv/bin/python -I eval/resize-pages.py <Ordner> <Ordner-1152> --max-edge 1152
 node --experimental-transform-types eval/ocr-run.ts --model glm-ocr-q8 --images <Ordner-1152> --out <Ergebnisse>/strike.json
 node --experimental-transform-types eval/strike.ts --ocr <Ergebnisse>/strike.json --images <Ordner-1152> --truth <Ordner> --method ink
+node --experimental-transform-types eval/strike-correct.ts --ocr <Ergebnisse>/strike.json --images <Ordner-1152> --truth <Ordner> --method ink --out <Ergebnisse>/korrektur.json
 ```
 
-- `render.py --strike N` fügt je Seite N gestrichene Wörter in den Text ein (ein falsch geschriebenes Folgewort oder ein Wort aus dem Text) und streicht sie abwechselnd mit einem Strich, zwei Strichen oder Gekritzel. Die `.txt` neben dem Bild enthält sie als `~~Wort~~`, die `.strikes.json` ihre Boxen. Ohne `--strike` bleiben die Bilder wie bisher.
+- `render.py --strike N` fügt je Seite N gestrichene Wörter in den Text ein (ein falsch geschriebenes Folgewort oder ein Wort aus dem Text) und streicht sie reihum mit einem Strich, zwei Strichen, Gekritzel oder einer Wellenlinie. Die `.txt` neben dem Bild enthält sie als `~~Wort~~`, die `.strikes.json` ihre Boxen und unter `styles` die Art je Strich. `--seed K` erzeugt einen weiteren, unabhängigen Satz derselben Texte (andere Wörter, Lage und Striche). Ohne `--strike` bleiben die Bilder wie bisher.
 - `ocr-run.ts --prompt <Text>` ersetzt den Prompt der Registry, etwa um eine Markierung wie `<del>` zu verlangen.
-- `strike.ts` vergleicht das Ergebnis mit der Wahrheit (`--truth` mit `.txt` je Seite, auch ein ScaDS-Ordner `ground_truth`, der kein Gestrichenes enthält). `--method none` wertet das Transkript, wie es ist, `prompt` liest `<del>`, `<s>`, `<strike>` und `~~` im Transkript als gestrichen, `ink` sucht die Striche mit `findStruckWords` aus der App im Bild, `both` vereint beides. Ausgabe: Gestrichene Wörter (erkannt, ungekennzeichnet abgeschrieben, ausgelassen), Fehlalarme, Wortzahl gegen die Wahrheit, Wortfehlerrate ohne Gestrichenes und Zeit je Seite. `--verbose` zeigt jede Seite.
+- `strike.ts` vergleicht das Ergebnis mit der Wahrheit (`--truth` mit `.txt` je Seite, auch ein ScaDS-Ordner `ground_truth`, der kein Gestrichenes enthält). `--ocr`, `--images` und `--truth` lassen sich paarweise wiederholen, um mehrere Sätze zusammen zu werten. `--method none` wertet das Transkript, wie es ist, `prompt` liest `<del>`, `<s>`, `<strike>` und `~~` im Transkript als gestrichen, `ink` sucht die Striche mit `findStruckWords` aus der App im Bild, `both` vereint beides. Ausgabe: Gestrichene Wörter (erkannt, ungekennzeichnet abgeschrieben, ausgelassen), Fehlalarme und Precision, eine Tabelle je Art des Durchstreichens mit dem Recall unter den abgeschriebenen Wörtern, Wortzahl gegen die Wahrheit, Wortfehlerrate ohne Gestrichenes und Zeit je Seite. `--verbose` zeigt jede Seite. `STRIKE_OPTIONS='{"pageMargin":1.5}'` überschreibt Optionen von `findStruckWords`.
+- `strike-correct.ts` markiert das Transkript wie in der App (`--method ink`, mit `none` ohne Strichsuche) und korrigiert es mit `correctPage` und Gemma. Ausgabe: Marken je 100 sichtbare Wörter und Marken auf tatsächlich gestrichenen Wörtern je 100 Wörter, also Fehlalarme durch übersehenes Gestrichenes. Ein abgebrochener Lauf setzt beim nächsten Aufruf fort.
 
 ## Korrekturprofile (Fremdsprachen und Sachfach)
 

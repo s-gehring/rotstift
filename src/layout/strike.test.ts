@@ -13,6 +13,12 @@ describe('findStruckWords', () => {
     expect(findStruckWords(page.image, lines)).toEqual(struck);
   });
 
+  it('finds words with a wavy line through them', () => {
+    const struck = [[], [2], [], [], [0], [], [], [3], [], [], [], []];
+    const page = renderPage({ ...PAGE, lines, struck, wavyStrikes: true, ruled: true });
+    expect(findStruckWords(page.image, lines)).toEqual(struck);
+  });
+
   it('finds nothing on a page without struck words', () => {
     for (const seed of [1, 2, 3]) {
       const page = renderPage({ ...PAGE, seed, lines, ruled: seed !== 2, margin: true });
