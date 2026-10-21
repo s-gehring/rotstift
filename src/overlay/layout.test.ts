@@ -447,7 +447,7 @@ function narrowMarginLine(number: number, y: number, types: readonly string[], f
 }
 
 describe('layoutOverlay with a narrow margin', () => {
-  const page = { width: 1000, height: 400 };
+  const page = { width: 1020, height: 400 };
   const transcript: Transcript = {
     lines: [
       narrowMarginLine(1, 100, ['A', 'A', 'R', 'A', 'A', 'G', 'Z', 'R']),

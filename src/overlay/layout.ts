@@ -6,6 +6,8 @@ import {
   bendPath,
   frameLift,
   gapAbove,
+  lineAngleAt,
+  lineTopAt,
   placeLine,
   type LineFrame,
   type PlacedLine,
@@ -25,12 +27,18 @@ export interface LayoutOptions {
 type LocatedLine = PlacedLine;
 
 type Column =
-  | { readonly mode: 'margin'; readonly left: number; readonly right: number }
+  | {
+      readonly mode: 'margin';
+      readonly side: 'left' | 'right';
+      readonly left: number;
+      readonly right: number;
+    }
   | { readonly mode: 'edge'; readonly right: number };
 
 interface Frame {
   readonly page: PageSize;
   readonly pad: number;
+  readonly inset: number;
   readonly textLeft: number;
   readonly column: Column;
 }
@@ -62,6 +70,10 @@ const MIN_FIX_FRACTION = 0.3;
 const MIN_FIX_PIXELS = 9;
 const MIN_CODE_FRACTION = 0.4;
 const MIN_EDGE_CODE_PIXELS = 6;
+const EDGE_INSET_FRACTION = 0.3;
+const WIDTH_SAFETY = 1.06;
+const CODE_CENTER = 0.5;
+const CODE_DROP = 0.3;
 
 function hasBox(
   line: TranscriptLine,
@@ -88,36 +100,75 @@ export function layoutOverlay(transcript: Transcript, options: LayoutOptions): O
     }
     previous = line.frame;
   }
-  return { page, items, skippedLines };
+  return {
+    page,
+    items: items.map((item) => (item.kind === 'text' ? keepInPage(item, frame) : item)),
+    skippedLines,
+  };
+}
+
+function keepInPage(item: TextItem, frame: Frame): TextItem {
+  const { page, pad } = frame;
+  const room = page.width - 2 * pad;
+  let size = item.size;
+  let width = estimateTextWidth(item.text, size) * WIDTH_SAFETY;
+  if (width > room) {
+    size *= room / width;
+    width = room;
+  }
+  const anchorShare = item.anchor === 'end' ? 1 : item.anchor === 'middle' ? 0.5 : 0;
+  const left = item.x - width * anchorShare;
+  const x = item.x + Math.min(Math.max(left, pad), page.width - pad - width) - left;
+  const rise = Math.abs(Math.sin((item.rotate * Math.PI) / 180)) * width;
+  const y = Math.min(
+    Math.max(item.y, pad + size * FIX_ASCENT + rise),
+    page.height - pad - size * 0.25 - rise,
+  );
+  return x === item.x && y === item.y && size === item.size ? item : { ...item, x, y, size };
 }
 
 function buildFrame(page: PageSize, lines: readonly LocatedLine[]): Frame {
   const pad = Math.max(4, page.width * 0.006);
   if (lines.length === 0) {
-    return { page, pad, textLeft: pad, column: { mode: 'edge', right: page.width - pad } };
-  }
-  const textLeft = Math.min(...lines.map((line) => line.bbox.x));
-  const textRight = Math.min(
-    Math.max(...lines.map((line) => line.bbox.x + line.bbox.width)),
-    page.width - pad,
-  );
-  const meanHeight = lines.reduce((sum, line) => sum + line.frame.height, 0) / lines.length;
-  const free = page.width - textRight - pad;
-  if (free >= Math.max(page.width * 0.04, meanHeight * 1.6)) {
-    const left = textRight + Math.min(free * 0.2, meanHeight * 0.8);
     return {
       page,
       pad,
-      textLeft: Math.max(textLeft, pad),
-      column: { mode: 'margin', left, right: page.width - pad },
+      inset: pad,
+      textLeft: pad,
+      column: { mode: 'edge', right: page.width - pad },
     };
   }
-  return {
-    page,
-    pad,
-    textLeft: Math.max(textLeft, pad),
-    column: { mode: 'edge', right: textRight },
-  };
+  const meanHeight = lines.reduce((sum, line) => sum + line.frame.height, 0) / lines.length;
+  const inset = Math.max(pad, meanHeight * EDGE_INSET_FRACTION);
+  const textLeft = Math.max(Math.min(...lines.map((line) => line.bbox.x)), pad);
+  const textRight = Math.min(
+    Math.max(...lines.map((line) => line.bbox.x + line.bbox.width)),
+    page.width - inset,
+  );
+  const needed = Math.max(page.width * 0.04, meanHeight * 1.6);
+  const freeRight = page.width - textRight - inset;
+  const freeLeft = textLeft - inset;
+  if (freeRight >= needed) {
+    const left = textRight + Math.min(freeRight * 0.2, meanHeight * 0.8);
+    return {
+      page,
+      pad,
+      inset,
+      textLeft,
+      column: { mode: 'margin', side: 'right', left, right: page.width - inset },
+    };
+  }
+  if (freeLeft >= needed) {
+    const right = textLeft - Math.min(freeLeft * 0.2, meanHeight * 0.8);
+    return {
+      page,
+      pad,
+      inset,
+      textLeft,
+      column: { mode: 'margin', side: 'left', left: inset, right },
+    };
+  }
+  return { page, pad, inset, textLeft, column: { mode: 'edge', right: textRight } };
 }
 
 function layoutLine(
@@ -149,14 +200,24 @@ function layoutLine(
   const minFix = Math.max(height * MIN_FIX_FRACTION, MIN_FIX_PIXELS);
   const preferred = Math.min(height * FIX_PREFERRED, bandSize);
   const codeSize = Math.max(Math.min(preferred, height * CODE_PREFERRED), minFix);
-  const bandBaseline = (x: number) => line.frame.top(x) - height * FIX_LIFT;
+  const bandBaseline = (x: number) => lineTopAt(line.frame, x) - height * FIX_LIFT;
   const bandUsable = preferred >= minFix;
+
+  const maxRight = frame.page.width - frame.inset;
+  const minLeft =
+    frame.column.mode === 'margin' && frame.column.side === 'left'
+      ? frame.column.right + frame.pad
+      : frame.pad;
 
   const moved = new Set<number>();
   const rightLimit = (): number => {
-    if (frame.column.mode === 'margin') return frame.column.left - frame.pad;
+    if (frame.column.mode === 'margin') {
+      return frame.column.side === 'right' ? frame.column.left - frame.pad : maxRight;
+    }
     const codes = fitEdgeCodes(entries, moved, frame, codeSize);
-    return frame.column.right - estimateTextWidth(codes.text, codes.size) - codeSize * 1.2;
+    return (
+      frame.column.right - estimateTextWidth(codes.text, codes.size) * WIDTH_SAFETY - codeSize * 1.2
+    );
   };
 
   let remaining = fixes;
@@ -172,7 +233,7 @@ function layoutLine(
           units: textUnits(fix.text) * fix.boost,
         })),
         sizes,
-        () => ({ left: frame.pad, right: Math.min(rightLimit(), frame.page.width - frame.pad) }),
+        () => ({ left: minLeft, right: Math.min(rightLimit(), maxRight) }),
         FIX_EM_PER_UNIT,
         FIX_GAP_EM,
       );
@@ -323,7 +384,7 @@ function fixTokens(entries: readonly Entry[], moved: ReadonlySet<number>): strin
 }
 
 function fitsAt(text: string, size: number, available: number): boolean {
-  return estimateTextWidth(text, size) <= available;
+  return estimateTextWidth(text, size) * WIDTH_SAFETY <= available;
 }
 
 function wrapCodes(codes: readonly string[], size: number, available: number): string[] | null {
@@ -379,7 +440,7 @@ function fitCodeRows(
   const shortened = shortenCodes(codes, floor, available);
   if (shortened !== null) return { rows: [shortened], size: floor };
   const last = codes.length > 1 ? `${codes[0] ?? ''}${CODE_SEPARATOR}+${codes.length - 1}` : single;
-  const width = estimateTextWidth(last, 1);
+  const width = estimateTextWidth(last, 1) * WIDTH_SAFETY;
   return { rows: [last], size: width > 0 ? Math.min(floor, available / width) : floor };
 }
 
@@ -418,8 +479,9 @@ function codesItems(
     title: entries.map((entry) => entry.title).join(', '),
   } as const;
   const tilt = spread(random, 1.2);
-  const rotate = (x: number) => tilt + line.frame.angle(x);
-  const baseline = (x: number) => line.frame.top(x) + height * BASELINE;
+  const rotate = (x: number) => tilt + lineAngleAt(line.frame, x);
+  const baseline = (x: number, size: number) =>
+    lineTopAt(line.frame, x) + height * CODE_CENTER + size * CODE_DROP;
 
   if (column.mode === 'margin') {
     const minimum = height * MIN_CODE_FRACTION;
@@ -433,10 +495,10 @@ function codesItems(
       Math.min(MAX_CODE_ROWS, Math.max(1, rowsRoom)),
     );
     const step = fitted.size * ROW_HEIGHT_EM;
-    const first = baseline(line.frame.right) - (step * (fitted.rows.length - 1)) / 2;
+    const first = baseline(column.left, fitted.size) - (step * (fitted.rows.length - 1)) / 2;
     return fitted.rows.map((text, row) => ({
       ...common,
-      rotate: tilt,
+      rotate: rotate(column.left),
       text,
       x: column.left,
       y: first + row * step,
@@ -448,13 +510,14 @@ function codesItems(
   if (!space.bandUsable) {
     const beside = besideText(entries, moved, frame, column.right, space.codeSize);
     if (beside !== null) {
+      const x = frame.page.width - frame.inset;
       return [
         {
           ...common,
-          rotate: tilt,
+          rotate: rotate(x),
           text: beside.text,
-          x: frame.page.width - frame.pad,
-          y: baseline(line.frame.right),
+          x,
+          y: baseline(x, beside.size),
           size: beside.size,
           anchor: 'end',
         },
@@ -487,7 +550,7 @@ function besideText(
   textRight: number,
   codeSize: number,
 ): { text: string; size: number } | null {
-  const available = frame.page.width - frame.pad - textRight - codeSize * 0.3;
+  const available = frame.page.width - frame.inset - textRight - codeSize * 0.3;
   const floor = Math.min(codeSize, MIN_FIX_PIXELS);
   for (const text of [
     fixTokens(entries, moved).join(CODE_SEPARATOR),
