@@ -72,6 +72,21 @@ pub async fn llm_start_model<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn llm_probe_model<R: Runtime>(
+    app: AppHandle<R>,
+    runtime: State<'_, LlmRuntime>,
+    models: State<'_, Arc<ModelManager>>,
+    model_id: String,
+) -> Result<(), LlmError> {
+    if runtime.is_busy() {
+        return Err(LlmError::NotReady);
+    }
+    let started = llm_start_model(app, runtime.clone(), models, model_id).await;
+    runtime.stop();
+    started.map(drop)
+}
+
+#[tauri::command]
 pub fn llm_stop(runtime: State<'_, LlmRuntime>) -> RuntimeStatus {
     runtime.stop()
 }

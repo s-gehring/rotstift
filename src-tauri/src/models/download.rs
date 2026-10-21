@@ -35,6 +35,21 @@ pub enum DownloadError {
     HashMismatch { file: String },
     Io(String),
     Cancelled,
+    Custom(CustomProblem),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "reason", rename_all = "camelCase")]
+pub enum CustomProblem {
+    NoLink,
+    Gated,
+    NotFound,
+    NoGguf,
+    SplitFile,
+    NotGguf { file: String },
+    Projector { file: String },
+    NoProjector,
+    TooManyFiles,
 }
 
 impl From<std::io::Error> for DownloadError {
@@ -109,7 +124,25 @@ async fn cancelled(cancel: &mut watch::Receiver<bool>) {
     }
 }
 
-fn network_error(error: reqwest::Error) -> DownloadError {
+pub(super) fn http_client(allowed: UrlPolicy) -> Result<Client, DownloadError> {
+    let policy = redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            attempt.error("too many redirects")
+        } else if allowed(attempt.url()) {
+            attempt.follow()
+        } else {
+            attempt.error("redirect to a host that is not allowed")
+        }
+    });
+    Client::builder()
+        .redirect(policy)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .user_agent(concat!("rotstift/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| DownloadError::Network(error.to_string()))
+}
+
+pub(super) fn network_error(error: reqwest::Error) -> DownloadError {
     if error.is_redirect() {
         DownloadError::NotAllowed("redirect".into())
     } else {
@@ -154,23 +187,8 @@ impl Downloader {
     }
 
     pub fn with_policy(allowed: UrlPolicy, free_space: FreeSpace) -> Result<Self, DownloadError> {
-        let policy = redirect::Policy::custom(move |attempt| {
-            if attempt.previous().len() >= MAX_REDIRECTS {
-                attempt.error("too many redirects")
-            } else if allowed(attempt.url()) {
-                attempt.follow()
-            } else {
-                attempt.error("redirect to a host that is not allowed")
-            }
-        });
-        let client = Client::builder()
-            .redirect(policy)
-            .connect_timeout(CONNECT_TIMEOUT)
-            .user_agent(concat!("rotstift/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|error| DownloadError::Network(error.to_string()))?;
         Ok(Self {
-            client,
+            client: http_client(allowed)?,
             allowed,
             free_space,
         })

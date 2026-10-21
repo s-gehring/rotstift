@@ -6,6 +6,7 @@ import { ModelCallError, type ModelClient } from './client.ts';
 import {
   DEFAULT_MODEL_ID,
   DEFAULT_REVIEWER_ID,
+  REVIEWERS,
   recommendModel,
   type CorrectorInfo,
 } from './registry.ts';
@@ -44,6 +45,13 @@ function fakeClient(
     select: () => Promise.resolve(undefined),
     reviewerSelection: () => Promise.resolve(null),
     selectReviewer: () => Promise.resolve(undefined),
+    correctorSelection: () => Promise.resolve(null),
+    selectCorrector: () => Promise.resolve(undefined),
+    customModels: () => Promise.resolve([]),
+    resolveLink: () => Promise.reject(new Error('offline')),
+    addLink: () => Promise.reject(new Error('offline')),
+    importCustom: () => Promise.resolve(null),
+    probe: () => Promise.resolve(null),
     remove: () => Promise.resolve(statusOf('missing')),
     importFiles: () => Promise.resolve(null),
     onDownload: () => Promise.resolve(() => undefined),
@@ -214,14 +222,14 @@ describe('useModelSetup model choice', () => {
     await vi.waitFor(() => expect(latest?.model.id).toBe(STRONGER));
   });
 
-  it('ignores a persisted choice the machine no longer qualifies for', async () => {
+  it('keeps a persisted choice on a small machine', async () => {
     const { client } = fakeClient('ready', Promise.resolve(statusOf('ready')), {
       hardware: () => Promise.resolve({ totalRamBytes: 8 * 1024 ** 3, freeDiskBytes: null }),
       selection: () => Promise.resolve(STRONGER),
     });
     await mount(client);
     await vi.waitFor(() => expect(latest?.state.loaded).toBe(true));
-    expect(latest?.model.id).toBe(DEFAULT_MODEL_ID);
+    expect(latest?.model.id).toBe(STRONGER);
   });
 
   it('persists a switch through the backend and then uses the new model', async () => {
@@ -368,7 +376,7 @@ describe('useReviewerModelSetup', () => {
     await mountReviewer(client);
     await vi.waitFor(() => expect(reviewerLatest?.state.loaded).toBe(true));
     expect(reviewerLatest?.model.id).toBe(DEFAULT_REVIEWER_ID);
-    expect(reviewerLatest?.models.map((entry) => entry.role)).toEqual(['corrector']);
+    expect(reviewerLatest?.models).toEqual(REVIEWERS);
     expect(reviewerSelection).toHaveBeenCalled();
     expect(selection).not.toHaveBeenCalled();
   });

@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { ModelCallError, type ModelClient } from './client.ts';
-import { describeImport } from './format.ts';
+import { describeImport, probeProblem } from './format.ts';
 import {
   CORRECTORS,
+  DEFAULT_CORRECTOR_ID,
   DEFAULT_MODEL_ID,
   DEFAULT_REVIEWER_ID,
   MODELS,
   REVIEWERS,
+  customEntry,
   modelFiles,
   type AnyModelInfo,
   type CorrectorInfo,
+  type CustomModel,
+  type FileRole,
   type ModelInfo,
 } from './registry.ts';
 import {
@@ -22,7 +26,7 @@ import {
   samplesOf,
   setupReducer,
 } from './setup-state.ts';
-import type { DownloadError } from './types.ts';
+import type { DownloadError, ResolvedLink } from './types.ts';
 
 function toDownloadError(error: unknown): DownloadError {
   return error instanceof ModelCallError ? error.error : { kind: 'io' };
@@ -40,6 +44,12 @@ const TRANSCRIBER_CHOICE: Choice = {
   save: (client, modelId) => client.select(modelId),
 };
 
+const CORRECTOR_CHOICE: Choice = {
+  defaultId: DEFAULT_CORRECTOR_ID,
+  load: (client) => client.correctorSelection(),
+  save: (client, modelId) => client.selectCorrector(modelId),
+};
+
 const REVIEWER_CHOICE: Choice = {
   defaultId: DEFAULT_REVIEWER_ID,
   load: (client) => client.reviewerSelection(),
@@ -49,6 +59,7 @@ const REVIEWER_CHOICE: Choice = {
 interface Change {
   readonly origin: symbol;
   readonly modelId: string;
+  readonly custom?: boolean;
 }
 
 const changeListeners = new WeakMap<ModelClient, Set<(change: Change) => void>>();
@@ -57,13 +68,32 @@ function announceChange(client: ModelClient, change: Change) {
   for (const listener of changeListeners.get(client) ?? []) listener(change);
 }
 
+function withCustoms<T extends AnyModelInfo>(
+  base: readonly T[],
+  role: FileRole,
+  customs: readonly CustomModel[],
+): readonly T[] {
+  const own = customs
+    .filter((custom) => custom.role === role)
+    .map((custom) => customEntry(custom))
+    .filter((entry): entry is T => entry.role === role);
+  return own.length === 0 ? base : [...base, ...own];
+}
+
 function useRoleSetup<T extends AnyModelInfo>(
   client: ModelClient | null,
-  models: readonly T[],
-  choice: Choice | null,
+  base: readonly T[],
+  role: FileRole,
+  choice: Choice,
 ) {
   const [state, dispatch] = useReducer(setupReducer, INITIAL_SETUP);
   const origin = useRef(Symbol('model-setup'));
+  const [customs, setCustoms] = useReducer(
+    (_previous: readonly CustomModel[], next: readonly CustomModel[]) => next,
+    [],
+  );
+  const models = useMemo(() => withCustoms(base, role, customs), [base, role, customs]);
+  const awaitingProbe = useRef(new Set<string>());
 
   const verifying = useRef(new Set<string>());
 
@@ -93,11 +123,14 @@ function useRoleSetup<T extends AnyModelInfo>(
   const refresh = useCallback(async () => {
     if (client === null) return;
     try {
+      const loaded = await client.customModels().catch(() => []);
+      const listed = withCustoms(base, role, loaded);
       const [statuses, hardware, selectedId] = await Promise.all([
-        Promise.all(models.map((model) => client.status(model.id))),
+        Promise.all(listed.map((model) => client.status(model.id))),
         client.hardware().catch(() => null),
-        choice === null ? null : choice.load(client).catch(() => null),
+        choice.load(client).catch(() => null),
       ]);
+      setCustoms(loaded);
       dispatch({
         type: 'loaded',
         statuses: statuses.map((status) =>
@@ -114,7 +147,23 @@ function useRoleSetup<T extends AnyModelInfo>(
     } catch (error) {
       dispatch({ type: 'error', modelId: ANY_MODEL, error: toDownloadError(error) });
     }
-  }, [client, verify, choice, models]);
+  }, [client, verify, choice, base, role]);
+
+  const probe = useCallback(
+    async (modelId: string) => {
+      if (client === null) return;
+      awaitingProbe.current.delete(modelId);
+      const failure = await client.probe(modelId);
+      if (failure !== null && failure.kind !== 'notReady' && failure.kind !== 'cancelled') {
+        dispatch({
+          type: 'error',
+          modelId,
+          error: { kind: 'custom', detail: probeProblem(failure) },
+        });
+      }
+    },
+    [client],
+  );
 
   useEffect(() => {
     if (client === null) return undefined;
@@ -124,6 +173,9 @@ function useRoleSetup<T extends AnyModelInfo>(
       .onDownload((event) => {
         dispatch({ type: 'event', event, at: performance.now() });
         if (event.state !== 'progress' && event.state !== 'verifying') void refresh();
+        if (event.state === 'done' && awaitingProbe.current.has(event.modelId)) {
+          void probe(event.modelId);
+        }
       })
       .then(
         (stop) => {
@@ -137,14 +189,17 @@ function useRoleSetup<T extends AnyModelInfo>(
       current = false;
       unlisten?.();
     };
-  }, [client, refresh]);
+  }, [client, refresh, probe]);
 
   useEffect(() => {
     if (client === null) return undefined;
     const listeners = changeListeners.get(client) ?? new Set<(change: Change) => void>();
     changeListeners.set(client, listeners);
     const listener = (change: Change) => {
-      if (change.origin !== origin.current && models.some((model) => model.id === change.modelId)) {
+      if (
+        change.origin !== origin.current &&
+        (change.custom === true || models.some((model) => model.id === change.modelId))
+      ) {
         void refresh();
       }
     };
@@ -170,7 +225,7 @@ function useRoleSetup<T extends AnyModelInfo>(
       if (client === null || modelId === model.id || hasRunningJob(state)) return;
       dispatch({ type: 'error', modelId: model.id, error: null });
       await guard(model.id, async () => {
-        if (choice !== null) await choice.save(client, modelId);
+        await choice.save(client, modelId);
         dispatch({ type: 'selected', modelId });
       });
     },
@@ -207,14 +262,78 @@ function useRoleSetup<T extends AnyModelInfo>(
       dispatch({ type: 'note', note: null });
       await guard(modelId, async () => {
         dispatch({ type: 'status', status: await client.remove(modelId) });
-        announceChange(client, { origin: origin.current, modelId });
-        if (choice === null) return;
+        const custom = customs.some((entry) => entry.id === modelId);
+        announceChange(client, { origin: origin.current, modelId, custom });
+        if (custom) await refresh();
         const selectedId = await choice.load(client).catch(() => null);
         dispatch({ type: 'selected', modelId: selectedId ?? choice.defaultId });
       });
     },
-    [client, guard, model.id, choice],
+    [client, guard, model.id, choice, customs, refresh],
   );
+
+  const adopt = useCallback(
+    async (modelId: string) => {
+      if (client === null) return;
+      announceChange(client, { origin: origin.current, modelId, custom: true });
+      await refresh();
+      await choice.save(client, modelId);
+      dispatch({ type: 'selected', modelId });
+      dispatch({ type: 'error', modelId, error: null });
+      const current = await client.status(modelId);
+      if (current.state === 'ready') {
+        await probe(modelId);
+        return;
+      }
+      awaitingProbe.current.add(modelId);
+      dispatch({ type: 'started', modelId, presentBytes: current.downloadedBytes });
+      await client.startDownload(modelId);
+      await refresh();
+    },
+    [client, choice, probe, refresh],
+  );
+
+  const resolveLink = useCallback(
+    async (link: string): Promise<ResolvedLink | null> => {
+      if (client === null) return null;
+      dispatch({ type: 'error', modelId: model.id, error: null });
+      try {
+        return await client.resolveLink(link);
+      } catch (error) {
+        dispatch({ type: 'error', modelId: model.id, error: toDownloadError(error) });
+        return null;
+      }
+    },
+    [client, model.id],
+  );
+
+  const addLink = useCallback(
+    async (resolved: ResolvedLink, modelPath: string, projectorPath: string | null) => {
+      if (client === null) return;
+      await guard(model.id, async () => {
+        const modelId = await client.addLink(
+          role,
+          resolved.repo,
+          resolved.commit,
+          modelPath,
+          projectorPath,
+        );
+        await adopt(modelId);
+      });
+    },
+    [client, guard, model.id, role, adopt],
+  );
+
+  const importCustom = useCallback(async () => {
+    if (client === null) return;
+    dispatch({ type: 'error', modelId: model.id, error: null });
+    dispatch({ type: 'importing', importing: true });
+    await guard(model.id, async () => {
+      const modelId = await client.importCustom(role);
+      if (modelId !== null) await adopt(modelId);
+    });
+    dispatch({ type: 'importing', importing: false });
+  }, [client, guard, model.id, role, adopt]);
 
   const importFiles = useCallback(async () => {
     if (client === null) return;
@@ -250,6 +369,11 @@ function useRoleSetup<T extends AnyModelInfo>(
     cancel,
     remove,
     importFiles,
+    resolveLink,
+    addLink,
+    importCustom,
+    defaultId: choice.defaultId,
+    selectRecommended: () => select(choice.defaultId),
     refresh,
     verifyAgain,
     clearError: () => {
@@ -261,13 +385,13 @@ function useRoleSetup<T extends AnyModelInfo>(
 export type ModelSetup<T extends AnyModelInfo = ModelInfo> = ReturnType<typeof useRoleSetup<T>>;
 
 export function useModelSetup(client: ModelClient | null): ModelSetup {
-  return useRoleSetup(client, MODELS, TRANSCRIBER_CHOICE);
+  return useRoleSetup(client, MODELS, 'transcriber', TRANSCRIBER_CHOICE);
 }
 
 export function useCorrectorModelSetup(client: ModelClient | null): ModelSetup<CorrectorInfo> {
-  return useRoleSetup(client, CORRECTORS, null);
+  return useRoleSetup(client, CORRECTORS, 'corrector', CORRECTOR_CHOICE);
 }
 
 export function useReviewerModelSetup(client: ModelClient | null): ModelSetup<CorrectorInfo> {
-  return useRoleSetup(client, REVIEWERS, REVIEWER_CHOICE);
+  return useRoleSetup(client, REVIEWERS, 'corrector', REVIEWER_CHOICE);
 }

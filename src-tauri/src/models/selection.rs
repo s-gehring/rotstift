@@ -14,7 +14,42 @@ const SELECTION_FILE: &str = "selection.json";
 struct Selection {
     model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    corrector_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     reviewer_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    Transcriber,
+    Corrector,
+    Reviewer,
+}
+
+impl Slot {
+    const ALL: [Self; 3] = [Self::Transcriber, Self::Corrector, Self::Reviewer];
+
+    fn role(self) -> Role {
+        match self {
+            Self::Transcriber => Role::Transcriber,
+            Self::Corrector | Self::Reviewer => Role::Corrector,
+        }
+    }
+
+    fn default_id(self) -> &'static str {
+        match self {
+            Self::Transcriber => DEFAULT_MODEL_ID,
+            Self::Corrector | Self::Reviewer => DEFAULT_CORRECTOR_ID,
+        }
+    }
+
+    fn field(self, selection: &mut Selection) -> &mut Option<String> {
+        match self {
+            Self::Transcriber => &mut selection.model_id,
+            Self::Corrector => &mut selection.corrector_id,
+            Self::Reviewer => &mut selection.reviewer_id,
+        }
+    }
 }
 
 pub fn selection_path(models_dir: &Path) -> PathBuf {
@@ -29,19 +64,16 @@ fn read(path: &Path) -> Option<Selection> {
     serde_json::from_str(&text).ok()
 }
 
-fn chosen(id: Option<String>, role: Role) -> Option<String> {
-    manager::entry(&id?)
+pub fn load_slot(path: &Path, slot: Slot) -> Option<String> {
+    let id = slot.field(&mut read(path)?).take()?;
+    manager::entry(&id)
         .ok()
-        .filter(|entry| entry.role == role)
+        .filter(|entry| entry.role == slot.role())
         .map(|entry| entry.id.clone())
 }
 
 pub fn load(path: &Path) -> Option<String> {
-    chosen(read(path)?.model_id, Role::Transcriber)
-}
-
-pub fn load_reviewer(path: &Path) -> Option<String> {
-    chosen(read(path)?.reviewer_id, Role::Corrector)
+    load_slot(path, Slot::Transcriber)
 }
 
 fn write(path: &Path, selection: &Selection) -> Result<(), DownloadError> {
@@ -56,52 +88,29 @@ fn write(path: &Path, selection: &Selection) -> Result<(), DownloadError> {
     Ok(())
 }
 
-pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
-    if entry.role != Role::Transcriber {
+pub fn save_slot(path: &Path, slot: Slot, entry: &ModelEntry) -> Result<(), DownloadError> {
+    if entry.role != slot.role() {
         return Err(DownloadError::UnknownModel(entry.id.clone()));
     }
-    let reviewer_id = read(path).and_then(|selection| selection.reviewer_id);
-    write(
-        path,
-        &Selection {
-            model_id: Some(entry.id.clone()),
-            reviewer_id,
-        },
-    )
+    let mut selection = read(path).unwrap_or_default();
+    *slot.field(&mut selection) = Some(entry.id.clone());
+    write(path, &selection)
 }
 
-pub fn save_reviewer(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
-    if entry.role != Role::Corrector {
-        return Err(DownloadError::UnknownModel(entry.id.clone()));
-    }
-    let model_id = read(path).and_then(|selection| selection.model_id);
-    write(
-        path,
-        &Selection {
-            model_id,
-            reviewer_id: Some(entry.id.clone()),
-        },
-    )
+pub fn save(path: &Path, entry: &ModelEntry) -> Result<(), DownloadError> {
+    save_slot(path, Slot::Transcriber, entry)
 }
 
 pub fn forget(path: &Path, deleted: &ModelEntry) -> Result<(), DownloadError> {
-    match deleted.role {
-        Role::Transcriber => {
-            if load(path).as_deref() != Some(deleted.id.as_str()) || deleted.id == DEFAULT_MODEL_ID
-            {
-                return Ok(());
-            }
-            save(path, manager::entry(DEFAULT_MODEL_ID)?)
-        }
-        Role::Corrector => {
-            if load_reviewer(path).as_deref() != Some(deleted.id.as_str())
-                || deleted.id == DEFAULT_CORRECTOR_ID
-            {
-                return Ok(());
-            }
-            save_reviewer(path, manager::entry(DEFAULT_CORRECTOR_ID)?)
+    for slot in Slot::ALL {
+        if slot.role() == deleted.role
+            && deleted.id != slot.default_id()
+            && load_slot(path, slot).as_deref() == Some(deleted.id.as_str())
+        {
+            save_slot(path, slot, manager::entry(slot.default_id())?)?;
         }
     }
+    Ok(())
 }
 
 pub fn serves_model(status: &RuntimeStatus, entry: &ModelEntry) -> bool {
@@ -215,20 +224,29 @@ mod tests {
         let dir = temp_dir("reviewer");
         let path = selection_path(&dir.join("models"));
         let (first, second) = models();
-        assert_eq!(load_reviewer(&path), None);
+        assert_eq!(load_slot(&path, Slot::Reviewer), None);
 
-        save_reviewer(&path, corrector()).unwrap();
-        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        save_slot(&path, Slot::Reviewer, corrector()).unwrap();
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
         assert_eq!(load(&path), None);
 
         save(&path, second).unwrap();
         assert_eq!(load(&path), Some(second.id.clone()));
-        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
 
-        save_reviewer(&path, corrector()).unwrap();
+        save_slot(&path, Slot::Reviewer, corrector()).unwrap();
         assert_eq!(load(&path), Some(second.id.clone()));
         save(&path, first).unwrap();
-        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
     }
 
     #[test]
@@ -237,12 +255,12 @@ mod tests {
         let path = selection_path(&dir.join("models"));
         let (first, _) = models();
         assert_eq!(
-            save_reviewer(&path, first).unwrap_err(),
+            save_slot(&path, Slot::Reviewer, first).unwrap_err(),
             DownloadError::UnknownModel(first.id.clone())
         );
-        assert_eq!(load_reviewer(&path), None);
+        assert_eq!(load_slot(&path, Slot::Reviewer), None);
         std::fs::write(&path, format!(r#"{{"reviewerId":"{}"}}"#, first.id)).unwrap();
-        assert_eq!(load_reviewer(&path), None);
+        assert_eq!(load_slot(&path, Slot::Reviewer), None);
     }
 
     #[test]
@@ -252,7 +270,7 @@ mod tests {
         let (_, second) = models();
         std::fs::write(&path, format!(r#"{{"modelId":"{}"}}"#, second.id)).unwrap();
         assert_eq!(load(&path), Some(second.id.clone()));
-        assert_eq!(load_reviewer(&path), None);
+        assert_eq!(load_slot(&path, Slot::Reviewer), None);
     }
 
     #[test]
@@ -261,12 +279,43 @@ mod tests {
         let path = selection_path(&dir.join("models"));
         let (_, second) = models();
         save(&path, second).unwrap();
-        save_reviewer(&path, corrector()).unwrap();
+        save_slot(&path, Slot::Reviewer, corrector()).unwrap();
         forget(&path, second).unwrap();
         assert_eq!(load(&path), Some(DEFAULT_MODEL_ID.to_owned()));
-        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
         forget(&path, corrector()).unwrap();
-        assert_eq!(load_reviewer(&path), Some(DEFAULT_CORRECTOR_ID.to_owned()));
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
+    }
+
+    #[test]
+    fn each_step_keeps_its_own_text_model_until_that_model_is_deleted() {
+        let dir = temp_dir("corrector-slot");
+        let path = selection_path(&dir.join("models"));
+        let stronger = crate::models::manager::entry("gemma-4-e4b-q4").unwrap();
+        assert_eq!(load_slot(&path, Slot::Corrector), None);
+        save_slot(&path, Slot::Corrector, stronger).unwrap();
+        save_slot(&path, Slot::Reviewer, corrector()).unwrap();
+        assert_eq!(load_slot(&path, Slot::Corrector), Some(stronger.id.clone()));
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
+        save_slot(&path, Slot::Reviewer, stronger).unwrap();
+        forget(&path, stronger).unwrap();
+        assert_eq!(
+            load_slot(&path, Slot::Corrector),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
+        assert_eq!(
+            load_slot(&path, Slot::Reviewer),
+            Some(DEFAULT_CORRECTOR_ID.to_owned())
+        );
     }
 
     #[test]

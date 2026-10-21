@@ -699,7 +699,7 @@ async fn the_manager_tracks_status_through_download_cancel_and_delete() {
         stops.fetch_add(1, Ordering::Relaxed);
     };
     assert_eq!(
-        manager.delete(&dir, entry, stop).await,
+        manager.delete(&dir, entry, stop, |_| false).await,
         Err(DownloadError::Busy)
     );
     assert_eq!(stops.load(Ordering::Relaxed), 0);
@@ -718,7 +718,7 @@ async fn the_manager_tracks_status_through_download_cancel_and_delete() {
     std::fs::write(dir.join("p.gguf"), b"truncated").unwrap();
     assert_eq!(manager.status(&dir, entry).await.state, State::Corrupt);
 
-    manager.delete(&dir, entry, stop).await.unwrap();
+    manager.delete(&dir, entry, stop, |_| false).await.unwrap();
     assert_eq!(stops.load(Ordering::Relaxed), 1);
     let status = manager.status(&dir, entry).await;
     assert_eq!((status.state, status.downloaded_bytes), (State::Missing, 0));
@@ -1013,7 +1013,10 @@ async fn import_and_delete_report_their_own_status_while_running() {
         .await
         .unwrap();
     assert_eq!(observed.lock().unwrap().take(), Some(State::Importing));
-    manager.delete(&dir, entry, observe).await.unwrap();
+    manager
+        .delete(&dir, entry, observe, |_| false)
+        .await
+        .unwrap();
     assert_eq!(observed.lock().unwrap().take(), Some(State::Deleting));
     assert_eq!(manager.running_state("test-model"), None);
 }
@@ -1065,9 +1068,14 @@ async fn two_models_are_installed_side_by_side_and_managed_separately() {
     assert!(!manager.has_jobs());
     let during = Mutex::new(None);
     manager
-        .delete(&dir, first, || {
-            *during.lock().unwrap() = Some(manager.has_jobs());
-        })
+        .delete(
+            &dir,
+            first,
+            || {
+                *during.lock().unwrap() = Some(manager.has_jobs());
+            },
+            |_| false,
+        )
         .await
         .unwrap();
     assert_eq!(during.lock().unwrap().take(), Some(true));
@@ -1080,9 +1088,15 @@ async fn two_models_are_installed_side_by_side_and_managed_separately() {
 
     let observed = Mutex::new(None);
     manager
-        .delete(&dir, second, || {
-            *observed.lock().unwrap() = Some((manager.is_busy("second"), manager.is_busy("first")));
-        })
+        .delete(
+            &dir,
+            second,
+            || {
+                *observed.lock().unwrap() =
+                    Some((manager.is_busy("second"), manager.is_busy("first")));
+            },
+            |_| false,
+        )
         .await
         .unwrap();
     assert_eq!(observed.lock().unwrap().take(), Some((true, false)));

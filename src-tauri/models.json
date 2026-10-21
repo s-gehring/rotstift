@@ -1,4 +1,8 @@
 {
+  "customTemplates": {
+    "transcriber": "qwen3-vl-4b-q4",
+    "corrector": "gemma-4-e2b-q4"
+  },
   "models": [
     {
       "id": "glm-ocr-q8",
@@ -84,6 +88,35 @@
           "url": "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/6938c58e698502037401a5f19f6905f2fb2f7dee/gemma-4-E2B-it-Q4_0.gguf",
           "sha256": "8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52",
           "bytes": 2841481184
+        }
+      },
+      "server": {
+        "contextSize": 4096,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": false,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0
+      },
+      "lineMode": "numbered",
+      "system": "Du korrigierst die Fehler in einer Schülerarbeit. Fach: {subject}. Der Text ist auf {language} geschrieben.\nDie Eingabe besteht aus nummerierten Zeilen. Gib genau dieselben Zeilen mit derselben Nummerierung aus, in denen die Fehler behoben sind: {kinds}.\nÄndere sonst nichts: keine Umformulierung, keine Stiländerung, keine neuen Sätze. Zeilen ohne Fehler bleiben unverändert. Beachte die Regeln der Sprache des Textes, auch Akzente und Satzzeichen. Fachwörter, Namen und Zitate bleiben unverändert. Gib nur die Zeilen aus, ohne Erklärung.",
+      "prompt": "{text}"
+    },
+    {
+      "id": "gemma-4-e4b-q4",
+      "role": "corrector",
+      "displayName": "Gemma 4 E4B it (Q4_0)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 16,
+      "files": {
+        "model": {
+          "name": "gemma-4-E4B-it-Q4_0.gguf",
+          "url": "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/a69f018d7678a2b9f5e705f8903d6fb29b9b25dc/gemma-4-E4B-it-Q4_0.gguf",
+          "sha256": "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2",
+          "bytes": 4590807392
         }
       },
       "server": {
