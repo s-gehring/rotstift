@@ -129,7 +129,9 @@ Die Zeit ist unter Last anderer Sessions gemessen (Lastmittel um 19, fremde `lla
 | ----------- | -------------------- | ---------------------- |
 | keine       | 14,33                | 3,22                   |
 | vorher      | 12,25                | 1,14                   |
-| nachher     | KORR_MARKS           | KORR_STRUCK            |
+| nachher     | 12,09                | 1,18                   |
+
+Die Fehlalarme durch Gestrichenes bleiben praktisch gleich (49 statt 47 Marken auf 32 Seiten, eine Seite fiel vorher aus), weil fast genauso viele gestrichene Wörter unerkannt bleiben wie vorher. Was die Strichsuche überhaupt findet, halbiert diese Fehlalarme gegenüber keiner Strichsuche. Der Gewinn der zweiten Fassung liegt bei den fälschlich gestrichenen Wörtern, die vorher still ihre Fehlermarken verloren.
 
 ### Was sich geändert hat
 
