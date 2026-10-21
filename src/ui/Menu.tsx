@@ -328,6 +328,7 @@ export interface MenuProps {
   readonly disabled?: boolean;
   readonly variant?: ButtonVariant;
   readonly icon?: IconName;
+  readonly tooltip?: 'bottom' | 'none';
   readonly children?: ReactNode;
   readonly className?: string;
 }
@@ -339,6 +340,7 @@ export function Menu({
   disabled = false,
   variant = 'secondary',
   icon = 'more',
+  tooltip = 'bottom',
   children,
   className,
 }: MenuProps) {
@@ -350,7 +352,7 @@ export function Menu({
           label={label}
           icon={icon}
           disabled={disabled}
-          tooltip={popup.open ? 'none' : 'bottom'}
+          tooltip={popup.open ? 'none' : tooltip}
           {...popup.triggerProps}
         />
       ) : (

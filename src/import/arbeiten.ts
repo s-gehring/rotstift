@@ -23,6 +23,7 @@ export type ArbeitenAction =
       readonly toIndex: number;
     }
   | { readonly type: 'split'; readonly pageId: string; readonly newArbeitId: string }
+  | { readonly type: 'split-from'; readonly pageId: string; readonly newArbeitId: string }
   | { readonly type: 'merge'; readonly ids: readonly string[] }
   | { readonly type: 'clear' };
 
@@ -107,6 +108,27 @@ function split(
   });
 }
 
+function splitFrom(
+  arbeiten: readonly Arbeit[],
+  pageId: string,
+  newArbeitId: string,
+): readonly Arbeit[] {
+  const source = findPage(arbeiten, pageId);
+  if (source === undefined || source.index === 0) return arbeiten;
+  const { arbeit, index } = source;
+  return arbeiten.flatMap((candidate): Arbeit[] => {
+    if (candidate.id !== arbeit.id) return [candidate];
+    return [
+      { ...arbeit, pages: arbeit.pages.slice(0, index) },
+      {
+        id: newArbeitId,
+        name: `${arbeit.name} (ab Seite ${index + 1})`,
+        pages: arbeit.pages.slice(index),
+      },
+    ];
+  });
+}
+
 function merge(arbeiten: readonly Arbeit[], ids: readonly string[]): readonly Arbeit[] {
   const selected = arbeiten.filter((arbeit) => ids.includes(arbeit.id));
   const [first] = selected;
@@ -116,6 +138,41 @@ function merge(arbeiten: readonly Arbeit[], ids: readonly string[]): readonly Ar
     if (arbeit.id === first.id) return [{ ...first, pages }];
     return selected.includes(arbeit) ? [] : [arbeit];
   });
+}
+
+export function restoreArbeiten(
+  current: readonly Arbeit[],
+  snapshot: readonly Arbeit[],
+): readonly Arbeit[] {
+  let result = [...current];
+  for (const [snapshotIndex, original] of snapshot.entries()) {
+    const present = new Set(result.flatMap((arbeit) => arbeit.pages.map((page) => page.id)));
+    const existing = result.findIndex((arbeit) => arbeit.id === original.id);
+    if (existing < 0) {
+      const pages = original.pages.filter((page) => !present.has(page.id));
+      if (pages.length === 0) continue;
+      const before = snapshot
+        .slice(0, snapshotIndex)
+        .map((arbeit) => result.findIndex((candidate) => candidate.id === arbeit.id))
+        .filter((position) => position >= 0);
+      const at = before.length === 0 ? 0 : Math.max(...before) + 1;
+      result = [...result.slice(0, at), { ...original, pages }, ...result.slice(at)];
+      continue;
+    }
+    const target = result[existing];
+    if (target === undefined) continue;
+    const pages = [...target.pages];
+    for (const [pageIndex, page] of original.pages.entries()) {
+      if (present.has(page.id)) continue;
+      const anchors = original.pages
+        .slice(0, pageIndex)
+        .map((earlier) => pages.findIndex((candidate) => candidate.id === earlier.id))
+        .filter((position) => position >= 0);
+      pages.splice(anchors.length === 0 ? 0 : Math.max(...anchors) + 1, 0, page);
+    }
+    if (pages.length !== target.pages.length) result[existing] = { ...target, pages };
+  }
+  return result;
 }
 
 export function arbeitenReducer(
@@ -148,6 +205,8 @@ export function arbeitenReducer(
       return place(arbeiten, action.pageId, action.arbeitId, action.toIndex);
     case 'split':
       return split(arbeiten, action.pageId, action.newArbeitId);
+    case 'split-from':
+      return splitFrom(arbeiten, action.pageId, action.newArbeitId);
     case 'merge':
       return merge(arbeiten, action.ids);
     case 'clear':

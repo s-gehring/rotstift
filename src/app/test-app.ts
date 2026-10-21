@@ -104,8 +104,7 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
     dispatch: noop,
     addFiles: noop,
     busy: false,
-    notices: [],
-    dismissNotices: noop,
+    undo: noop,
     ...parts.importState,
   };
   const transcriber = testModelSetup(recommendModel());

@@ -90,8 +90,11 @@ function useNavigation(arbeiten: AppModel['importState']['arbeiten']): Navigatio
 }
 
 export function useAppModel(): AppModel {
-  const importState = useImportPages();
   const toasts = useToast();
+  const { show: showToast } = toasts;
+  const importState = useImportPages({
+    onProblem: (text) => showToast(text, { tone: 'error' }),
+  });
   const transcriberSetup = useModelSetup(modelClient);
   const { model } = transcriberSetup;
   const modelState = transcriberSetup.status?.state;

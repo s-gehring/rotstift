@@ -282,29 +282,6 @@ thead th {
   pointer-events: none;
 }
 
-.klasse-view-tools {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-2);
-}
-
-.import-header,
-.list-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.list-header {
-  justify-content: space-between;
-  margin-top: var(--space-4);
-}
-
-.list-header p {
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
 .lock-area {
   min-width: 0;
   margin: 0;
@@ -312,33 +289,6 @@ thead th {
   border: none;
 }
 
-.empty {
-  margin: var(--space-5) 0;
-  padding: var(--space-6) var(--space-4);
-  border: 2px dashed var(--color-border-strong);
-  border-radius: calc(var(--radius) * 2);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.errors {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-red);
-  border-radius: var(--radius);
-  background: var(--color-red-soft);
-}
-
-.errors ul {
-  margin: 0;
-  padding-left: var(--space-4);
-}
-
-.arbeit-list,
 .arbeit-results {
   display: flex;
   flex-direction: column;
@@ -348,14 +298,6 @@ thead th {
   list-style: none;
 }
 
-.arbeit {
-  padding: var(--space-3) var(--space-4) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-surface);
-}
-
-.arbeit-header,
 .arbeit-result-head {
   display: flex;
   flex-wrap: wrap;
@@ -363,51 +305,6 @@ thead th {
   gap: var(--space-2) var(--space-3);
 }
 
-.arbeit-header .arbeit-name {
-  flex: 1;
-  min-width: 160px;
-  border-color: transparent;
-  background: transparent;
-  font-weight: 600;
-}
-
-.arbeit-header .arbeit-name:hover {
-  border-color: var(--color-border);
-}
-
-.page-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: var(--space-3);
-  margin: var(--space-3) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.page-card {
-  padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-raised);
-  cursor: grab;
-}
-
-.page-card.is-dragging {
-  opacity: 0.4;
-}
-
-.page-card.is-drop-target {
-  outline: 2px solid var(--color-focus);
-}
-
-.page-stage {
-  position: relative;
-  width: 160px;
-  height: 160px;
-  margin: 0 auto;
-}
-
-.page-stage img,
 .result-stage img {
   position: absolute;
   top: 50%;
@@ -423,22 +320,6 @@ thead th {
   font-size: var(--font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.page-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-1);
-}
-
-.page-actions button {
-  flex: 1;
-  padding: 0;
-}
-
-.page-move {
-  width: 100%;
-  margin-top: var(--space-2);
 }
 
 .results {
