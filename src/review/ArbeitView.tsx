@@ -80,7 +80,7 @@ interface Confirm {
 }
 
 function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
-  const { work, run } = useApp();
+  const { work, run, subject } = useApp();
   const display = useDisplay();
   const review = work.review.state;
   const entries = work.count.state.entries;
@@ -126,11 +126,11 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
   const retryHint = run.running ? AFTER_RUN : canRetry ? null : NO_MODEL;
 
   const recognize = (page: ImportPage) => {
-    if (corrected) void work.review.flow.retry(page, { recognize: true });
+    if (corrected) void work.review.flow.retry(page, { recognize: true, scope: subject.scope });
     else work.count.runner.retry(page.id);
   };
   const retry = (page: ImportPage) => {
-    if (corrected) void work.review.flow.retry(page);
+    if (corrected) void work.review.flow.retry(page, { scope: subject.scope });
     else work.count.runner.retry(page.id);
   };
 

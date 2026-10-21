@@ -47,9 +47,9 @@ export function createPreviewCorrector(options: PreviewOptions = {}): Corrector 
   const { delayMs = 700 } = options;
   const fake = createFakeCorrector(previewCorrection);
   return {
-    async correct(lines, profile, signal): Promise<CorrectResult> {
+    async correct(lines, profile, signal, scope): Promise<CorrectResult> {
       if (!(await wait(delayMs, signal))) return { ok: false, error: { kind: 'cancelled' } };
-      return fake.correct(lines, profile, signal);
+      return fake.correct(lines, profile, signal, scope);
     },
   };
 }

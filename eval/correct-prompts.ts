@@ -2,11 +2,32 @@ import { buildSpecification } from '../src/annotations/prompt-spec.ts';
 import { formatIssues } from '../src/annotations/parse.ts';
 import type { ParseIssue } from '../src/annotations/parse.ts';
 import type { CorrectionProfile } from '../src/annotations/profile.ts';
+import { assignmentSection } from '../src/correction/llm-corrector.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from '../src/correction/scope.ts';
 import { serializeTranscript } from '../src/annotations/serialize.ts';
 import type { ChatMessage } from '../src/llm/types.ts';
 import type { Mark, Transcript, TranscriptLine } from '../src/annotations/transcript.ts';
 
 export type { ChatMessage } from '../src/llm/types.ts';
+
+export const SCOPE_CHOICES = ['all', 'spelling', 'grammar'] as const;
+
+export function scopeFromArgs(kinds = 'all', assignment = ''): CorrectionScope {
+  if (!SCOPE_CHOICES.some((choice) => choice === kinds)) {
+    throw new Error(`Unknown scope ${kinds}, use one of ${SCOPE_CHOICES.join(', ')}`);
+  }
+  return {
+    ...DEFAULT_SCOPE,
+    spelling: kinds !== 'grammar',
+    grammar: kinds !== 'spelling',
+    assignment,
+  };
+}
+
+export function withAssignment(system: string, scope: CorrectionScope): string {
+  const section = assignmentSection(scope);
+  return section === '' ? system : `${system}\n\n${section}`;
+}
 
 export const PROMPT_VARIANTS = ['spec', 'extended'] as const;
 export type PromptVariant = (typeof PROMPT_VARIANTS)[number];
@@ -70,8 +91,9 @@ export function buildMessages(
   variant: PromptVariant,
   profile: CorrectionProfile,
   input: Transcript,
+  scope: CorrectionScope = DEFAULT_SCOPE,
 ): ChatMessage[] {
-  const specification = buildSpecification(profile);
+  const specification = withAssignment(buildSpecification(profile, scope), scope);
   const user: ChatMessage = { role: 'user', content: serializeTranscript(input) };
   if (variant === 'spec') {
     return [{ role: 'system', content: specification }, user];

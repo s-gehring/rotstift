@@ -3,9 +3,12 @@ import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import { LlmCallError } from '../llm/client.ts';
 import type { ChatOptions, Completion } from '../llm/client.ts';
 import type { ChatRequest, LlmError } from '../llm/types.ts';
+import { DEFAULT_SCOPE } from './scope.ts';
 import {
+  assignmentSection,
   cleanAnswer,
   createLlmCorrector,
+  describeKinds,
   numberLines,
   readNumberedLines,
   renderPrompt,
@@ -45,6 +48,32 @@ describe('renderPrompt', () => {
   });
 });
 
+describe('describeKinds', () => {
+  it('names the requested kinds', () => {
+    expect(describeKinds({ ...DEFAULT_SCOPE, grammar: false })).toBe(
+      'Rechtschreibung (auch Groß- und Kleinschreibung und Getrennt- und Zusammenschreibung) und Zeichensetzung (fehlende oder falsche Kommas und andere Satzzeichen)',
+    );
+    expect(describeKinds({ ...DEFAULT_SCOPE, spelling: false })).toBe(
+      'Grammatik (Fall, Zahl, Artikel, Verbform)',
+    );
+  });
+});
+
+describe('assignmentSection', () => {
+  it('is empty without an assignment', () => {
+    expect(assignmentSection(DEFAULT_SCOPE)).toBe('');
+    expect(assignmentSection({ ...DEFAULT_SCOPE, assignment: ' \n\u0000 ' })).toBe('');
+  });
+
+  it('leaves out the spelling reminder when spelling is not asked for', () => {
+    const scope = { ...DEFAULT_SCOPE, assignment: 'Brief' };
+    expect(assignmentSection(scope)).toContain('Falsch geschriebene Wörter');
+    expect(assignmentSection({ ...scope, grammar: true, spelling: false })).not.toContain(
+      'Falsch geschriebene Wörter',
+    );
+  });
+});
+
 describe('cleanAnswer', () => {
   it('removes code fences and thinking blocks', () => {
     expect(cleanAnswer('```text\nHallo Welt\n```')).toBe('Hallo Welt');
@@ -57,6 +86,33 @@ describe('cleanAnswer', () => {
 });
 
 describe('createLlmCorrector', () => {
+  it('appends the assignment after filling the placeholders', async () => {
+    const { client, complete } = clientReturning('x');
+    const corrector = createLlmCorrector({
+      client,
+      config: { ...config, system: 'System {subject}: {kinds}.' },
+    });
+    await corrector.correct(['x'], DEUTSCH, signal(), {
+      ...DEFAULT_SCOPE,
+      spelling: false,
+      assignment: 'Nutze {text} und {subject}',
+    });
+    const system = complete.mock.calls[0]?.[0].messages[0]?.content;
+    expect(system).toMatch(/^System Deutsch: Grammatik \(Fall, Zahl, Artikel, Verbform\)\.\n\n/u);
+    expect(system).toContain('<aufgabe>\nNutze {text} und {subject}\n</aufgabe>');
+  });
+
+  it('sends the assignment as system message when the model has no system prompt', async () => {
+    const { client, complete } = clientReturning('x');
+    await createLlmCorrector({ client, config }).correct(['x'], DEUTSCH, signal(), {
+      ...DEFAULT_SCOPE,
+      assignment: 'Brief',
+    });
+    const messages = complete.mock.calls[0]?.[0].messages ?? [];
+    expect(messages.map((message) => message.role)).toEqual(['system', 'user']);
+    expect(messages[0]?.content).toContain('<aufgabe>\nBrief\n</aufgabe>');
+  });
+
   it('sends the rendered prompt with the configured limits', async () => {
     const { client, complete } = clientReturning('Hallo Welt.');
     const corrector = createLlmCorrector({ client, config });

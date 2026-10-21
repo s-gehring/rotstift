@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILT_IN_PROFILES } from '../annotations/profile.ts';
+import { useCorrectionScope } from '../correction/use-correction-scope.ts';
 import { useCorrector } from '../correction/use-corrector.ts';
 import { useProfileChoice } from '../correction/use-profile-choice.ts';
 import { flattenPages } from '../import/arbeiten.ts';
@@ -119,6 +120,7 @@ export function useAppModel(): AppModel {
     [transcriberPhase, correctorPhase],
   );
   const { profile, select: selectProfile } = useProfileChoice();
+  const { scope, setScope } = useCorrectionScope(importState.arbeiten.length > 0);
   const weighting = useWeighting();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
   const review = useReview(count.runner, pages, corrector);
@@ -164,7 +166,7 @@ export function useAppModel(): AppModel {
   const launch = (wanted: RunKind) => {
     cancelled.current = false;
     if (wanted === 'count') count.runner.start();
-    else void review.flow.start(pages, profile);
+    else void review.flow.start(pages, profile, scope);
   };
 
   const start = (wanted: RunKind = kind) => {
@@ -267,7 +269,7 @@ export function useAppModel(): AppModel {
       start,
       cancel,
     },
-    subject: { profile, profiles: BUILT_IN_PROFILES, select: selectProfile },
+    subject: { profile, profiles: BUILT_IN_PROFILES, select: selectProfile, scope, setScope },
     weighting,
     work: {
       count,

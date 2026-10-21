@@ -1,4 +1,5 @@
 import { DEUTSCH, BUILT_IN_PROFILES } from '../annotations/profile.ts';
+import { DEFAULT_SCOPE } from '../correction/scope.ts';
 import { flattenPages } from '../import/arbeiten.ts';
 import { CORRECTORS, MODELS, recommendModel, type AnyModelInfo } from '../models/registry.ts';
 import { INITIAL_SETUP } from '../models/setup-state.ts';
@@ -142,7 +143,14 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       cancel: noop,
       ...parts.run,
     },
-    subject: { profile: DEUTSCH, profiles: BUILT_IN_PROFILES, select: noop, ...parts.subject },
+    subject: {
+      profile: DEUTSCH,
+      profiles: BUILT_IN_PROFILES,
+      select: noop,
+      scope: DEFAULT_SCOPE,
+      setScope: noop,
+      ...parts.subject,
+    },
     weighting: parts.weighting ?? fixedWeighting(),
     work: parts.work ?? testWork(),
     models: {

@@ -194,3 +194,19 @@ export function hintsText(count: number): string {
     ? '1 Stelle unsicher gelesen'
     : `${count.toLocaleString('de-DE')} Stellen unsicher gelesen`;
 }
+
+export function requestedTypes(
+  arbeiten: readonly Arbeit[],
+  review: ReviewState,
+): readonly string[] {
+  const { profile } = review;
+  if (profile === null) return [];
+  const requested = new Set<string>();
+  for (const page of arbeiten.flatMap((arbeit) => arbeit.pages)) {
+    const result = review.pages[page.id]?.result;
+    if (result != null)
+      for (const code of result.requested ?? profile.allowedTypes) requested.add(code);
+  }
+  if (requested.size === 0) return profile.allowedTypes;
+  return profile.allowedTypes.filter((code) => requested.has(code));
+}

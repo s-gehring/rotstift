@@ -98,7 +98,7 @@
         "temperature": 0
       },
       "lineMode": "numbered",
-      "system": "Du korrigierst die Fehler in einer Schülerarbeit. Fach: {subject}. Der Text ist auf {language} geschrieben.\nDie Eingabe besteht aus nummerierten Zeilen. Gib genau dieselben Zeilen mit derselben Nummerierung aus, in denen die Fehler behoben sind: Rechtschreibung (auch Groß- und Kleinschreibung und Getrennt- und Zusammenschreibung), Zeichensetzung (fehlende oder falsche Kommas und andere Satzzeichen) und Grammatik (Fall, Zahl, Artikel, Verbform).\nÄndere sonst nichts: keine Umformulierung, keine Stiländerung, keine neuen Sätze. Zeilen ohne Fehler bleiben unverändert. Beachte die Regeln der Sprache des Textes, auch Akzente und Satzzeichen. Fachwörter, Namen und Zitate bleiben unverändert. Gib nur die Zeilen aus, ohne Erklärung.",
+      "system": "Du korrigierst die Fehler in einer Schülerarbeit. Fach: {subject}. Der Text ist auf {language} geschrieben.\nDie Eingabe besteht aus nummerierten Zeilen. Gib genau dieselben Zeilen mit derselben Nummerierung aus, in denen die Fehler behoben sind: {kinds}.\nÄndere sonst nichts: keine Umformulierung, keine Stiländerung, keine neuen Sätze. Zeilen ohne Fehler bleiben unverändert. Beachte die Regeln der Sprache des Textes, auch Akzente und Satzzeichen. Fachwörter, Namen und Zitate bleiben unverändert. Gib nur die Zeilen aus, ohne Erklärung.",
       "prompt": "{text}"
     }
   ]
