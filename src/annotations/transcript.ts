@@ -36,14 +36,58 @@ export const markSchema = z
     }
   });
 
+export const struckSchema = z.object({
+  offset: z.int().min(0),
+  text: z.string().min(1, 'Gestrichener Text darf nicht leer sein.'),
+});
+
+function overlapsStruck(mark: Mark, struck: readonly Struck[]): boolean {
+  const end = mark.offset + mark.original.length;
+  return struck.some((span) => {
+    const spanEnd = span.offset + span.text.length;
+    return mark.kind === 'omission'
+      ? mark.offset > span.offset && mark.offset < spanEnd
+      : mark.offset < spanEnd && end > span.offset;
+  });
+}
+
 export const lineSchema = z
   .object({
     number: z.int().min(1),
     bbox: bboxSchema.optional(),
     text: z.string(),
     marks: z.array(markSchema),
+    struck: z.array(struckSchema).optional(),
   })
   .superRefine((line, ctx) => {
+    const struck = line.struck ?? [];
+    let struckEnd = 0;
+    struck.forEach((span, index) => {
+      const end = span.offset + span.text.length;
+      if (end > line.text.length || line.text.slice(span.offset, end) !== span.text) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['struck', index],
+          message: `Der gestrichene Text „${clip(span.text)}“ liegt nicht an Position ${span.offset} der Zeile.`,
+        });
+      } else if (span.offset < struckEnd) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['struck', index],
+          message: `Der gestrichene Text bei Position ${span.offset} überlappt den vorherigen.`,
+        });
+      }
+      struckEnd = Math.max(struckEnd, end);
+    });
+    line.marks.forEach((mark, index) => {
+      if (overlapsStruck(mark, struck)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['marks', index],
+          message: `Die Markierung „${clip(mark.original || mark.correction)}“ liegt in gestrichenem Text.`,
+        });
+      }
+    });
     let previousEnd = 0;
     line.marks.forEach((mark, index) => {
       const end = mark.offset + mark.original.length;
@@ -81,6 +125,7 @@ export const transcriptSchema = z
 
 export type Bbox = z.infer<typeof bboxSchema>;
 export type Mark = z.infer<typeof markSchema>;
+export type Struck = z.infer<typeof struckSchema>;
 export type TranscriptLine = z.infer<typeof lineSchema>;
 export type Transcript = z.infer<typeof transcriptSchema>;
 

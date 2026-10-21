@@ -1,5 +1,6 @@
 import { decodeImage } from './decode.ts';
 import { locateLines } from './locate-lines.ts';
+import { findStruckWords } from './strike.ts';
 import type { LayoutRequest, LayoutResponse } from './protocol.ts';
 
 interface WorkerScope {
@@ -13,7 +14,7 @@ function isWorkerScope(value: unknown): value is WorkerScope {
 
 function serve(scope: WorkerScope): void {
   scope.addEventListener('message', (event) => {
-    const { id, image, lines } = event.data;
+    const { id, image, lines, task } = event.data;
     const pixels =
       image.kind === 'blob'
         ? decodeImage(image.blob)
@@ -24,7 +25,11 @@ function serve(scope: WorkerScope): void {
           });
     pixels
       .then((decoded) => {
-        scope.postMessage({ id, ok: true, result: locateLines(decoded, lines) }, []);
+        if (task === 'struck') {
+          scope.postMessage({ id, ok: true, struck: findStruckWords(decoded, lines) }, []);
+        } else {
+          scope.postMessage({ id, ok: true, result: locateLines(decoded, lines) }, []);
+        }
       })
       .catch((error: unknown) => {
         scope.postMessage(

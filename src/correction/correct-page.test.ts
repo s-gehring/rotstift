@@ -103,4 +103,36 @@ describe('correctPage', () => {
     if (!result.ok) throw new Error('expected success');
     expect(result.transcript.lines[0]?.marks.length).toBeGreaterThan(1);
   });
+
+  it('hides struck words from the corrector, keeps them in the text and does not count them', async () => {
+    const corrector = createFakeCorrector(
+      'Wir sind früh losgefahren, weil mein Bruder\ndie Rutsche ausprobieren wollte.',
+    );
+    const result = await correctPage({
+      lines: [
+        'Wir sind ~~spät~~ früh losgefahren weil mein ~~Brder~~ Bruder',
+        'die Rutche ausprobieren ~~wolte~~ wollte.',
+      ],
+      profile: DEUTSCH,
+      corrector,
+    });
+    expect(corrector.calls[0]?.lines).toEqual([
+      'Wir sind früh losgefahren weil mein Bruder',
+      'die Rutche ausprobieren wollte.',
+    ]);
+    if (!result.ok) throw new Error('expected success');
+    const [first, second] = result.transcript.lines;
+    expect(first).toMatchObject({
+      text: 'Wir sind spät früh losgefahren weil mein Brder Bruder',
+      struck: [
+        { offset: 9, text: 'spät' },
+        { offset: 41, text: 'Brder' },
+      ],
+      marks: [{ kind: 'omission', correction: ',', offset: 30 }],
+    });
+    expect(second?.marks).toMatchObject([{ original: 'Rutche', correction: 'Rutsche', offset: 4 }]);
+    expect(result.statistics.words).toBe(11);
+    const reparsed = parseTranscript(serializeTranscript(result.transcript), { profile: DEUTSCH });
+    expect(reparsed).toEqual({ ok: true, transcript: result.transcript });
+  });
 });

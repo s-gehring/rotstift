@@ -107,6 +107,21 @@ node --experimental-transform-types eval/ocr-threshold.ts --scans ~/Rotstift-Tes
 
 Der Befehl verkleinert die Seiten je Modell auf `imageMaxEdge` (mit `eval/.venv`, siehe oben), erkennt sie mit Lesesicherheit, korrigiert sie mit Gemma wie in der App und schreibt nach `~/.cache/rotstift/eval/eigene-schrift/` (`--out` ändert das) die Zwischenstände und `bericht.md`: Lesefehler, Kalibrierung und je Schwelle Recall der roten Marken, Recall mit Hinweisen, Hinweise und Fehlalarme je 100 Wörter, dazu die Schwelle nach der Regel und den Wert aus der Registry. Ein abgebrochener Lauf setzt beim nächsten Aufruf fort. `--threads` (Standard 8) und `--thresholds` lassen sich ändern.
 
+## Durchgestrichenes
+
+Misst, wie viele durchgestrichene Wörter erkannt werden, wie viele normale Wörter fälschlich als gestrichen gelten und wie sich das auf die Wortzahl auswirkt. Der Bericht steht in [docs/evaluations/2026-10-durchgestrichen.md](../docs/evaluations/2026-10-durchgestrichen.md).
+
+```bash
+eval/.venv/bin/python -I eval/samples/render.py --strike 4 --out <Ordner>
+eval/.venv/bin/python -I eval/resize-pages.py <Ordner> <Ordner-1152> --max-edge 1152
+node --experimental-transform-types eval/ocr-run.ts --model glm-ocr-q8 --images <Ordner-1152> --out <Ergebnisse>/strike.json
+node --experimental-transform-types eval/strike.ts --ocr <Ergebnisse>/strike.json --images <Ordner-1152> --truth <Ordner> --method ink
+```
+
+- `render.py --strike N` fügt je Seite N gestrichene Wörter in den Text ein (ein falsch geschriebenes Folgewort oder ein Wort aus dem Text) und streicht sie abwechselnd mit einem Strich, zwei Strichen oder Gekritzel. Die `.txt` neben dem Bild enthält sie als `~~Wort~~`, die `.strikes.json` ihre Boxen. Ohne `--strike` bleiben die Bilder wie bisher.
+- `ocr-run.ts --prompt <Text>` ersetzt den Prompt der Registry, etwa um eine Markierung wie `<del>` zu verlangen.
+- `strike.ts` vergleicht das Ergebnis mit der Wahrheit (`--truth` mit `.txt` je Seite, auch ein ScaDS-Ordner `ground_truth`, der kein Gestrichenes enthält). `--method none` wertet das Transkript, wie es ist, `prompt` liest `<del>`, `<s>`, `<strike>` und `~~` im Transkript als gestrichen, `ink` sucht die Striche mit `findStruckWords` aus der App im Bild, `both` vereint beides. Ausgabe: Gestrichene Wörter (erkannt, ungekennzeichnet abgeschrieben, ausgelassen), Fehlalarme, Wortzahl gegen die Wahrheit, Wortfehlerrate ohne Gestrichenes und Zeit je Seite. `--verbose` zeigt jede Seite.
+
 ## Korrekturprofile (Fremdsprachen und Sachfach)
 
 Misst die App-Kette ab dem Text für ein Profil: Prompt aus der Registry, `createLlmCorrector`, `correctPage`, `deriveMarks`. Der Bericht steht in [docs/evaluations/2026-10-profile.md](../docs/evaluations/2026-10-profile.md).

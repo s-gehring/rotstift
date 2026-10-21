@@ -17,7 +17,7 @@ Version 0.2 zählt die Wörter handschriftlicher Texte und berichtigt sie als Vo
 - **„Berichtigen“ (Vorschau):** Nach Wahl eines Korrekturprofils (derzeit Deutsch, Englisch, Französisch, Spanisch und „Sachfach“ für alle Fächer, in denen nur die deutsche Sprachrichtigkeit korrigiert wird) erkennt Rotstift alle Seiten, korrigiert den Text mit einem zweiten lokalen Modell (Gemma 4 E2B) und schreibt die Korrekturzeichen aus [ADR 0002](docs/adr/0002-korrekturschema.md) wie mit rotem Fineliner auf das Original: Unterstreichung, Verbesserung darüber, Fehlerzeichen (etwa R, Z, G, A) am Rand. Dazu kommen eine Fehlerliste je Seite, eine Statistik je Arbeit und für die Klasse sowie „Als PDF speichern“ und „Klassen-PDF mit Korrekturen speichern“.
 - **„Unsicher gelesen“:** Wo die Texterkennung selbst unsicher war, setzt Rotstift keine rote Marke, sondern unterstreicht die Stelle in der Prüfansicht grau gepunktet. Antippen zeigt den Vorschlag, die Lehrkraft übernimmt ihn als Fehler oder verwirft ihn. Solche Stellen fehlen in Statistik und PDF, solange sie nicht übernommen sind.
 
-Genauigkeit der Wortzahl: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag sie im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Durchgestrichenes behandelt Rotstift noch nicht gesondert.
+Genauigkeit der Wortzahl: Auf echter deutscher Handschrift (ScaDS.AI-Datensatz) lag sie im Mittel rund 2 % neben dem richtigen Wert, auf einzelnen Seiten bis 8 %. Die Zahl ist ein guter Richtwert, für eine exakte Zählung den erkannten Text kurz gegenlesen. Mit einem oder zwei Strichen durchgestrichene Wörter erkennt Rotstift an der Tinte, zählt sie nicht mit und korrigiert sie nicht. Im erkannten Text stehen sie als `~~Wort~~`, so lässt sich eine Streichung auch von Hand setzen oder entfernen. Etwa die Hälfte der gestrichenen Wörter wird so erkannt, Gekritzel und Überschreibungen meist nicht ([Messung](docs/evaluations/2026-10-durchgestrichen.md)).
 
 Genauigkeit der Berichtigung: Auf selbst geschriebenen, getippten Schülertexten findet die Korrektur 86 % der Fehler, 97 % der Markierungen stimmen ([Messung](docs/evaluations/2026-10-fehlermarkierung.md)). Auf Handschrift kommen Lesefehler der Texterkennung hinzu. Auf fehlerfreien Seiten bleiben dank der Lesesicherheit rund 1 bis 2 rote Fehlalarme je 100 Wörter, dazu etwa 10 Stellen „unsicher gelesen“ ([Messung](docs/evaluations/2026-10-lesefehler.md)). Deshalb ist „Berichtigen“ als Vorschau gekennzeichnet, und jedes PDF trägt den Hinweis, die automatische Korrektur zu prüfen.
 
@@ -26,7 +26,7 @@ Geschwindigkeit: Die Texterkennung braucht nur auf der CPU rund 12 Sekunden pro 
 Geplant:
 
 - Weniger Stellen „unsicher gelesen“ durch eine genauere Texterkennung, Schwelle auf echter Schülerhandschrift prüfen.
-- Durchgestrichenes erkennen und nicht mitzählen.
+- Durchgestrichenes zuverlässiger erkennen, auch Gekritzel und Überschreibungen.
 - Weitere Fächer und Sprachen als Korrekturprofile, Statistik nach Schwere der Fehler.
 - Signierte Installer für Windows und macOS.
 

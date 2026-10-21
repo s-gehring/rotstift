@@ -1,6 +1,13 @@
 import { decodeImage } from './decode.ts';
 import { locateLines } from './locate-lines.ts';
-import type { LayoutImage, LayoutInput, LayoutRequest, LayoutResponse } from './protocol.ts';
+import type {
+  LayoutImage,
+  LayoutInput,
+  LayoutRequest,
+  LayoutResponse,
+  LayoutTask,
+} from './protocol.ts';
+import { findStruckWords } from './strike.ts';
 import type { LayoutResult } from './types.ts';
 
 export interface WorkerLike {
@@ -14,11 +21,12 @@ export interface WorkerLike {
 
 export interface LayoutLocator {
   locate(image: LayoutInput, lines: readonly string[]): Promise<LayoutResult>;
+  struckWords(image: LayoutInput, lines: readonly string[]): Promise<number[][]>;
   dispose(): void;
 }
 
 interface Pending {
-  readonly resolve: (result: LayoutResult) => void;
+  readonly resolve: (response: LayoutResponse & { ok: true }) => void;
   readonly reject: (error: Error) => void;
 }
 
@@ -58,7 +66,7 @@ export function createLayoutLocator(
       const entry = pending.get(response.id);
       if (entry === undefined) return;
       pending.delete(response.id);
-      if (response.ok) entry.resolve(response.result);
+      if (response.ok) entry.resolve(response);
       else entry.reject(new Error(response.message));
     });
     created.addEventListener('messageerror', () => {
@@ -71,19 +79,31 @@ export function createLayoutLocator(
     return created;
   };
 
+  const request = (image: LayoutInput, lines: readonly string[], task: LayoutTask) => {
+    const create = factory;
+    if (create === null) throw new Error('layout worker is not available');
+    worker ??= start(create);
+    counter += 1;
+    const id = counter;
+    const message = toMessageImage(image);
+    return new Promise<LayoutResponse & { ok: true }>((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      worker?.postMessage({ id, image: message.image, lines, task }, message.transfer);
+    });
+  };
+
   return {
-    locate(image, lines) {
-      if (factory === null) {
-        return decodeImage(image).then((pixels) => locateLines(pixels, lines));
-      }
-      worker ??= start(factory);
-      counter += 1;
-      const id = counter;
-      const message = toMessageImage(image);
-      return new Promise<LayoutResult>((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        worker?.postMessage({ id, image: message.image, lines }, message.transfer);
-      });
+    async locate(image, lines) {
+      if (factory === null) return locateLines(await decodeImage(image), lines);
+      const response = await request(image, lines, 'locate');
+      if (!('result' in response)) throw new Error('layout worker answered the wrong task');
+      return response.result;
+    },
+    async struckWords(image, lines) {
+      if (factory === null) return findStruckWords(await decodeImage(image), lines);
+      const response = await request(image, lines, 'struck');
+      if (!('struck' in response)) throw new Error('layout worker answered the wrong task');
+      return response.struck;
     },
     dispose() {
       failAll(new Error('layout locator disposed'));

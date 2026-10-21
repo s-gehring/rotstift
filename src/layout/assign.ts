@@ -16,7 +16,7 @@ const SUBSTANTIAL_WIDTH = 0.35;
 const SUBSTANTIAL_HEIGHT = 0.5;
 
 export function lineLength(text: string): number {
-  return Array.from(text.trim().replace(/\s+/gu, ' ')).length;
+  return Array.from(text.replaceAll('~~', '').trim().replace(/\s+/gu, ' ')).length;
 }
 
 function estimateScale(

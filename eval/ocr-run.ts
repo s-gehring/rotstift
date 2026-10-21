@@ -57,12 +57,14 @@ async function main() {
       threads: { type: 'string', default: '8' },
       out: { type: 'string' },
       'max-edge': { type: 'string' },
+      prompt: { type: 'string' },
     },
   });
   if (!values.images || !values.out) throw new Error('--images und --out angeben');
   const model = transcriber(values.model);
   const maxEdge = values['max-edge'] ? Number(values['max-edge']) : model.request.imageMaxEdge;
   const threads = Number(values.threads);
+  const prompt = values.prompt ?? model.prompt;
   const wanted = values.pages?.split(',');
   const names = readdirSync(values.images)
     .filter((name) => ['.jpg', '.jpeg'].includes(extname(name).toLowerCase()))
@@ -91,7 +93,7 @@ async function main() {
       const image = (await readFile(join(values.images, name))).toString('base64');
       const started = performance.now();
       const response = await postJson(server.port, '/v1/chat/completions', {
-        messages: [visionMessage(model.prompt, [`data:image/jpeg;base64,${image}`])],
+        messages: [visionMessage(prompt, [`data:image/jpeg;base64,${image}`])],
         temperature: model.request.temperature,
         max_tokens: model.request.maxOutputTokens,
         logprobs: true,

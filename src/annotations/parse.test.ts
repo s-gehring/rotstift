@@ -470,3 +470,35 @@ describe('round trip parse, serialize, parse', () => {
     expect(serializeTranscript(second)).toBe(serialized);
   });
 });
+
+describe('parseTranscript with struck text', () => {
+  const html =
+    '<rs-line n="1">Ich <rs-struck>gehe</rs-struck> ging<rs-missing type="Z" fix=","></rs-missing> als es <rs-error type="R" fix="dunkel">dunkl</rs-error> war.</rs-line>';
+
+  it('keeps the struck text in the line and records its position', () => {
+    const transcript = expectOk(parseTranscript(html, { profile: DEUTSCH }));
+    expect(transcript.lines[0]).toMatchObject({
+      text: 'Ich gehe ging als es dunkl war.',
+      struck: [{ offset: 4, text: 'gehe' }],
+    });
+    expect(listErrors(transcript).map((error) => error.offset)).toEqual([13, 21]);
+  });
+
+  it('round-trips through the serializer', () => {
+    const transcript = expectOk(parseTranscript(html, { profile: DEUTSCH }));
+    expect(serializeTranscript(transcript)).toBe(html);
+  });
+
+  it('rejects markings inside struck text and empty struck elements', () => {
+    expect(
+      issuesOf(
+        '<rs-line n="1"><rs-struck><rs-error type="R" fix="a">b</rs-error></rs-struck></rs-line>',
+      ),
+    ).toContain(
+      '<rs-error> darf nicht in <rs-struck> verschachtelt sein. Markierungen dürfen sich nicht überlappen oder enthalten.',
+    );
+    expect(issuesOf('<rs-line n="1">a <rs-struck> </rs-struck></rs-line>')).toContain(
+      'Ein <rs-struck> ohne Text ist leer.',
+    );
+  });
+});

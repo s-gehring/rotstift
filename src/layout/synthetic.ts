@@ -17,6 +17,7 @@ export interface PageSpec {
   readonly strays?: number;
   readonly noise?: number;
   readonly indent?: readonly number[];
+  readonly struck?: readonly (readonly number[])[];
 }
 
 export interface SyntheticPage {
@@ -216,9 +217,30 @@ export function renderPage(spec: PageSpec): SyntheticPage {
       (spec.wobble ?? 0) * Math.sin(x / (width * 0.2) + phase) + (spec.drift ?? 0) * (x - left);
     let x = left + (spec.indent?.[index] ?? 0) * pitch;
     const xHeight = pitch * 0.34 * scale;
-    for (const character of text) {
+    const struck = new Set(spec.struck?.[index] ?? []);
+    let word = 0;
+    let wordStart = x;
+    const strikeWord = () => {
+      if (!struck.has(word)) return;
+      const middle = baseline - xHeight * 0.45;
+      stroke(
+        ink,
+        [
+          [wordStart - advance * 0.3, middle + wobbleAt(wordStart)],
+          [x + advance * 0.3, middle + wobbleAt(x) - pitch * 0.03],
+        ],
+        penRadius * scale,
+        box,
+      );
+    };
+    for (const [at, character] of Array.from(text).entries()) {
       if (character === ' ') {
+        if (text[at - 1] !== ' ') {
+          strikeWord();
+          word += 1;
+        }
         x += advance * 0.7 * scale;
+        wordStart = x;
         continue;
       }
       const base = baseline + wobbleAt(x);
@@ -261,6 +283,7 @@ export function renderPage(spec: PageSpec): SyntheticPage {
       }
       x += advance * scale * (0.85 + next() * 0.3);
     }
+    if (!text.endsWith(' ')) strikeWord();
     truth.push(
       box.x1 < 0
         ? null

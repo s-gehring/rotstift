@@ -1,8 +1,14 @@
 import { formatIssues, parseTranscript } from '../annotations/parse.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import {
+  readStruck,
+  visibleLine,
+  type StruckLine,
+  type VisibleLine,
+} from '../annotations/struck.ts';
 import { serializeTranscript } from '../annotations/serialize.ts';
 import { transcriptSchema } from '../annotations/transcript.ts';
-import type { Bbox, Transcript } from '../annotations/transcript.ts';
+import type { Bbox, Mark, Transcript, TranscriptLine } from '../annotations/transcript.ts';
 import { computeStatistics } from '../stats/statistics.ts';
 import type { Statistics } from '../stats/statistics.ts';
 import type { CorrectError, Corrector } from './corrector.ts';
@@ -32,6 +38,28 @@ function normalizeLine(line: string): string {
   return line.replaceAll(/\s+/gu, ' ').trim();
 }
 
+function restoreMark(mark: Mark, read: StruckLine, visible: VisibleLine): Mark | null {
+  const { positions } = visible;
+  if (mark.kind === 'omission') {
+    const offset = mark.offset > 0 ? (positions[mark.offset - 1] ?? 0) + 1 : (positions[0] ?? 0);
+    return { ...mark, offset };
+  }
+  const start = positions[mark.offset];
+  const last = positions[mark.offset + mark.original.length - 1];
+  if (start === undefined || last === undefined) return null;
+  if (read.text.slice(start, last + 1) !== mark.original) return null;
+  return { ...mark, offset: start };
+}
+
+function restoreLine(line: TranscriptLine, read: StruckLine, visible: VisibleLine) {
+  if (read.struck.length === 0) return { line, dropped: 0 };
+  const marks = line.marks.flatMap((mark) => restoreMark(mark, read, visible) ?? []);
+  return {
+    line: { ...line, text: read.text, marks, struck: read.struck },
+    dropped: line.marks.length - marks.length,
+  };
+}
+
 const INVALID_MESSAGE = 'Die Korrekturmarkierungen konnten nicht erstellt werden';
 
 function invalid(detail: string): CorrectPageResult {
@@ -40,7 +68,9 @@ function invalid(detail: string): CorrectPageResult {
 
 export async function correctPage(input: CorrectPageInput): Promise<CorrectPageResult> {
   const { profile, corrector, bboxes } = input;
-  const lines = input.lines.map(normalizeLine);
+  const read = input.lines.map((line) => readStruck(normalizeLine(line)));
+  const visible = read.map((line) => visibleLine(line.text, line.struck));
+  const lines = visible.map((line) => line.text);
   const signal = input.signal ?? new AbortController().signal;
 
   const answer = lines.some((line) => line !== '')
@@ -52,8 +82,15 @@ export async function correctPage(input: CorrectPageInput): Promise<CorrectPageR
     profile,
     maxChangedRun: input.maxChangedRun,
   });
+  const restored = derived.lines.map((line, index) =>
+    restoreLine(
+      line,
+      read[index] ?? { text: line.text, struck: [] },
+      visible[index] ?? { text: line.text, positions: [] },
+    ),
+  );
   const transcript: Transcript = {
-    lines: derived.lines.map((line, index) => {
+    lines: restored.map(({ line }, index) => {
       const bbox = bboxes?.[index];
       return bbox === undefined ? line : { ...line, bbox };
     }),
@@ -76,6 +113,6 @@ export async function correctPage(input: CorrectPageInput): Promise<CorrectPageR
     transcript,
     statistics: computeStatistics(transcript),
     correctedText: answer.correctedText,
-    droppedMarks: derived.droppedOverlaps,
+    droppedMarks: derived.droppedOverlaps + restored.reduce((sum, { dropped }) => sum + dropped, 0),
   };
 }

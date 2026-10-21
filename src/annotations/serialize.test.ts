@@ -74,3 +74,17 @@ describe('serializeTranscript', () => {
     expect(serializeTranscript({ lines: [] })).toBe('');
   });
 });
+
+describe('serializeLine with struck text', () => {
+  it('writes struck text and marks in order', () => {
+    const html = serializeLine({
+      number: 1,
+      text: 'Ich gehe ging nach Hause',
+      marks: [{ kind: 'omission', type: 'Z', original: '', correction: ',', offset: 4 }],
+      struck: [{ offset: 4, text: 'gehe' }],
+    });
+    expect(html).toBe(
+      '<rs-line n="1">Ich <rs-missing type="Z" fix=","></rs-missing><rs-struck>gehe</rs-struck> ging nach Hause</rs-line>',
+    );
+  });
+});

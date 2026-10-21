@@ -169,3 +169,52 @@ describe('listErrors', () => {
     ]);
   });
 });
+
+describe('struck text', () => {
+  const line = {
+    number: 1,
+    text: 'Ich gehe ging nach Hause',
+    marks: [],
+    struck: [{ offset: 4, text: 'gehe' }],
+  };
+
+  it('accepts struck spans that match the text', () => {
+    expect(lineSchema.safeParse(line).success).toBe(true);
+  });
+
+  it('rejects struck spans that do not match the text or overlap', () => {
+    expect(
+      messages(lineSchema.safeParse({ ...line, struck: [{ offset: 3, text: 'gehe' }] })),
+    ).toEqual(['Der gestrichene Text „gehe“ liegt nicht an Position 3 der Zeile.']);
+    const overlapping = {
+      ...line,
+      struck: [
+        { offset: 4, text: 'gehe' },
+        { offset: 6, text: 'he' },
+      ],
+    };
+    expect(messages(lineSchema.safeParse(overlapping))).toEqual([
+      'Der gestrichene Text bei Position 6 überlappt den vorherigen.',
+    ]);
+  });
+
+  it('rejects marks inside struck text', () => {
+    const marked = {
+      ...line,
+      marks: [{ kind: 'error', type: 'R', original: 'gehe', correction: 'Gehe', offset: 4 }],
+    };
+    expect(messages(lineSchema.safeParse(marked))).toEqual([
+      'Die Markierung „gehe“ liegt in gestrichenem Text.',
+    ]);
+    const inside = {
+      ...line,
+      marks: [{ kind: 'omission', type: 'Z', original: '', correction: ',', offset: 6 }],
+    };
+    expect(lineSchema.safeParse(inside).success).toBe(false);
+    const after = {
+      ...line,
+      marks: [{ kind: 'omission', type: 'Z', original: '', correction: ',', offset: 8 }],
+    };
+    expect(lineSchema.safeParse(after).success).toBe(true);
+  });
+});
