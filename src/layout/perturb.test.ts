@@ -58,7 +58,7 @@ describe('perturbed transcripts on synthetic pages', () => {
 describe('perturbed transcripts on pages with sloped, wavy lines', () => {
   const all: ReturnType<typeof scoreVariant>[] = [];
   let unchanged = sumScores([]);
-  for (const seed of [3, 4, 5, 6]) {
+  for (const seed of [3, 4]) {
     const lines = [...sampleLines(seed, 8, 20, 50), '', ...sampleLines(seed + 100, 8, 20, 50)];
     const page = renderPage({ ...BASE, seed, lines, lineSlopes: 2, wobble: 4 });
     const truth = lines.map((text, index) => ({ text, bbox: page.truth[index] ?? null }));

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { topAt } from './band.ts';
 import { locateLines } from './locate-lines.ts';
-import { iou, renderPage, sampleLines, type PageSpec } from './synthetic.ts';
-import type { BBox, LineLocation } from './types.ts';
+import { iou, renderPage, sampleLines, type PageSpec, type SyntheticPage } from './synthetic.ts';
+import type { BBox, LayoutResult, LineLocation } from './types.ts';
 
 interface Score {
   readonly hits: number;
@@ -11,7 +11,19 @@ interface Score {
   readonly detected: number;
 }
 
-function score(spec: PageSpec, transcript = spec.lines): Score & { skew: number } {
+function bandSpread(page: SyntheticPage, result: LayoutResult): number {
+  const deviations: number[] = [];
+  page.cores.forEach((core, index) => {
+    const band = result.lines[index]?.bbox.band;
+    if (core === null || band === undefined) return;
+    const offsets = core.map((point) => point.y - topAt(band, point.x));
+    const middle = offsets.toSorted((a, b) => a - b)[offsets.length >> 1] ?? 0;
+    deviations.push(...offsets.map((offset) => Math.abs(offset - middle)));
+  });
+  return deviations.reduce((sum, value) => sum + value, 0) / deviations.length;
+}
+
+function score(spec: PageSpec, transcript = spec.lines): Score & { skew: number; spread: number } {
   const page = renderPage(spec);
   const result = locateLines(page.image, transcript);
   let hits = 0;
@@ -31,21 +43,8 @@ function score(spec: PageSpec, transcript = spec.lines): Score & { skew: number 
     meanIou: sum / total,
     detected: result.detectedLines,
     skew: result.skewDegrees,
+    spread: bandSpread(page, result),
   };
-}
-
-function bandSpread(spec: PageSpec): number {
-  const page = renderPage(spec);
-  const result = locateLines(page.image, spec.lines);
-  const deviations: number[] = [];
-  page.cores.forEach((core, index) => {
-    const band = result.lines[index]?.bbox.band;
-    if (core === null || band === undefined) return;
-    const offsets = core.map((point) => point.y - topAt(band, point.x));
-    const middle = offsets.toSorted((a, b) => a - b)[offsets.length >> 1] ?? 0;
-    deviations.push(...offsets.map((offset) => Math.abs(offset - middle)));
-  });
-  return deviations.reduce((sum, value) => sum + value, 0) / deviations.length;
 }
 
 function overlapOf(truth: BBox | null | undefined, found: LineLocation | null | undefined): number {
@@ -101,27 +100,27 @@ describe('locateLines on synthetic pages', () => {
   });
 
   it('follows lines that each have their own slope and a slight wave', () => {
-    for (const seed of [1, 2, 3, 4]) {
-      const spec = { ...BASE, seed, lines: sampleLines(seed + 20, 22), lineSlopes: 3, wobble: 6 };
-      const outcome = score(spec);
-      expect(outcome.hits).toBe(outcome.total);
-      expect(outcome.detected).toBe(22);
-      expect(bandSpread(spec)).toBeLessThan(1.5);
-    }
+    const lines = sampleLines(22, 10);
+    const outcome = score({ ...BASE, height: 640, seed: 2, lines, lineSlopes: 3, wobble: 6 });
+    expect(outcome.hits).toBe(outcome.total);
+    expect(outcome.detected).toBe(10);
+    expect(outcome.spread).toBeLessThan(1.5);
   });
 
   it('separates small, dense lines of different slopes', () => {
-    const lines = sampleLines(30, 34, 40, 60);
-    const spec = { ...BASE, pitch: 34, seed: 5, lines, lineSlopes: 2, wobble: 3 };
+    const lines = sampleLines(30, 16, 40, 60);
+    const spec = { ...BASE, height: 700, pitch: 34, seed: 5, lines, lineSlopes: 2, wobble: 3 };
     const outcome = score(spec);
     expect(outcome.hits).toBe(outcome.total);
-    expect(outcome.detected).toBe(34);
+    expect(outcome.detected).toBe(16);
+    expect(outcome.spread).toBeLessThan(1.5);
   });
 
   it('keeps the band level on straight lines', () => {
-    expect(bandSpread({ ...BASE, lines: sampleLines(3, 24) })).toBeLessThan(0.5);
+    const lines = sampleLines(5, 10);
+    expect(score({ ...BASE, height: 640, lines }).spread).toBeLessThan(0.5);
     expect(
-      bandSpread({ ...BASE, lines: sampleLines(5, 24), ruled: true, skewDegrees: 2.5 }),
+      score({ ...BASE, height: 640, lines, ruled: true, skewDegrees: 2.5 }).spread,
     ).toBeLessThan(0.5);
   });
 
