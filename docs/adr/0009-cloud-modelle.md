@@ -176,7 +176,7 @@ Erkennung:
 >
 > Rotstift schickt jede Seite als Bild an Mistral AI (api.mistral.ai). Auf den Bildern stehen die Handschrift und oft Namen der Schülerinnen und Schüler. Standort laut Anbieter: EU.
 >
-> [Zusatzsatz der Vorlage, falls vorhanden]
+> Mistral AI kann die Daten je nach Tarif zum Training nutzen, bis die Schule widerspricht.
 >
 > Verantwortlich ist die Schule. Sie braucht einen Auftragsverarbeitungsvertrag mit dem Anbieter und gegebenenfalls die Freigabe des Schulträgers. Rotstift prüft das nicht.
 >
@@ -190,7 +190,7 @@ Rechtschreibung und Grammatik, Inhalt und Form:
 >
 > Rotstift schickt den erkannten Text jeder Arbeit mit Fach und Aufgabenstellung an Mistral AI (api.mistral.ai). Bilder werden nicht gesendet. Im Text können Namen und persönliche Angaben stehen. Standort laut Anbieter: EU.
 >
-> [Zusatzsatz der Vorlage, falls vorhanden]
+> Mistral AI kann die Daten je nach Tarif zum Training nutzen, bis die Schule widerspricht.
 >
 > Verantwortlich ist die Schule. Sie braucht einen Auftragsverarbeitungsvertrag mit dem Anbieter und gegebenenfalls die Freigabe des Schulträgers. Rotstift prüft das nicht.
 >
@@ -198,7 +198,7 @@ Rechtschreibung und Grammatik, Inhalt und Form:
 >
 > [Abbrechen] [Text senden]
 
-Bei „Eigener Server“ und „Anderer Anbieter“ steht statt des Anbieters der Host, statt des Standorts „Standort unbekannt“.
+Der dritte Absatz ist der Zusatzsatz der Vorlage und fehlt, wo es keinen gibt. Bei „Eigener Server“ und „Anderer Anbieter“ steht statt des Anbieters der Host, statt des Standorts „Standort unbekannt“.
 
 ### Tests
 
