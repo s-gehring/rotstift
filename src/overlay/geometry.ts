@@ -37,6 +37,28 @@ export function frameOf(bbox: Bbox): LineFrame {
   };
 }
 
+const TREND_SHARE = 0.25;
+
+export function lineTopAt(frame: LineFrame, x: number): number {
+  if (x >= frame.left && x <= frame.right) return frame.top(x);
+  const edge = x < frame.left ? frame.left : frame.right;
+  return frame.top(edge) + trendSlope(frame, x < frame.left ? 'left' : 'right') * (x - edge);
+}
+
+export function lineAngleAt(frame: LineFrame, x: number): number {
+  if (x >= frame.left && x <= frame.right) return frame.angle(x);
+  const slope = trendSlope(frame, x < frame.left ? 'left' : 'right');
+  return (Math.atan(slope) * 180) / Math.PI;
+}
+
+function trendSlope(frame: LineFrame, side: 'left' | 'right'): number {
+  const reach = (frame.right - frame.left) * TREND_SHARE;
+  if (frame.band === null || reach <= 0) return 0;
+  return side === 'right'
+    ? (frame.top(frame.right) - frame.top(frame.right - reach)) / reach
+    : (frame.top(frame.left + reach) - frame.top(frame.left)) / reach;
+}
+
 export function bendPath(d: string, frame: LineFrame): string {
   if (frame.band === null) return d;
   return d.replace(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g, (_, x: string, y: string) => {
