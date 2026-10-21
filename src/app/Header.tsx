@@ -1,4 +1,5 @@
 import { ExportMenu } from '../export/ExportMenu.tsx';
+import { hasResults } from '../export/has-results.ts';
 import { Button } from '../ui/Button.tsx';
 import { IconButton } from '../ui/IconButton.tsx';
 import { SplitButton } from '../ui/Menu.tsx';
@@ -38,7 +39,7 @@ function RunStatus() {
 }
 
 function MainAction() {
-  const { importState, run, navigation } = useApp();
+  const { importState, run, navigation, work } = useApp();
   if (importState.arbeiten.length === 0) return null;
   if (run.running) {
     return (
@@ -47,8 +48,9 @@ function MainAction() {
       </Button>
     );
   }
+  const arbeitId = navigation.route.view === 'arbeit' ? navigation.route.arbeitId : undefined;
+  const target = arbeitId === undefined ? {} : { arbeitId };
   if (run.done[run.kind]) {
-    const arbeitId = navigation.route.view === 'arbeit' ? navigation.route.arbeitId : undefined;
     return (
       <>
         {run.kind === 'count' && !run.done.correct && (
@@ -57,13 +59,16 @@ function MainAction() {
             <Button onClick={() => run.start('correct')}>Korrigieren</Button>
           </>
         )}
-        <ExportMenu {...(arbeitId !== undefined && { arbeitId })} />
+        <ExportMenu {...target} />
       </>
     );
   }
   const alternative = other(run.kind);
   return (
     <>
+      {hasResults(importState.arbeiten, work.count.state.entries) && (
+        <ExportMenu variant="secondary" {...target} />
+      )}
       {run.kind === 'correct' && <SubjectSelect />}
       <SplitButton
         label={MAIN_LABEL[run.kind]}

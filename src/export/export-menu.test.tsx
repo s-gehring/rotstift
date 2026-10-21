@@ -526,4 +526,23 @@ describe('the corrected PDF', () => {
     expect(hintOf('Klassen-PDF')).toBe('Nicht mit Demo-Korrekturen');
     expect(isDisabled('Tabelle (CSV)')).toBe(false);
   });
+
+  it('adds the errors per type of the profile to the class table', async () => {
+    vi.mocked(saveCsv).mockResolvedValue({ state: 'saved', fileName: 'Klassenübersicht.csv' });
+    await corrected();
+    await choose('Tabelle (CSV)');
+    const [csv, fileName] = vi.mocked(saveCsv).mock.calls[0] ?? [];
+    const [head, ada] = csv?.replace('\uFEFF', '').split('\r\n') ?? [];
+    expect(head).toBe(
+      `Name;Seiten;Wörter;Fehler;Fehler je 100 Wörter;${DEUTSCH.allowedTypes.join(';')};Hinweis`,
+    );
+    expect(ada?.split(';').slice(0, 5)).toEqual([
+      'Ada',
+      '1',
+      expect.any(String),
+      '1',
+      expect.any(String),
+    ]);
+    expect(fileName).toBe('Klassenübersicht');
+  });
 });

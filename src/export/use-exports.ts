@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
 import { useApp } from '../app/app-context.tsx';
 import type { Arbeit } from '../import/arbeiten.ts';
-import { CSV_FILE_NAME, formatClipboardTable, formatCsv } from '../results/export-table.ts';
+import {
+  csvFileName,
+  formatClipboardTable,
+  formatCsv,
+  type CorrectionColumns,
+} from '../results/export-table.ts';
 import { createPdfInput } from '../results/pdf-input.ts';
 import { saveCsv } from '../results/save-csv.ts';
 import { saveMessage } from '../results/save-message.ts';
@@ -105,6 +110,8 @@ export function useExports(arbeitId?: string): MenuAction[] {
   const exportable = summaries.filter(
     (summary) => summary.complete && !summary.preview && summary.statistics !== null,
   );
+  const corrections: CorrectionColumns | undefined =
+    profile === null ? undefined : { types: profile.allowedTypes, arbeiten: summaries };
   const blocked = firstHint(busy && EXPORT_HINT.busy, run.running && EXPORT_HINT.running);
   const fileBlocked = blocked ?? (canSaveFiles() ? null : EXPORT_HINT.desktop);
 
@@ -188,10 +195,12 @@ export function useExports(arbeitId?: string): MenuAction[] {
       );
     }),
     action('Tabelle (CSV)', 'table', fileBlocked ?? tableHint, () => {
-      void saveCsv(formatCsv(results), CSV_FILE_NAME).then((outcome) => report(outcome, 'csv'));
+      void saveCsv(formatCsv(results, corrections), csvFileName(corrections)).then((outcome) =>
+        report(outcome, 'csv'),
+      );
     }),
     action('Tabelle kopieren', 'copy', blocked ?? tableHint, () => {
-      navigator.clipboard.writeText(formatClipboardTable(results)).then(
+      navigator.clipboard.writeText(formatClipboardTable(results, corrections)).then(
         () => show(COPIED),
         () => show(COPY_FAILED, { tone: 'error' }),
       );

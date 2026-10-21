@@ -67,6 +67,9 @@ function show(props: LiveProps) {
   act(() => root.render(<Live {...props} />));
 }
 
+const hasExportMenu = () =>
+  all('button').some((candidate) => candidate.textContent === 'Exportieren');
+
 async function corrected(props: Partial<LiveProps> = {}) {
   const harness = setupReview(['a', 'b']);
   const [a, b] = harness.pages;
@@ -166,15 +169,13 @@ describe('the head of an Arbeit', () => {
   });
 
   it('offers its own export menu only while the header does not', async () => {
-    const harness = await corrected();
+    const harness = await corrected({ run: { running: true } });
     expect(button('Exportieren')).toBeDefined();
-    show({
-      flow: harness.flow,
-      runner: harness.runner,
-      arbeiten: harness.arbeiten,
-      run: { done: { correct: true, count: false } },
-    });
-    expect(all('button').some((candidate) => candidate.textContent === 'Exportieren')).toBe(false);
+    const { flow, runner, arbeiten } = harness;
+    show({ flow, runner, arbeiten, run: { done: { correct: true, count: false } } });
+    expect(hasExportMenu()).toBe(false);
+    show({ flow, runner, arbeiten, run: { done: { correct: false, count: false } } });
+    expect(hasExportMenu()).toBe(false);
   });
 
   it('switches between the corrected and the original pages for every Arbeit', async () => {

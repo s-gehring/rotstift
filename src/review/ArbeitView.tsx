@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { useApp } from '../app/app-context.tsx';
 import { ExportMenu } from '../export/ExportMenu.tsx';
+import { hasResults } from '../export/has-results.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import { wordsText } from '../results/summary.ts';
@@ -228,7 +229,9 @@ export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
   if (arbeit === undefined) return null;
   const model = buildArbeitModel(arbeit, work.review.state, work.count.state.entries);
   const figures = figuresText(model.figures);
-  const headerExports = !run.running && run.done[run.kind];
+  const headerExports =
+    !run.running &&
+    (run.done[run.kind] || hasResults(importState.arbeiten, work.count.state.entries));
 
   return (
     <section className="detail" aria-labelledby={headingId}>
