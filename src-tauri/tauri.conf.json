@@ -39,6 +39,10 @@
       "deb": { "depends": ["libgomp1", "libssl3", "libstdc++6 (>= 12)"] },
       "rpm": { "depends": ["libgomp", "openssl-libs >= 3", "libstdc++ >= 12"] }
     },
+    "windows": {
+      "wix": { "language": "de-DE" },
+      "nsis": { "languages": ["German"] }
+    },
     "publisher": "Simon Gehring",
     "icon": [
       "icons/32x32.png",
