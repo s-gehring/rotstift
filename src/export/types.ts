@@ -1,3 +1,4 @@
+import type { PageComment } from '../overlay/layout.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import type { Statistics } from '../stats/statistics.ts';
@@ -7,6 +8,20 @@ export interface ExportPage {
   readonly width: number;
   readonly height: number;
   readonly transcript?: Transcript;
+  readonly comments?: readonly PageComment[];
+  readonly summary?: string | null;
+}
+
+export interface ContentNote {
+  readonly page: number;
+  readonly line: number;
+  readonly text: string;
+  readonly coveredBy?: string;
+}
+
+export interface ContentReport {
+  readonly comments: readonly ContentNote[];
+  readonly summary: string | null;
 }
 
 export interface CorrectedArbeit {
@@ -14,6 +29,7 @@ export interface CorrectedArbeit {
   readonly pages: readonly ExportPage[];
   readonly profile: CorrectionProfile;
   readonly statistics: Statistics;
+  readonly content?: ContentReport;
 }
 
 export interface WordCountArbeit {

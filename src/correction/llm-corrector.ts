@@ -171,7 +171,7 @@ export function repairMessages(
   ];
 }
 
-function describeLlmError(error: LlmError): CorrectError {
+export function describeLlmError(error: LlmError): CorrectError {
   switch (error.kind) {
     case 'cancelled':
       return { kind: 'cancelled' };

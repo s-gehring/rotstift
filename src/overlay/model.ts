@@ -4,7 +4,7 @@ export interface PageSize {
 }
 
 export type StrokeRole = 'underline' | 'ring' | 'strike' | 'caret';
-export type TextRole = 'fix' | 'code';
+export type TextRole = 'fix' | 'code' | 'comment' | 'sign' | 'summary';
 export type TextAnchor = 'start' | 'middle' | 'end';
 
 export interface StrokeItem {

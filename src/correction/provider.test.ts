@@ -6,6 +6,9 @@ import {
   CORRECTOR_DESKTOP_ONLY,
   CORRECTOR_MISSING_MESSAGE,
   resolveBrowserCorrector,
+  REVIEWER_DESKTOP_ONLY,
+  REVIEWER_MISSING_MESSAGE,
+  REVIEWER_TEXTS,
   sidecarCorrectorStatus,
   type CorrectorEnvironment,
 } from './provider.ts';
@@ -31,6 +34,23 @@ describe('resolveBrowserCorrector', () => {
       message: CORRECTOR_DESKTOP_ONLY,
     });
     expect(environment.loadPreview).not.toHaveBeenCalled();
+  });
+});
+
+describe('reviewer texts', () => {
+  it('speak of content and form instead of the correction model', async () => {
+    await expect(resolveBrowserCorrector(env({}), REVIEWER_TEXTS)).resolves.toEqual({
+      state: 'unavailable',
+      message: REVIEWER_DESKTOP_ONLY,
+    });
+    expect(sidecarCorrectorStatus({ state: 'missing', corrector: null }, REVIEWER_TEXTS)).toEqual({
+      state: 'needs-model',
+      message: REVIEWER_MISSING_MESSAGE,
+    });
+    for (const state of ['downloading', 'verifying', 'importing', 'deleting', 'corrupt'] as const) {
+      const status = sidecarCorrectorStatus({ state, corrector: null }, REVIEWER_TEXTS);
+      expect(status?.state === 'needs-model' && status.message).toContain('Inhalt und Form');
+    }
   });
 });
 

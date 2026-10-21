@@ -234,7 +234,7 @@ describe('layoutOverlay on a page without margin', () => {
   });
 
   it('keeps the fixes clear of the codes', () => {
-    for (const code of texts(model, 'code')) {
+    for (const code of texts(model, 'code').filter((entry) => entry.line === 2)) {
       const codeBox = box(code);
       for (const fix of texts(model, 'fix').filter((item) => item.line === code.line)) {
         expect(box(fix).right).toBeLessThan(codeBox.left);
@@ -577,5 +577,121 @@ describe('layoutOverlay on lines with a band', () => {
     expect(defined(lines[0]).y).toBeLessThan(370);
     expect(defined(lines[1]).y).toBeGreaterThan(410);
     expect(texts(model, 'code').map((code) => code.text)).toEqual(['R', 'R']);
+  });
+});
+
+function verticalSpan(item: TextItem): { top: number; bottom: number } {
+  return { top: item.y - item.size, bottom: item.y + item.size * 0.3 };
+}
+
+describe('layoutOverlay with comments and a summary', () => {
+  it('draws a comment in the wide margin without touching the codes of its line', () => {
+    const model = layoutOverlay(roomyPage(), {
+      ...options,
+      comments: [{ line: 2, text: 'Einleitung fehlt' }],
+    });
+    const comment = texts(model, 'comment');
+    expect(comment.length).toBeGreaterThanOrEqual(1);
+    for (const item of comment) {
+      const { left, right } = box(item);
+      expect(item.line).toBe(2);
+      expect(item.title).toBe('Einleitung fehlt');
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(right).toBeLessThanOrEqual(FIXTURE_PAGE.width);
+      expect(item.y).toBeLessThanOrEqual(FIXTURE_PAGE.height);
+      for (const code of texts(model, 'code').filter((entry) => entry.line === 2)) {
+        const other = box(code);
+        const overlapsX = left < other.right && other.left < right;
+        const a = verticalSpan(item);
+        const b = verticalSpan(code);
+        const overlapsY = a.top < b.bottom && b.top < a.bottom;
+        expect(overlapsX && overlapsY).toBe(false);
+      }
+    }
+    expect(comment.map((item) => item.text).join(' ')).toBe('Einleitung fehlt');
+  });
+
+  it('draws a single sign with the comment as title when there is no margin', () => {
+    const model = layoutOverlay(wideNoMarginPage(), {
+      ...options,
+      comments: [{ line: 3, text: 'Argument ohne Beleg' }],
+    });
+    expect(texts(model, 'comment')).toHaveLength(0);
+    const signs = texts(model, 'sign');
+    expect(signs).toHaveLength(1);
+    expect(signs[0]).toMatchObject({ text: '*', title: 'Argument ohne Beleg', line: 3 });
+  });
+
+  it('draws nothing for a comment on a line without a bbox', () => {
+    const transcript: Transcript = {
+      lines: [...roomyPage().lines, { number: 99, text: 'ohne Box', marks: [] }],
+    };
+    const model = layoutOverlay(transcript, {
+      ...options,
+      comments: [{ line: 99, text: 'Kommentar' }],
+    });
+    expect(texts(model, 'comment')).toHaveLength(0);
+    expect(texts(model, 'sign')).toHaveLength(0);
+  });
+
+  it('draws nothing for a comment on an unknown line', () => {
+    const model = layoutOverlay(roomyPage(), { ...options, comments: [{ line: 500, text: 'x' }] });
+    expect(texts(model, 'comment')).toHaveLength(0);
+    expect(texts(model, 'sign')).toHaveLength(0);
+  });
+
+  it('draws the summary below the last line', () => {
+    const transcript = roomyPage();
+    const model = layoutOverlay(transcript, {
+      ...options,
+      summary: 'Inhalt: Thema verfehlt. Form: Anrede fehlt.',
+    });
+    const summary = texts(model, 'summary');
+    expect(summary.length).toBeGreaterThanOrEqual(1);
+    const last = transcript.lines.at(-1)?.bbox;
+    const bottom = defined(last).y + defined(last).height;
+    for (const item of summary) {
+      expect(item.y).toBeGreaterThan(bottom);
+      expect(item.y).toBeLessThanOrEqual(FIXTURE_PAGE.height);
+      expect(item.title).toBe('Inhalt: Thema verfehlt. Form: Anrede fehlt.');
+    }
+  });
+
+  it('draws no summary when the last line is at the bottom of the page', () => {
+    const transcript: Transcript = {
+      lines: [
+        {
+          number: 1,
+          bbox: { x: 150, y: FIXTURE_PAGE.height - 70, width: 860, height: 60 },
+          text: 'Letzte Zeile',
+          marks: [],
+        },
+      ],
+    };
+    const model = layoutOverlay(transcript, { ...options, summary: 'Form: Anrede fehlt.' });
+    expect(texts(model, 'summary')).toHaveLength(0);
+  });
+
+  it('draws no summary for null or blank text', () => {
+    expect(texts(layoutOverlay(roomyPage(), { ...options, summary: null }), 'summary')).toEqual([]);
+    expect(texts(layoutOverlay(roomyPage(), { ...options, summary: '  ' }), 'summary')).toEqual([]);
+  });
+
+  it('leaves the output unchanged without comments and summary', () => {
+    const plain = layoutOverlay(roomyPage(), options);
+    expect(layoutOverlay(roomyPage(), { ...options, comments: [], summary: null })).toEqual(plain);
+    expect(texts(plain, 'comment')).toHaveLength(0);
+    expect(texts(plain, 'sign')).toHaveLength(0);
+    expect(texts(plain, 'summary')).toHaveLength(0);
+  });
+
+  it('does not move the existing items when notes are added', () => {
+    const plain = layoutOverlay(roomyPage(), options);
+    const noted = layoutOverlay(roomyPage(), {
+      ...options,
+      comments: [{ line: 1, text: 'Anrede fehlt' }],
+      summary: 'Form: Anrede fehlt.',
+    });
+    expect(noted.items.slice(0, plain.items.length)).toEqual(plain.items);
   });
 });

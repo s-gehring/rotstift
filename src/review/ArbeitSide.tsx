@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { HintStatus } from '../correction/uncertain-reading.ts';
+import type { CommentStatus } from './review-flow.ts';
 import { formatCount, wordsText } from '../results/summary.ts';
 import { Button } from '../ui/Button.tsx';
 import { classNames } from '../ui/class-names.ts';
-import type { HintEntry, MarkEntry, PageModel } from './arbeit-model.ts';
+import type { ContentReviewModel, HintEntry, MarkEntry, PageModel } from './arbeit-model.ts';
 import { errorsText } from './summary.ts';
 
 export interface PageHint {
@@ -20,6 +21,8 @@ export interface PageMark {
 
 export interface ArbeitSideProps {
   readonly pages: readonly PageModel[];
+  readonly content?: ContentReviewModel | null;
+  readonly onComment?: (index: number, status: CommentStatus) => void;
   readonly corrected: boolean;
   readonly profile: CorrectionProfile | null;
   readonly editing: string | null;
@@ -210,6 +213,81 @@ function HintGroup({
   );
 }
 
+const CONTENT_STATUS = {
+  reviewing: 'wird geprüft …',
+  cancelled: 'abgebrochen',
+} as const;
+
+function ContentSection({
+  content,
+  onComment,
+}: {
+  readonly content: ContentReviewModel;
+  readonly onComment: (index: number, status: CommentStatus) => void;
+}) {
+  const open = content.comments.filter((comment) => comment.status === 'open');
+  if (content.status === 'done' && content.comments.length === 0) {
+    return <p className="side-empty">Inhalt und Form: keine Auffälligkeiten</p>;
+  }
+  const figure =
+    content.status === 'reviewing' || content.status === 'cancelled'
+      ? CONTENT_STATUS[content.status]
+      : content.status === 'failed'
+        ? 'nicht geprüft'
+        : formatCount(open.length);
+  return (
+    <section className="side-page side-content" aria-labelledby="side-content">
+      <header className="side-page-head">
+        <h2 id="side-content">Inhalt und Form</h2>
+        <span className="side-page-figure">{figure}</span>
+      </header>
+      {content.status === 'failed' && content.message !== null && (
+        <p className="side-empty">{content.message}</p>
+      )}
+      {content.comments.length > 0 && (
+        <ul className="side-comments">
+          {content.comments.map((comment) => (
+            <li key={comment.index} className="side-hint" data-status={comment.status}>
+              <span className="side-comment-text">
+                <span className="side-comment-place">
+                  S. {comment.page}, Z. {comment.line}
+                </span>{' '}
+                {comment.text}
+                {comment.coveredBy !== null && (
+                  <span className="side-comment-place"> · siehe {comment.coveredBy}</span>
+                )}
+              </span>
+              <span className="side-hint-actions">
+                {comment.status === 'open' ? (
+                  <Button
+                    variant="quiet"
+                    aria-label={`Verwerfen: ${comment.text}`}
+                    onClick={() => onComment(comment.index, 'dismissed')}
+                  >
+                    Verwerfen
+                  </Button>
+                ) : (
+                  <>
+                    <span className="side-hint-state">verworfen</span>
+                    <Button
+                      variant="quiet"
+                      aria-label={`Rückgängig: ${comment.text}`}
+                      onClick={() => onComment(comment.index, 'open')}
+                    >
+                      Rückgängig
+                    </Button>
+                  </>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {content.summary !== null && <p className="side-summary">{content.summary}</p>}
+    </section>
+  );
+}
+
 function TextEditor({
   page,
   locked,
@@ -251,6 +329,8 @@ function TextEditor({
 
 export function ArbeitSide({
   pages,
+  content = null,
+  onComment,
   corrected,
   profile,
   editing,
@@ -322,6 +402,9 @@ export function ArbeitSide({
           </section>
         );
       })}
+      {corrected && content !== null && onComment !== undefined && (
+        <ContentSection content={content} onComment={onComment} />
+      )}
     </aside>
   );
 }

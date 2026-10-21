@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH } from '../annotations/profile.ts';
 import { correctPage } from './correct-page.ts';
-import { createPreviewCorrector, previewCorrection } from './preview-corrector.ts';
+import { createPreviewCorrector, previewCorrection, previewReview } from './preview-corrector.ts';
+import { DEFAULT_SCOPE } from './scope.ts';
 
 const DEMO = [
   'Demo-Text: Dieser Text stammt nicht aus einer echten Erkennung.',
@@ -33,5 +34,44 @@ describe('createPreviewCorrector', () => {
     );
     abort.abort();
     await expect(pending).resolves.toEqual({ ok: false, error: { kind: 'cancelled' } });
+  });
+});
+
+describe('previewReview', () => {
+  const lines = [
+    { pageId: 'p1', line: 1, text: 'Erste' },
+    { pageId: 'p1', line: 2, text: '' },
+    { pageId: 'p1', line: 3, text: 'Zweite' },
+    { pageId: 'p1', line: 4, text: 'Dritte' },
+  ];
+
+  it('comments on form at the first and content at the middle written line', () => {
+    const result = previewReview({
+      lines,
+      profile: DEUTSCH,
+      scope: {
+        ...DEFAULT_SCOPE,
+        form: true,
+        formName: 'Leserbrief',
+        content: true,
+        assignment: 'A',
+      },
+    });
+    expect(result).toEqual({
+      ok: true,
+      comments: [
+        { pageId: 'p1', line: 1, kind: 'form', text: 'Bezug zum Artikel fehlt' },
+        { pageId: 'p1', line: 3, kind: 'content', text: 'Vorgabe der Aufgabe fehlt' },
+      ],
+      questions: 6,
+    });
+  });
+
+  it('gives no comments when nothing is requested', () => {
+    expect(previewReview({ lines, profile: DEUTSCH, scope: DEFAULT_SCOPE })).toEqual({
+      ok: true,
+      comments: [],
+      questions: 0,
+    });
   });
 });

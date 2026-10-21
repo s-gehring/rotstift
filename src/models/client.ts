@@ -49,6 +49,8 @@ export function createModelClient(
     cancelDownload: (modelId: string) => call<boolean>('model_download_cancel', { modelId }),
     selection: () => call<string | null>('model_selection'),
     select: (modelId: string) => call<undefined>('model_select', { modelId }),
+    reviewerSelection: () => call<string | null>('model_reviewer_selection'),
+    selectReviewer: (modelId: string) => call<undefined>('model_select_reviewer', { modelId }),
     remove: (modelId: string) => call<ModelStatus>('model_delete', { modelId }),
     verify: (modelId: string) => call<ModelStatus>('model_verify', { modelId }),
     importFiles: (modelId: string) => call<ImportOutcome | null>('model_import', { modelId }),

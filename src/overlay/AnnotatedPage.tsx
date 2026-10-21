@@ -3,7 +3,7 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import type { ReadingHint } from '../correction/uncertain-reading.ts';
 import { layoutHints, markText, type HintSpot } from './hint-layout.ts';
-import { layoutOverlay } from './layout.ts';
+import { layoutOverlay, type PageComment } from './layout.ts';
 import type { TextLocator } from './locator.ts';
 import { INK_COLOR, INK_OPACITY, type OverlayItem, type PageSize } from './model.ts';
 import './overlay.css';
@@ -17,6 +17,8 @@ export interface AnnotatedPageProps {
   readonly alt?: string;
   readonly className?: string;
   readonly hints?: readonly ReadingHint[];
+  readonly comments?: readonly PageComment[];
+  readonly summary?: string | null;
   readonly activeMark?: string | null;
   readonly onMarkHover?: (key: string | null) => void;
   readonly onMarkSelect?: (key: string) => void;
@@ -65,6 +67,8 @@ export function AnnotatedPage({
   alt = '',
   className,
   hints,
+  comments,
+  summary = null,
   activeMark = null,
   onMarkHover,
   onMarkSelect,
@@ -72,9 +76,18 @@ export function AnnotatedPage({
   onHintHover,
   onHintSelect,
 }: AnnotatedPageProps) {
+  const [notes, setNotes] = useState(comments);
+  if (notes !== comments && JSON.stringify(notes) !== JSON.stringify(comments)) setNotes(comments);
   const model = useMemo(
-    () => layoutOverlay(transcript, { page: size, profile, ...(locator ? { locator } : {}) }),
-    [transcript, size, profile, locator],
+    () =>
+      layoutOverlay(transcript, {
+        page: size,
+        profile,
+        ...(locator ? { locator } : {}),
+        ...(notes && { comments: notes }),
+        summary,
+      }),
+    [transcript, size, profile, locator, notes, summary],
   );
   const groups = useMemo(() => groupByMark(model.items), [model]);
   const interactive = onMarkHover !== undefined || onMarkSelect !== undefined;

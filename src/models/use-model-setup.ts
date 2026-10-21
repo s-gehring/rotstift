@@ -4,7 +4,9 @@ import { describeImport } from './format.ts';
 import {
   CORRECTORS,
   DEFAULT_MODEL_ID,
+  DEFAULT_REVIEWER_ID,
   MODELS,
+  REVIEWERS,
   modelFiles,
   type AnyModelInfo,
   type CorrectorInfo,
@@ -26,9 +28,42 @@ function toDownloadError(error: unknown): DownloadError {
   return error instanceof ModelCallError ? error.error : { kind: 'io' };
 }
 
-function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models: readonly T[]) {
+interface Choice {
+  readonly defaultId: string;
+  readonly load: (client: ModelClient) => Promise<string | null>;
+  readonly save: (client: ModelClient, modelId: string) => Promise<undefined>;
+}
+
+const TRANSCRIBER_CHOICE: Choice = {
+  defaultId: DEFAULT_MODEL_ID,
+  load: (client) => client.selection(),
+  save: (client, modelId) => client.select(modelId),
+};
+
+const REVIEWER_CHOICE: Choice = {
+  defaultId: DEFAULT_REVIEWER_ID,
+  load: (client) => client.reviewerSelection(),
+  save: (client, modelId) => client.selectReviewer(modelId),
+};
+
+interface Change {
+  readonly origin: symbol;
+  readonly modelId: string;
+}
+
+const changeListeners = new WeakMap<ModelClient, Set<(change: Change) => void>>();
+
+function announceChange(client: ModelClient, change: Change) {
+  for (const listener of changeListeners.get(client) ?? []) listener(change);
+}
+
+function useRoleSetup<T extends AnyModelInfo>(
+  client: ModelClient | null,
+  models: readonly T[],
+  choice: Choice | null,
+) {
   const [state, dispatch] = useReducer(setupReducer, INITIAL_SETUP);
-  const choosable = models.some((model) => model.role === 'transcriber');
+  const origin = useRef(Symbol('model-setup'));
 
   const verifying = useRef(new Set<string>());
 
@@ -61,7 +96,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
       const [statuses, hardware, selectedId] = await Promise.all([
         Promise.all(models.map((model) => client.status(model.id))),
         client.hardware().catch(() => null),
-        choosable ? client.selection().catch(() => null) : null,
+        choice === null ? null : choice.load(client).catch(() => null),
       ]);
       dispatch({
         type: 'loaded',
@@ -79,7 +114,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     } catch (error) {
       dispatch({ type: 'error', modelId: ANY_MODEL, error: toDownloadError(error) });
     }
-  }, [client, verify, choosable, models]);
+  }, [client, verify, choice, models]);
 
   useEffect(() => {
     if (client === null) return undefined;
@@ -104,6 +139,21 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     };
   }, [client, refresh]);
 
+  useEffect(() => {
+    if (client === null) return undefined;
+    const listeners = changeListeners.get(client) ?? new Set<(change: Change) => void>();
+    changeListeners.set(client, listeners);
+    const listener = (change: Change) => {
+      if (change.origin !== origin.current && models.some((model) => model.id === change.modelId)) {
+        void refresh();
+      }
+    };
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, [client, refresh, models]);
+
   const model = useMemo(() => activeModel(state, models), [state, models]);
   const status = state.statuses[model.id] ?? null;
 
@@ -120,11 +170,11 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
       if (client === null || modelId === model.id || hasRunningJob(state)) return;
       dispatch({ type: 'error', modelId: model.id, error: null });
       await guard(model.id, async () => {
-        await client.select(modelId);
+        if (choice !== null) await choice.save(client, modelId);
         dispatch({ type: 'selected', modelId });
       });
     },
-    [client, guard, model.id, state],
+    [client, choice, guard, model.id, state],
   );
 
   const verifyAgain = useCallback(async () => {
@@ -157,12 +207,13 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
       dispatch({ type: 'note', note: null });
       await guard(modelId, async () => {
         dispatch({ type: 'status', status: await client.remove(modelId) });
-        if (!choosable) return;
-        const selectedId = await client.selection().catch(() => null);
-        dispatch({ type: 'selected', modelId: selectedId ?? DEFAULT_MODEL_ID });
+        announceChange(client, { origin: origin.current, modelId });
+        if (choice === null) return;
+        const selectedId = await choice.load(client).catch(() => null);
+        dispatch({ type: 'selected', modelId: selectedId ?? choice.defaultId });
       });
     },
-    [client, guard, model.id, choosable],
+    [client, guard, model.id, choice],
   );
 
   const importFiles = useCallback(async () => {
@@ -178,6 +229,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
             describeImport(outcome.imported, outcome.unmatched, modelFiles(model).length) || null,
         });
         await refresh();
+        announceChange(client, { origin: origin.current, modelId: model.id });
       }
     });
     dispatch({ type: 'importing', importing: false });
@@ -209,9 +261,13 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
 export type ModelSetup<T extends AnyModelInfo = ModelInfo> = ReturnType<typeof useRoleSetup<T>>;
 
 export function useModelSetup(client: ModelClient | null): ModelSetup {
-  return useRoleSetup(client, MODELS);
+  return useRoleSetup(client, MODELS, TRANSCRIBER_CHOICE);
 }
 
 export function useCorrectorModelSetup(client: ModelClient | null): ModelSetup<CorrectorInfo> {
-  return useRoleSetup(client, CORRECTORS);
+  return useRoleSetup(client, CORRECTORS, null);
+}
+
+export function useReviewerModelSetup(client: ModelClient | null): ModelSetup<CorrectorInfo> {
+  return useRoleSetup(client, REVIEWERS, REVIEWER_CHOICE);
 }

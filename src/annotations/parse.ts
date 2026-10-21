@@ -72,8 +72,11 @@ interface LineState {
 
 class Collector {
   readonly issues: ParseIssue[] = [];
+  private readonly profile: CorrectionProfile;
 
-  constructor(private readonly profile: CorrectionProfile) {}
+  constructor(profile: CorrectionProfile) {
+    this.profile = profile;
+  }
 
   report(line: LineState | undefined, message: string): void {
     if (!line) {

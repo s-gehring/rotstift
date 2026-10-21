@@ -170,3 +170,26 @@ pub async fn model_select<R: Runtime>(
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn model_reviewer_selection<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<String>, DownloadError> {
+    Ok(selection::load_reviewer(&selection::selection_path(
+        &models_dir(&app)?,
+    )))
+}
+
+#[tauri::command]
+pub fn model_select_reviewer<R: Runtime>(
+    app: AppHandle<R>,
+    models: State<'_, Arc<ModelManager>>,
+    llm: State<'_, LlmRuntime>,
+    model_id: String,
+) -> Result<(), DownloadError> {
+    let entry = manager::entry(&model_id)?;
+    if llm.is_busy() || models.has_jobs() {
+        return Err(DownloadError::Busy);
+    }
+    selection::save_reviewer(&selection::selection_path(&models_dir(&app)?), entry)
+}

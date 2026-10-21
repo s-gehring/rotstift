@@ -43,6 +43,7 @@ function reviewPage(status: ReviewPage['status'], words = 0, byType: Record<stri
 }
 
 const state: ReviewState = {
+  works: {},
   profile: null,
   run: null,
   stopping: false,

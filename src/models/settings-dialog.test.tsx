@@ -6,16 +6,28 @@ import { AppProvider } from '../app/app-context.tsx';
 import { testAppModel, testModelSetup } from '../app/test-app.ts';
 import type { Models, ModelRole } from '../app/types.ts';
 import type { ModelClient } from './client.ts';
-import { defaultCorrector, recommendModel, totalBytes, type AnyModelInfo } from './registry.ts';
+import {
+  defaultCorrector,
+  defaultReviewer,
+  recommendModel,
+  totalBytes,
+  type AnyModelInfo,
+} from './registry.ts';
 import { SettingsDialog } from './SettingsDialog.tsx';
 import { fakeModelClient, type FakeClientOptions } from './test-client.ts';
 import type { DownloadError, ModelState, ModelStatus } from './types.ts';
-import { useCorrectorModelSetup, useModelSetup, type ModelSetup } from './use-model-setup.ts';
+import {
+  useCorrectorModelSetup,
+  useModelSetup,
+  useReviewerModelSetup,
+  type ModelSetup,
+} from './use-model-setup.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const transcriber = recommendModel();
 const corrector = defaultCorrector();
+const reviewer = defaultReviewer();
 const GIB = 1024 ** 3;
 const QWEN_ID = 'qwen3-vl-4b-q4';
 const BIG = { totalRamBytes: 16 * GIB, freeDiskBytes: 100e9 };
@@ -71,17 +83,19 @@ interface LiveProps {
 
 function Live({
   client,
-  switchLocked = { transcriber: false, corrector: false },
+  switchLocked = { transcriber: false, corrector: false, reviewer: false },
   show = noop,
 }: LiveProps) {
   const transcriberSetup = useModelSetup(client);
   const correctorSetup = useCorrectorModelSetup(client);
+  const reviewerSetup = useReviewerModelSetup(client);
   return (
     <AppProvider
       value={testAppModel({
         models: {
           transcriber: transcriberSetup,
           corrector: correctorSetup,
+          reviewer: reviewerSetup,
           switchLocked,
           settings: { open: true, show: noop, close: noop },
           setup: { open: false, roles: [], pendingRun: null, show, close: noop },
@@ -133,20 +147,32 @@ describe('SettingsDialog static content', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'ready')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'missing')),
+      reviewer: testModelSetup(reviewer, statusOf(reviewer, 'missing')),
     });
     expect(container.querySelector('dialog h2')?.textContent).toBe('Einstellungen');
     expect(section('transcriber').querySelector('h3')?.textContent).toBe('Texterkennung');
     expect(section('corrector').querySelector('h3')?.textContent).toBe('Korrektur');
+    expect(section('reviewer').querySelector('h3')?.textContent).toBe('Inhalt und Form');
     expect(section('transcriber').textContent).toContain('GLM-OCR (Q8_0)');
     expect(section('transcriber').textContent).toContain('1,4 GB');
     expect(section('corrector').textContent).toContain('Gemma 4 E2B it (Q4_0)');
     expect(section('corrector').textContent).toContain('2,8 GB');
-    expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet']);
+    expect(section('reviewer').textContent).toContain('Gemma 4 E2B it (Q4_0)');
+    expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet', 'Nicht eingerichtet']);
     expect(buttonLabels(section('transcriber'))).toEqual(['Löschen']);
-    expect(buttonLabels(section('corrector'))).toEqual([
-      'Herunterladen',
-      'Modell aus Datei importieren …',
-    ]);
+    for (const role of ['corrector', 'reviewer'] as const) {
+      expect(buttonLabels(section(role))).toEqual([
+        'Herunterladen',
+        'Modell aus Datei importieren …',
+      ]);
+    }
+    expect(section('corrector').textContent).toContain(
+      'Wird auch für Inhalt und Form verwendet und nur einmal gespeichert.',
+    );
+    expect(section('reviewer').textContent).toContain(
+      'Wird auch für Korrektur verwendet und nur einmal gespeichert.',
+    );
+    expect(section('transcriber').textContent).not.toContain('nur einmal gespeichert');
     expect(container.querySelector('summary')?.textContent).toBe('Protokoll');
     expect(container.querySelector('.settings-about')?.textContent).toMatch(
       /^Rotstift \d+\.\d+\.\d+ · Alles bleibt auf diesem Rechner\.$/,
@@ -169,6 +195,7 @@ describe('SettingsDialog static content', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, null, { available: false }),
       corrector: testModelSetup(corrector, null, { available: false }),
+      reviewer: testModelSetup(reviewer, null, { available: false }),
     });
     expect(container.querySelector('.dialog-body')?.textContent).toContain(
       'Modelle gibt es nur in der Desktop-App.',
@@ -269,8 +296,9 @@ describe('SettingsDialog static actions', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'corrupt')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'missing', 300_000_000)),
+      reviewer: testModelSetup(reviewer, statusOf(reviewer, 'missing', 300_000_000)),
     });
-    expect(stateTexts()).toEqual(['Beschädigt', 'Nicht eingerichtet']);
+    expect(stateTexts()).toEqual(['Beschädigt', 'Nicht eingerichtet', 'Nicht eingerichtet']);
     expect(buttonIn(section('transcriber'), 'Löschen')).toBeDefined();
     expect(buttonIn(section('corrector'), 'Löschen')).toBeDefined();
     expect(buttonIn(section('corrector'), 'Herunterladen')).toBeDefined();
@@ -309,7 +337,7 @@ describe('SettingsDialog static actions', () => {
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'ready')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'ready')),
-      switchLocked: { transcriber: true, corrector: false },
+      switchLocked: { transcriber: true, corrector: false, reviewer: false },
     });
     expect(buttonIn(section('transcriber'), 'Löschen')?.disabled).toBe(true);
     expect(buttonIn(section('corrector'), 'Löschen')?.disabled).toBe(false);
@@ -391,7 +419,7 @@ describe('SettingsDialog with live model state', () => {
 
   it('blocks switching and deleting for a locked role', async () => {
     await mountLive(
-      { switchLocked: { transcriber: true, corrector: false } },
+      { switchLocked: { transcriber: true, corrector: false, reviewer: false } },
       { hardware: BIG, states: { [transcriber.id]: 'ready', [corrector.id]: 'ready' } },
     );
     await vi.waitFor(() => expect(radios(section('transcriber'))).toHaveLength(2));
@@ -406,20 +434,22 @@ describe('SettingsDialog with live model state', () => {
       { show },
       { states: { [transcriber.id]: 'ready', [corrector.id]: 'ready' } },
     );
-    expect(stateTexts()).toEqual(['Bereit', 'Bereit']);
+    expect(stateTexts()).toEqual(['Bereit', 'Bereit', 'Bereit']);
 
     await click(buttonIn(section('corrector'), 'Löschen'));
     expect(section('corrector').textContent).toContain('Korrektur wirklich löschen?');
     await click(buttonIn(section('corrector'), 'Behalten'));
     expect(fake.remove).not.toHaveBeenCalled();
-    expect(stateTexts()).toEqual(['Bereit', 'Bereit']);
+    expect(stateTexts()).toEqual(['Bereit', 'Bereit', 'Bereit']);
 
     await click(buttonIn(section('corrector'), 'Löschen'));
     await click(
       buttonIn(section('corrector').querySelector('[role="alertdialog"]') ?? container, 'Löschen'),
     );
     expect(fake.remove).toHaveBeenCalledExactlyOnceWith(corrector.id);
-    await vi.waitFor(() => expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet']));
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet', 'Nicht eingerichtet']),
+    );
     expect(buttonLabels(section('corrector'))).toEqual([
       'Herunterladen',
       'Modell aus Datei importieren …',
@@ -428,6 +458,44 @@ describe('SettingsDialog with live model state', () => {
 
     await click(buttonIn(section('corrector'), 'Herunterladen'));
     expect(show).toHaveBeenCalledExactlyOnceWith(['corrector']);
+  });
+
+  it('deleting the shared model from the reviewer section removes it for the corrector too', async () => {
+    const show = vi.fn<(roles: readonly ModelRole[]) => void>();
+    const fake = await mountLive({ show }, { states: { [corrector.id]: 'ready' } });
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual(['Nicht eingerichtet', 'Bereit', 'Bereit']),
+    );
+
+    await click(buttonIn(section('reviewer'), 'Löschen'));
+    expect(section('reviewer').textContent).toContain('Inhalt und Form wirklich löschen?');
+    await click(
+      buttonIn(section('reviewer').querySelector('[role="alertdialog"]') ?? container, 'Löschen'),
+    );
+    expect(fake.remove).toHaveBeenCalledExactlyOnceWith(reviewer.id);
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual([
+        'Nicht eingerichtet',
+        'Nicht eingerichtet',
+        'Nicht eingerichtet',
+      ]),
+    );
+
+    await click(buttonIn(section('reviewer'), 'Herunterladen'));
+    expect(show).toHaveBeenCalledExactlyOnceWith(['reviewer']);
+  });
+
+  it('locks the reviewer section on its own', async () => {
+    await mountLive(
+      { switchLocked: { transcriber: false, corrector: false, reviewer: true } },
+      { states: { [corrector.id]: 'ready' } },
+    );
+    await vi.waitFor(() =>
+      expect(stateTexts()).toEqual(['Nicht eingerichtet', 'Bereit', 'Bereit']),
+    );
+    expect(section('reviewer').querySelector('fieldset')?.disabled).toBe(true);
+    expect(buttonIn(section('reviewer'), 'Löschen')?.disabled).toBe(true);
+    expect(buttonIn(section('corrector'), 'Löschen')?.disabled).toBe(false);
   });
 
   it('verifies leftover files again on request and shows the verified result', async () => {

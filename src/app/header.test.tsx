@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ENGLISCH } from '../annotations/profile.ts';
-import { DEFAULT_SCOPE } from '../correction/scope.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import { page, setupReview, waitFor } from '../review/test-support.ts';
 import { AppProvider } from './app-context.tsx';
@@ -264,5 +264,157 @@ describe('Header', () => {
     });
     expect(button('Exportieren')?.className).toContain('btn-secondary');
     expect(button('Korrigieren')?.className).toContain('btn-primary');
+  });
+});
+
+function Scoped({ initial }: { initial: CorrectionScope }) {
+  const [scope, setScope] = useState(initial);
+  return (
+    <AppProvider value={testAppModel({ importState: { arbeiten }, subject: { scope, setScope } })}>
+      <Header />
+    </AppProvider>
+  );
+}
+
+function renderScoped(initial: CorrectionScope = DEFAULT_SCOPE) {
+  act(() => root.render(<Scoped initial={initial} />));
+}
+
+const draw = (subjectParts: Partial<Subject>) => {
+  render({ subject: subjectParts });
+};
+
+const formInput = () =>
+  container.querySelector<HTMLInputElement>('.scope-popover input[type="text"]');
+const assignmentField = () => container.querySelector<HTMLTextAreaElement>('textarea');
+const popover = () => container.querySelector('.scope-popover');
+const errors = () =>
+  [...container.querySelectorAll('.error-text')].map((element) => element.textContent);
+
+describe('SubjectSelect with content and form', () => {
+  it('offers Inhalt and Form next to spelling and grammar, both off by default', () => {
+    renderScoped();
+    openScope();
+
+    expect(
+      [...container.querySelectorAll('.scope-kind')].map((element) => element.textContent),
+    ).toEqual(['Rechtschreibung', 'Grammatik', 'Inhalt', 'Form']);
+    expect(checkbox('Inhalt')?.checked).toBe(false);
+    expect(checkbox('Form')?.checked).toBe(false);
+    expect(formInput()).toBeNull();
+  });
+
+  it('asks for the Textform when Form is ticked, suggests known forms and focuses the field', () => {
+    renderScoped();
+    openScope();
+    click(checkbox('Form'));
+
+    const input = formInput();
+    expect(input?.closest('label')?.textContent).toContain('Textform');
+    expect(document.activeElement).toBe(input);
+    const list = container.querySelector(
+      `datalist#${CSS.escape(input?.getAttribute('list') ?? '')}`,
+    );
+    const options = [...(list?.querySelectorAll('option') ?? [])].map((option) => option.value);
+    expect(options).toContain('Persönlicher Brief');
+    expect(new Set(options).size).toBe(options.length);
+
+    click(checkbox('Form'));
+    expect(formInput()).toBeNull();
+  });
+
+  it('keeps what was typed as the Textform', () => {
+    renderScoped();
+    openScope();
+    click(checkbox('Form'));
+    const input = formInput();
+    if (input === null) throw new Error('missing input');
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'Persönlicher Brief',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(formInput()?.value).toBe('Persönlicher Brief');
+  });
+
+  it('moves the focus to the Aufgabenstellung when Inhalt is ticked', () => {
+    renderScoped();
+    openScope();
+    expect(document.activeElement).toBe(subject());
+
+    click(checkbox('Inhalt'));
+
+    expect(checkbox('Inhalt')?.checked).toBe(true);
+    expect(document.activeElement).toBe(assignmentField());
+  });
+
+  it('does not move the focus when a kind is switched off again', () => {
+    renderScoped({ ...DEFAULT_SCOPE, content: true, form: true, formName: 'Bericht' });
+    openScope();
+    click(checkbox('Inhalt'));
+    expect(checkbox('Inhalt')?.checked).toBe(false);
+    expect(document.activeElement).not.toBe(assignmentField());
+  });
+
+  it('opens on a missing Aufgabenstellung, marks the field, names the problem and focuses it', () => {
+    const scope = { ...DEFAULT_SCOPE, content: true };
+    draw({ scope, missing: null });
+    expect(popover()).toBeNull();
+
+    draw({ scope, missing: 'assignment' });
+
+    const field = assignmentField();
+    expect(popover()).not.toBeNull();
+    expect(field?.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(field);
+    expect(errors()).toEqual(['Aufgabenstellung fehlt']);
+    expect(field?.getAttribute('aria-describedby')).toBe(
+      container.querySelector('.error-text')?.id,
+    );
+    expect(field?.closest('label')?.textContent).toContain('Aufgabenstellung fehlt');
+  });
+
+  it('opens on a missing Textform and marks that field only', () => {
+    const scope = { ...DEFAULT_SCOPE, form: true };
+    draw({ scope, missing: null });
+    draw({ scope, missing: 'formName' });
+
+    const input = formInput();
+    expect(input?.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(input);
+    expect(errors()).toEqual(['Textform fehlt']);
+    expect(assignmentField()?.hasAttribute('aria-invalid')).toBe(false);
+  });
+
+  it('opens but flags nothing once the scope no longer needs the field', () => {
+    draw({ scope: DEFAULT_SCOPE, missing: null });
+    draw({
+      scope: { ...DEFAULT_SCOPE, content: true, assignment: 'Beschreibe deinen Tag.' },
+      missing: 'assignment',
+    });
+
+    expect(popover()).not.toBeNull();
+    expect(assignmentField()?.hasAttribute('aria-invalid')).toBe(false);
+    expect(errors()).toEqual([]);
+  });
+
+  it('forgets the missing field when the choice is closed', () => {
+    const clearMissing = vi.fn<() => void>();
+    const scope = { ...DEFAULT_SCOPE, content: true };
+    draw({ scope, missing: null, clearMissing });
+    draw({ scope, missing: 'assignment', clearMissing });
+    expect(clearMissing).not.toHaveBeenCalled();
+
+    act(() => {
+      assignmentField()?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    });
+
+    expect(popover()).toBeNull();
+    expect(clearMissing).toHaveBeenCalled();
+    expect(document.activeElement).toBe(scopeButton());
   });
 });
