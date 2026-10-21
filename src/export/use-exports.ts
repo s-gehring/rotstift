@@ -64,7 +64,7 @@ function action(
 }
 
 export function useExports(arbeitId?: string): MenuAction[] {
-  const { importState, work, toasts, run, weighting } = useApp();
+  const { importState, work, toasts, run, weighting, grading } = useApp();
   const { arbeiten } = importState;
   const entries = work.count.state.entries;
   const review = work.review.state;
@@ -110,15 +110,12 @@ export function useExports(arbeitId?: string): MenuAction[] {
   const exportable = summaries.filter(
     (summary) => summary.complete && !summary.preview && summary.statistics !== null,
   );
+  const rating =
+    profile === null ? null : { weighting: weighting.of(profile), grading: grading.of(profile) };
   const corrections: CorrectionColumns | undefined =
-    profile === null
+    profile === null || rating === null
       ? undefined
-      : {
-          types: requestedTypes(arbeiten, review),
-          arbeiten: summaries,
-          profile,
-          weighting: weighting.of(profile),
-        };
+      : { types: requestedTypes(arbeiten, review), arbeiten: summaries, profile, ...rating };
   const blocked = firstHint(busy && EXPORT_HINT.busy, run.running && EXPORT_HINT.running);
   const fileBlocked = blocked ?? (canSaveFiles() ? null : EXPORT_HINT.desktop);
 
@@ -135,7 +132,9 @@ export function useExports(arbeitId?: string): MenuAction[] {
           ));
     return action('Diese Arbeit als PDF', 'file', hint, () => {
       const corrected =
-        profile === null ? null : exporter.correctedArbeit(target, review, entries, profile);
+        profile === null || rating === null
+          ? null
+          : exporter.correctedArbeit(target, review, entries, profile, rating);
       if (corrected !== null) {
         runPdf((options) =>
           saveCorrectedPdf(corrected, {
@@ -178,8 +177,8 @@ export function useExports(arbeitId?: string): MenuAction[] {
 
   items.push(
     action('Klassen-PDF', 'file', fileBlocked ?? classHint, () => {
-      if (profile !== null) {
-        const included = exporter.classArbeiten(arbeiten, review, entries, profile);
+      if (profile !== null && rating !== null) {
+        const included = exporter.classArbeiten(arbeiten, review, entries, profile, rating);
         runPdf((options) =>
           saveClassPdf(included, {
             ...options,

@@ -14,6 +14,7 @@ import { buildArbeitModel, type ArbeitFigures, type PageModel } from './arbeit-m
 import { ArbeitPage } from './ArbeitPage.tsx';
 import { ArbeitSide, type PageHint, type PageMark } from './ArbeitSide.tsx';
 import { setDisplay, useDisplay, type Display } from './display.ts';
+import { gradeText } from '../stats/grading.ts';
 import { formatWeighted } from '../stats/weighting.ts';
 import { errorsText, formatRate } from './summary.ts';
 import './review.css';
@@ -34,11 +35,12 @@ function ignoresShortcuts(target: EventTarget | null): boolean {
   return target.closest('[role="menu"]') !== null;
 }
 
-function figuresText({ words, errors, partial }: ArbeitFigures): string {
+function figuresText({ words, errors, grade, partial }: ArbeitFigures): string {
   const prefix = partial ? 'mind. ' : '';
   const parts: string[] = [];
   if (words !== null) parts.push(prefix + wordsText(words));
   if (errors !== null) parts.push(prefix + errorsText(errors));
+  if (grade !== null) parts.push(gradeText(grade.value, grade.scale));
   return parts.join(' · ');
 }
 
@@ -258,7 +260,7 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
 }
 
 export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
-  const { importState, navigation, work, run, weighting } = useApp();
+  const { importState, navigation, work, run, weighting, grading } = useApp();
   const { back, next, prev, position } = navigation;
   const display = useDisplay();
   const headingId = useId();
@@ -285,6 +287,7 @@ export function ArbeitView({ arbeitId }: { readonly arbeitId: string }) {
     work.review.state,
     work.count.state.entries,
     work.review.state.profile === null ? null : weighting.of(work.review.state.profile),
+    work.review.state.profile === null ? null : grading.of(work.review.state.profile),
   );
   const figures = figuresText(model.figures);
   const headerExports =

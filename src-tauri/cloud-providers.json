@@ -22,6 +22,14 @@
       "tokenField": "max_tokens"
     },
     {
+      "id": "anthropic",
+      "label": "Anthropic",
+      "baseUrl": "https://api.anthropic.com/v1",
+      "key": "required",
+      "tokenField": "max_tokens",
+      "api": "anthropic"
+    },
+    {
       "id": "openai",
       "label": "OpenAI",
       "baseUrl": "https://api.openai.com/v1",

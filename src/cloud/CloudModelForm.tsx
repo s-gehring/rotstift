@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ModelRole } from '../app/types.ts';
 import { Button } from '../ui/Button.tsx';
-import type { CloudInput } from './client.ts';
+import type { CloudInput, RemoteModel } from './client.ts';
 import { describeCloudError, type CloudErrorClass } from './errors.ts';
 import { CLOUD_TEMPLATES, findTemplate } from './templates.ts';
 import type { CloudModel } from './use-cloud.ts';
@@ -81,8 +81,12 @@ export function CloudModelForm({
   const [error, setError] = useState<CloudErrorClass | null>(null);
   const [busy, setBusy] = useState(false);
   const [warning, setWarning] = useState(false);
+  const [models, setModels] = useState<readonly RemoteModel[] | null>(null);
+  const [modelsError, setModelsError] = useState<CloudErrorClass | null>(null);
+  const [loadingModels, setLoadingModels] = useState(false);
   const template = findTemplate(templateId);
   const fixed = template?.baseUrl ?? null;
+  const listed = template?.api === 'anthropic';
   const id = (name: string) => `cloud-${name}-${role}`;
 
   const input = (): CloudInput => ({
@@ -109,6 +113,19 @@ export function CloudModelForm({
     else setError(outcome.error);
   }
 
+  async function loadModels() {
+    setModelsError(null);
+    setLoadingModels(true);
+    const outcome = await cloud.models(input());
+    setLoadingModels(false);
+    if (outcome.state === 'ok') {
+      setModels(outcome.models);
+      setModel((current) => (outcome.models.some((entry) => entry.id === current) ? current : ''));
+    } else {
+      setModelsError(outcome.error);
+    }
+  }
+
   if (warning) {
     return <CloudWarning onCancel={() => setWarning(false)} onConfirm={() => void submit(true)} />;
   }
@@ -127,6 +144,9 @@ export function CloudModelForm({
         value={templateId}
         onChange={(event) => {
           setTemplateId(event.target.value);
+          setModel('');
+          setModels(null);
+          setModelsError(null);
           setError(null);
         }}
       >
@@ -166,13 +186,48 @@ export function CloudModelForm({
           />
           <FieldError error={error} field="key" />
           <label htmlFor={id('model')}>Modell</label>
-          <input
-            id={id('model')}
-            type="text"
-            value={model}
-            spellCheck={false}
-            onChange={(event) => setModel(event.target.value)}
-          />
+          {listed ? (
+            <>
+              <Button
+                variant="quiet"
+                disabled={key.trim() === '' || loadingModels}
+                onClick={() => void loadModels()}
+              >
+                {loadingModels ? 'Wird geladen …' : 'Modelle laden'}
+              </Button>
+              {models !== null && (
+                <select
+                  id={id('model')}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                >
+                  <option value="" disabled>
+                    Modell wählen
+                  </option>
+                  {models.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.displayName === entry.id
+                        ? entry.id
+                        : `${entry.displayName} (${entry.id})`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {modelsError !== null && (
+                <p className="settings-error" role="alert">
+                  {describeCloudError(modelsError)}.
+                </p>
+              )}
+            </>
+          ) : (
+            <input
+              id={id('model')}
+              type="text"
+              value={model}
+              spellCheck={false}
+              onChange={(event) => setModel(event.target.value)}
+            />
+          )}
           <FieldError error={error} field="model" />
         </>
       )}

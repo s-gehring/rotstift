@@ -23,8 +23,12 @@ import { layoutOverlay } from '../overlay/layout.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createLlmTranscriber } from '../pipeline/llm-transcriber.ts';
 import { createRunner } from '../pipeline/runner.ts';
+import { defaultGrading } from '../stats/grading.ts';
+import { defaultWeighting } from '../stats/weighting.ts';
 import { createReviewExport } from './export-input.ts';
 import { createReviewFlow, type ReviewPhase } from './review-flow.ts';
+
+const RATING = { weighting: defaultWeighting(DEUTSCH), grading: defaultGrading() };
 
 vi.mock('../import/canvas.ts', () =>
   import('../export/test-support.ts').then((m) => m.canvasModule),
@@ -259,7 +263,13 @@ describe.skipIf(!available)('Berichtigen end to end with the real sidecar', () =
 
       const exporter = createReviewExport();
       const arbeit: Arbeit = { id: 'e2e', name: 'Berichtigen E2E', pages };
-      const input = exporter.correctedArbeit(arbeit, state, runner.getState().entries, DEUTSCH);
+      const input = exporter.correctedArbeit(
+        arbeit,
+        state,
+        runner.getState().entries,
+        DEUTSCH,
+        RATING,
+      );
       if (input === null) throw new Error('the Arbeit is not exportable');
       const exportStarted = performance.now();
       const pdf = await buildCorrectedPdf(input, { encodePage: exporter.encodePage });

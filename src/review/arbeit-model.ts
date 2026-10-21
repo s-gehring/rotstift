@@ -12,6 +12,7 @@ import { coveringMark } from '../content-form/overlap.ts';
 import { summaryText } from '../content-form/review.ts';
 import type { PageComment } from '../overlay/layout.ts';
 import type { CommentStatus, ReviewImage, ReviewState, WorkReview } from './review-flow.ts';
+import { gradeFor, type GradeScale, type Grading } from '../stats/grading.ts';
 import type { Weighting } from '../stats/weighting.ts';
 import { pageCondition, summarizeArbeit, weighArbeit, type Entries } from './summary.ts';
 
@@ -78,6 +79,7 @@ export interface ArbeitFigures {
   readonly errors: number | null;
   readonly weighted: number | null;
   readonly quotient: number | null;
+  readonly grade: { readonly value: string; readonly scale: GradeScale } | null;
   readonly partial: boolean;
 }
 
@@ -150,6 +152,7 @@ export function buildArbeitModel(
   review: ReviewState,
   entries: Entries,
   weighting: Weighting | null = null,
+  grading: Grading | null = null,
 ): ArbeitModel {
   const corrected = arbeit.pages.some((page) => review.pages[page.id] !== undefined);
   const result = buildResults([arbeit], entries)[0];
@@ -239,11 +242,13 @@ export function buildArbeitModel(
       review.profile === null || weighting === null
         ? null
         : weighArbeit(summary, review.profile, weighting);
+    const grade = grading === null || !summary.complete ? null : gradeFor(weighted, grading);
     figures = {
       words: summary.statistics?.words ?? null,
       errors: summary.statistics?.errors ?? null,
       weighted: weighted?.weighted ?? null,
       quotient: weighted?.quotient ?? null,
+      grade: grade === null || grading === null ? null : { value: grade, scale: grading.scale },
       partial: !summary.complete,
     };
   } else {
@@ -252,6 +257,7 @@ export function buildArbeitModel(
       errors: null,
       weighted: null,
       quotient: null,
+      grade: null,
       partial: result !== undefined && result.countedPages < result.pageCount,
     };
   }

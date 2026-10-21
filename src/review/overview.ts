@@ -1,4 +1,5 @@
 import type { Arbeit } from '../import/arbeiten.ts';
+import { activeLimits, gradeFor, type GradeScale, type Grading } from '../stats/grading.ts';
 import type { Weighting } from '../stats/weighting.ts';
 import { buildResults, classTotals } from '../results/summary.ts';
 import type { ReviewState } from './review-flow.ts';
@@ -25,6 +26,7 @@ export interface OverviewRow {
   readonly errors: number | null;
   readonly weighted: number | null;
   readonly quotient: number | null;
+  readonly grade: string | null;
   readonly top: readonly TypeCount[];
   readonly tag: OverviewTag | null;
 }
@@ -42,6 +44,7 @@ export interface Overview {
   readonly rows: readonly OverviewRow[];
   readonly total: OverviewTotal | null;
   readonly types: readonly TypeCount[];
+  readonly scale: GradeScale | null;
 }
 
 const TOP_TYPES = 3;
@@ -66,9 +69,12 @@ export function buildOverview(
   entries: Entries,
   order: readonly string[] = [],
   weighting: Weighting | null = null,
+  grading: Grading | null = null,
 ): Overview {
   const corrected = Object.keys(review.pages).length > 0;
   const profile = review.profile;
+  const scale =
+    corrected && grading !== null && activeLimits(grading) !== null ? grading.scale : null;
   if (corrected) {
     const summary = summarizeClass(arbeiten, review, entries);
     const total = summary.statistics;
@@ -90,6 +96,10 @@ export function buildOverview(
           errors: statistics?.errors ?? null,
           weighted: weighted?.weighted ?? null,
           quotient: weighted?.quotient ?? null,
+          grade:
+            scale === null || grading === null || !row.complete
+              ? null
+              : gradeFor(weighted, grading),
           top: statistics === null ? [] : sortedTypes(statistics, order).slice(0, TOP_TYPES),
           tag: correctedTag(row),
         };
@@ -105,6 +115,7 @@ export function buildOverview(
               average: null,
             },
       types: total === null ? [] : sortedTypes(total, order),
+      scale,
     };
   }
   const results = buildResults(arbeiten, entries);
@@ -118,6 +129,7 @@ export function buildOverview(
       errors: null,
       weighted: null,
       quotient: null,
+      grade: null,
       top: [],
       tag:
         result.countedPages === result.pageCount
@@ -138,5 +150,6 @@ export function buildOverview(
             average: totals.average,
           },
     types: [],
+    scale: null,
   };
 }

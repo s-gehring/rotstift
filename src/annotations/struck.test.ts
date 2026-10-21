@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { markStruck, readStruck, visibleLine, visibleText } from './struck.ts';
+import {
+  markStruck,
+  readStruck,
+  splitStruck,
+  strokeStruck,
+  unstrokeStruck,
+  visibleLine,
+  visibleText,
+} from './struck.ts';
 
 describe('readStruck', () => {
   it('removes the markers and keeps the struck text with its position', () => {
@@ -66,5 +74,29 @@ describe('visibleLine', () => {
     expect(
       visibleText({ text: 'nur gestrichen', struck: [{ offset: 0, text: 'nur gestrichen' }] }),
     ).toBe('');
+  });
+});
+
+describe('struck text in an editor', () => {
+  it('shows struck words with a combining stroke instead of tildes', () => {
+    expect(strokeStruck('Ich ~~gieng~~ ging heim')).toBe('Ich g̶i̶e̶n̶g̶ ging heim');
+  });
+
+  it('turns stroked words back into tildes', () => {
+    const lines = ['Ich ~~gieng~~ ging heim', '~~zwei Wörter~~ und ~~eins~~', 'ohne'];
+    for (const line of lines) expect(unstrokeStruck(strokeStruck(line))).toBe(line);
+  });
+
+  it('keeps spaces at the edge of a stroked run outside the tildes', () => {
+    expect(unstrokeStruck('a̶ ̶b')).toBe('~~a~~ b');
+    expect(unstrokeStruck(' ̶')).toBe(' ');
+  });
+
+  it('splits a text into plain and struck parts', () => {
+    expect(splitStruck('Ich ~~gieng~~ ging')).toEqual([
+      { text: 'Ich ', struck: false },
+      { text: 'gieng', struck: true },
+      { text: ' ging', struck: false },
+    ]);
   });
 });

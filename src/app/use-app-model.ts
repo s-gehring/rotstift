@@ -19,6 +19,7 @@ import { useWordCount } from '../results/use-word-count.ts';
 import { useMonitorPhase } from '../review/engine-phase.ts';
 import { reviewWorks, type ReviewFlow } from '../review/review-flow.ts';
 import { useReview } from '../review/use-review.ts';
+import { useGrading } from '../stats/use-grading.ts';
 import { useWeighting } from '../stats/use-weighting.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts';
@@ -146,6 +147,7 @@ export function useAppModel(): AppModel {
   const [missing, setMissing] = useState<ScopeField | null>(null);
   const clearMissing = useCallback(() => setMissing(null), []);
   const weighting = useWeighting();
+  const grading = useGrading();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
   const review = useReview(count.runner, pages, corrector, reviewer, importState.arbeiten);
   const navigation = useNavigation(importState.arbeiten);
@@ -312,6 +314,7 @@ export function useAppModel(): AppModel {
       clearMissing,
     },
     weighting,
+    grading,
     work: {
       count,
       review,
