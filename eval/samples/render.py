@@ -181,12 +181,28 @@ def rotated_box(box: tuple[float, float, float, float], angle: float) -> list[fl
     return [round(min(xs), 1), round(min(ys), 1), round(max(xs), 1), round(max(ys), 1)]
 
 
+def render_class(out: Path) -> None:
+    fonts = list(FONTS)
+    for index, path in enumerate(sorted((HERE / "content-form").glob("*.txt"))):
+        body = path.read_text(encoding="utf-8").split("\n---\n", 1)[1].strip().split("\n")
+        half = (len(body) + 1) // 2
+        for part, lines in enumerate((body[:half], body[half:]), start=1):
+            image, _ = render(written_text("\n".join(lines)), fonts[index % len(fonts)], seed=100 * index + part)
+            target = out / f"{path.stem}-{part}.jpg"
+            image.save(target, quality=85)
+            print(target)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=HERE / "rendered")
     parser.add_argument("--strike", type=int, default=0)
+    parser.add_argument("--content-form", action="store_true")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.content_form:
+        render_class(args.out)
+        return
     texts = sorted((HERE / "texts").glob("*.txt"))
     for text_index, text_path in enumerate(texts):
         text = written_text(text_path.read_text(encoding="utf-8").strip())

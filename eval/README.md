@@ -180,3 +180,16 @@ node --experimental-transform-types eval/model-load.ts --models glm-ocr-q8,gemma
 
 - `model-candidates.ts` beschreibt Textmodelle, die (noch) nicht in der App stehen. Sie übernehmen Prompt und Parameter des Vorgabe-Korrektors aus `src-tauri/models.json` und tauschen nur die Datei, so wie ein eigenes Modell in der App. `profiles.ts` und `content-form.ts` finden sie unter ihrer `id`. Die Erkennungskandidaten stehen wie bisher in `ocr-candidates.json`, mit dem allgemeinen Transkriptionsauftrag.
 - `model-load.ts` startet jedes Modell mehrmals mit den Serverparametern der App und misst die Zeit bis `/health` antwortet (Median, Datei im Seitencache) und den RSS des Servers nach dem Laden. Das ist die Zeit, die ein Modellwechsel zwischen zwei Schritten mindestens kostet.
+
+## Ganze Klasse auf einem schwachen Rechner
+
+Misst Wanduhrzeit, Anteil jeder Stufe, Modellstarts und Peak-RAM für eine ganze Klasse mit demselben Ablauf wie die App (`createReviewFlow` mit echter Engine und Sidecar). Der Bericht steht in [docs/messung-schwacher-rechner.md](../docs/messung-schwacher-rechner.md).
+
+```bash
+eval/.venv/bin/python -I eval/samples/render.py --content-form --out <Ordner>
+ROTSTIFT_INTEGRATION=1 ROTSTIFT_CLASS=<Ordner> ROTSTIFT_CLASS_LABEL=t4-voll ROTSTIFT_THREADS=4 ROTSTIFT_NO_REPACK=1 \
+  pnpm vitest run eval/class-run.integration.test.ts
+```
+
+- `render.py --content-form` teilt jeden Text aus `samples/content-form/` in zwei Seiten, das ergibt 10 Arbeiten zu je 2 Seiten. Eine Arbeit sind alle Bilder mit gleichem Namen vor `-1.jpg`, `-2.jpg`.
+- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).

@@ -47,7 +47,8 @@ function serverArguments(model: AnyModelInfo): string[] {
     ['--no-slots'],
     ['--offline'],
   );
-  if (server.threads !== null) args.push(['--threads', String(server.threads)]);
+  const threads: string | number | null = process.env['ROTSTIFT_THREADS'] ?? server.threads;
+  if (threads !== null) args.push(['--threads', String(threads)]);
   const gpuLayers: string | number | null = process.env['ROTSTIFT_GPU_LAYERS'] ?? server.gpuLayers;
   if (gpuLayers !== null) args.push(['--n-gpu-layers', String(gpuLayers)]);
   if (!server.cpuRepack && NO_REPACK) args.push(['--no-repack']);
