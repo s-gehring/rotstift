@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { transcriptSchema, type Mark, type Transcript } from '../annotations/transcript.ts';
 import {
   editReading,
+  isPlausibleHint,
   nextHintStatus,
   openHints,
   readWords,
@@ -157,6 +158,42 @@ describe('separateUncertain', () => {
     expect(separateUncertain(transcript, reading(texts, { Hauß: 0.96 }, 0.98)).hints).toHaveLength(
       1,
     );
+  });
+
+  it('drops implausible suggestions on uncertainly read words', () => {
+    const text = 'Wir haben Wirnalt dass es heftich war';
+    const guessed: Transcript = {
+      lines: [
+        {
+          number: 1,
+          text,
+          marks: [
+            { ...error(10, 'Wirnalt', 'Wärme'), type: 'R' },
+            { ...error(10, 'Wirnalt', 'gemerkt'), type: 'A' },
+            error(26, 'heftich', 'heftig'),
+          ],
+        },
+      ],
+    };
+    const separated = separateUncertain(guessed, reading([text], { Wirnalt: 0.3, heftich: 0.6 }));
+    expect(separated.transcript.lines[0]?.marks).toEqual([]);
+    expect(separated.hints.map((entry) => entry.mark.correction)).toEqual(['heftig']);
+  });
+});
+
+describe('isPlausibleHint', () => {
+  it('keeps small spelling changes, grammar and punctuation', () => {
+    expect(isPlausibleHint(error(0, 'ausserdem', 'außerdem'))).toBe(true);
+    expect(isPlausibleHint(error(0, 'Gestern', 'gestern'))).toBe(true);
+    expect(isPlausibleHint({ ...error(0, 'ist', 'sei'), type: 'G' })).toBe(true);
+    expect(isPlausibleHint(omission(3, ','))).toBe(true);
+    expect(isPlausibleHint({ ...error(0, 'freind', 'friend'), type: 'sp' })).toBe(true);
+  });
+
+  it('drops guessed words and rewordings', () => {
+    expect(isPlausibleHint(error(0, 'Wirnalt', 'Wärme'))).toBe(false);
+    expect(isPlausibleHint({ ...error(0, 'lief', 'rannte'), type: 'A' })).toBe(false);
+    expect(isPlausibleHint({ ...error(0, 'grand', 'big'), type: 'voc' })).toBe(false);
   });
 });
 

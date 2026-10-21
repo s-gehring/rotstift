@@ -26,6 +26,7 @@ export const PROFILE_SETS: Record<string, { profile: CorrectionProfile; dir: str
   es: { profile: SPANISCH, dir: 'es' },
   sachfach: { profile: SACHFACH, dir: 'sachfach' },
   de: { profile: DEUTSCH, dir: '../texts' },
+  'gross-klein': { profile: DEUTSCH, dir: 'gross-klein' },
   en: { profile: ENGLISCH, dir: 'en' },
 };
 

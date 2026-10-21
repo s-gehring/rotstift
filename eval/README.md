@@ -134,3 +134,16 @@ node --experimental-transform-types eval/profiles.ts --set fr --out <Ergebnis.js
 - **Optionen:** `--set` (fr, es, en, de, sachfach), `--model` (Standard `gemma-4-e2b-q4`), `--threads` (4), `--variant` (`app` ist der Prompt der Registry, `plain` lässt die Sätze zur Sprache weg), `--only` (Textnamen), `--out`. `PROFILES_DEBUG=1` gibt die Antworten des Modells aus.
 - **Ausgabe:** Eine JSON-Datei mit allen Marken und Werten je Seite und die Kennzahlen auf der Konsole: Recall und Precision je nach Stelle sowie Art und Stelle, Korrektur richtig, Wortfehler vorher und nachher, Fehlalarme je 100 Wörter und die Zählung je Art.
 - `profiles.test.ts` prüft ohne Modell, dass eine perfekte Korrektur der Proben jede Marke an die richtige Stelle setzt und wie viele die vorgesehene Art bekommen.
+
+## Hinweise „unsicher gelesen“ und Groß- und Kleinschreibung
+
+Misst Marken und Hinweise genau wie die App: `correctPage` mit der gespeicherten Antwort des Korrekturmodells, dann `separateUncertain` mit der Lesesicherheit je Wort. Der Bericht steht in [docs/evaluations/2026-10-gross-klein.md](../docs/evaluations/2026-10-gross-klein.md).
+
+```bash
+node --experimental-transform-types eval/ocr-correct.ts --prompt app --no-thinking --ocr <Ergebnisse>/ocr-glm.json --out <Ergebnisse>/scads-app.json
+node --experimental-transform-types eval/hints.ts --ocr <Ergebnisse>/ocr-glm.json --corrections <Ergebnisse>/scads-app.json
+node --experimental-transform-types eval/profiles.ts --set gross-klein --out <Ergebnis.json>
+```
+
+- `hints.ts` nimmt Erkennungen (`--ocr`, mehrfach) und Korrekturläufe (`--corrections`, mehrfach) aus `ocr-run.ts` und `ocr-correct.ts`. Seiten mit `--` im Namen sind gerenderte Schülertexte und werden gegen ihre Fehlermarken gewertet (Recall ohne und mit Hinweisen), die übrigen sind fehlerfreie Seiten aus dem Datensatz. Ausgabe: Marken und Hinweise je 100 Wörter. `--threshold` ersetzt die Schwelle 0,95, `--list` gibt jeden Hinweis mit Art, Sicherheit, Wortzahl, Editierabstand und Treffer aus (nur lokal ansehen, enthält Text der Seiten).
+- `samples/profiles/gross-klein/` enthält zwei Texte mit falsch großgeschriebenen Adjektiven und Verben, kleingeschriebenen Substantiven und vielen Namen.
