@@ -3,6 +3,7 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Mark, TranscriptLine } from '../annotations/transcript.ts';
 import { align } from './align.ts';
 import type { Op } from './align.ts';
+import { keepCapitals } from './capitals.ts';
 import { classifyWordChange } from './classify.ts';
 import { codeFor } from './kinds.ts';
 import type { MarkRole } from './kinds.ts';
@@ -164,7 +165,7 @@ export function deriveMarksDetailed(
 ): DerivedMarks {
   const { profile } = options;
   const maxChangedRun = options.maxChangedRun ?? DEFAULT_MAX_CHANGED_RUN;
-  const joined = joinCorrected(correctedText);
+  const joined = keepCapitals(lines, joinCorrected(correctedText), profile.language);
   const original = tokenizeLines(lines).flat();
   const ops = align(original, tokenizeCorrected(joined));
   const marksByLine: Mark[][] = lines.map(() => []);

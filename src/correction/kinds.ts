@@ -14,3 +14,19 @@ export function codeFor(profile: CorrectionProfile, role: MarkRole): string | nu
   const code = CODES[profile.language][role];
   return profile.allowedTypes.includes(code) ? code : null;
 }
+
+const ROLE_NAMES: readonly MarkRole[] = [
+  'spelling',
+  'punctuation',
+  'grammar',
+  'wording',
+  'wordOrder',
+];
+
+const ROLES: ReadonlyMap<string, MarkRole> = new Map(
+  Object.values(CODES).flatMap((codes) => ROLE_NAMES.map((role) => [codes[role], role] as const)),
+);
+
+export function roleOf(code: string): MarkRole | undefined {
+  return ROLES.get(code);
+}

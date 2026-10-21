@@ -1,4 +1,6 @@
 import type { Mark, Transcript } from '../annotations/transcript.ts';
+import { editDistance } from './edit-distance.ts';
+import { roleOf } from './kinds.ts';
 import { charProbabilities, lineProbabilities, markConfidence } from './reading-confidence.ts';
 import type { TokenProbability } from './reading-confidence.ts';
 
@@ -27,6 +29,16 @@ export interface SeparatedMarks {
 }
 
 const WORD = /\S+/gu;
+
+export const MAX_HINT_SPELLING_EDITS = 2;
+
+export function isPlausibleHint(mark: Mark): boolean {
+  const role = roleOf(mark.type);
+  if (role === 'wording') return false;
+  if (role !== 'spelling') return true;
+  const distance = editDistance(mark.original.toLowerCase(), mark.correction.toLowerCase());
+  return distance <= MAX_HINT_SPELLING_EDITS;
+}
 
 export function readWords(
   content: string,
@@ -90,7 +102,8 @@ export function separateUncertain(
     const marks = line.marks.filter((mark) => {
       const confidence = markConfidence(line.text, perChar, mark);
       if (confidence >= reading.uncertainBelow) return true;
-      hints.push({ line: line.number, mark, confidence, status: 'open' });
+      if (isPlausibleHint(mark))
+        hints.push({ line: line.number, mark, confidence, status: 'open' });
       return false;
     });
     return marks.length === line.marks.length ? line : { ...line, marks };
