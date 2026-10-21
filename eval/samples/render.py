@@ -30,7 +30,7 @@ MARGIN_LINE = (225, 160, 160)
 INK = (28, 40, 115)
 MARKUP = re.compile(r"\{([^{}|]*)\|[^{}|]*\|[RZG]\}")
 STRUCK = re.compile(r"^~~(.+)~~$")
-STRIKE_STYLES = ("line", "double", "scribble")
+STRIKE_STYLES = ("line", "double", "scribble", "wave")
 
 HERE = Path(__file__).resolve().parent
 CACHE = Path.home() / ".cache" / "rotstift" / "fonts"
@@ -96,6 +96,16 @@ def draw_strike(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float
             x, up = x + step, not up
         draw.line(points, fill=fill, width=width, joint="curve")
         return (start, top, end, bottom)
+    if style == "wave":
+        height = (bottom - top) * rng.uniform(0.1, 0.18)
+        period = rng.uniform(22, 36)
+        phase = rng.uniform(0, 2 * math.pi)
+        steps = max(2, round((end - start) / 2))
+        points = [(start + (end - start) * i / steps,
+                   middle + height * math.sin(phase + 2 * math.pi * (end - start) * i / steps / period))
+                  for i in range(steps + 1)]
+        draw.line(points, fill=fill, width=width, joint="curve")
+        return (start, top, end, bottom)
     tilt = rng.uniform(-4, 4)
     offsets = (-0.12, 0.12) if style == "double" else (0.0,)
     for offset in offsets:
@@ -123,7 +133,7 @@ def layout(text: str, font: ImageFont.FreeTypeFont, width: int) -> list[list[str
     return lines
 
 
-def render(text: str, font_name: str, seed: int) -> tuple[Image.Image, list[list[float]]]:
+def render(text: str, font_name: str, seed: int) -> tuple[Image.Image, list[list[float]], list[str]]:
     rng = random.Random(seed)
     _, size, _ = FONTS[font_name]
     font_path = font_file(font_name)
@@ -146,6 +156,7 @@ def render(text: str, font_name: str, seed: int) -> tuple[Image.Image, list[list
     space = font.getlength(" ")
     strikes = seed
     struck: list[tuple[float, float, float, float]] = []
+    styles: list[str] = []
     for index, words in enumerate(lines):
         baseline = TOP + index * LINE_HEIGHT - 6 + rng.uniform(-3, 3)
         x = MARGIN_LEFT + rng.uniform(-6, 10)
@@ -158,7 +169,8 @@ def render(text: str, font_name: str, seed: int) -> tuple[Image.Image, list[list
             if shown != word:
                 _, top, _, _ = ink_draw.textbbox((x, y), "x", font=word_font, anchor="ls")
                 box = (x, top, x + word_font.getlength(shown), y)
-                struck.append(draw_strike(ink_draw, box, STRIKE_STYLES[strikes % len(STRIKE_STYLES)], rng))
+                styles.append(STRIKE_STYLES[strikes % len(STRIKE_STYLES)])
+                struck.append(draw_strike(ink_draw, box, styles[-1], rng))
                 strikes += 1
             x += word_font.getlength(shown) + space * rng.uniform(1.0, 1.6)
 
@@ -169,7 +181,7 @@ def render(text: str, font_name: str, seed: int) -> tuple[Image.Image, list[list
     page = Image.blend(page, noise, 0.06)
     angle = rng.uniform(-0.8, 0.8)
     page = page.rotate(angle, resample=Image.Resampling.BICUBIC, fillcolor=PAPER)
-    return page.filter(ImageFilter.GaussianBlur(0.4)), [rotated_box(box, angle) for box in struck]
+    return page.filter(ImageFilter.GaussianBlur(0.4)), [rotated_box(box, angle) for box in struck], styles
 
 
 def rotated_box(box: tuple[float, float, float, float], angle: float) -> list[float]:
@@ -185,20 +197,21 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=HERE / "rendered")
     parser.add_argument("--strike", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     texts = sorted((HERE / "texts").glob("*.txt"))
     for text_index, text_path in enumerate(texts):
         text = written_text(text_path.read_text(encoding="utf-8").strip())
         for font_index, font_name in enumerate(FONTS):
-            seed = 1000 * text_index + font_index
+            seed = 1000 * text_index + font_index + 10 * args.seed
             page_text = strike_words(text, args.strike, random.Random(seed)) if args.strike else text
-            image, struck = render(page_text, font_name, seed=seed)
+            image, struck, styles = render(page_text, font_name, seed=seed)
             target = args.out / f"{text_path.stem}--{font_name}.jpg"
             image.save(target, quality=85)
             if args.strike:
                 target.with_suffix(".txt").write_text(page_text + "\n", encoding="utf-8")
-                boxes = {"width": PAGE[0], "height": PAGE[1], "boxes": struck}
+                boxes = {"width": PAGE[0], "height": PAGE[1], "boxes": struck, "styles": styles}
                 target.with_suffix(".strikes.json").write_text(json.dumps(boxes) + "\n", encoding="utf-8")
             print(target)
 
