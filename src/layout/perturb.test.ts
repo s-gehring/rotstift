@@ -54,3 +54,30 @@ describe('perturbed transcripts on synthetic pages', () => {
     }
   });
 });
+
+describe('perturbed transcripts on pages with sloped, wavy lines', () => {
+  const all: ReturnType<typeof scoreVariant>[] = [];
+  let unchanged = sumScores([]);
+  for (const seed of [3, 4]) {
+    const lines = [...sampleLines(seed, 8, 20, 50), '', ...sampleLines(seed + 100, 8, 20, 50)];
+    const page = renderPage({ ...BASE, seed, lines, lineSlopes: 2, wobble: 4 });
+    const truth = lines.map((text, index) => ({ text, bbox: page.truth[index] ?? null }));
+    for (const variant of variantsOf(truth)) {
+      const image = { ...page.image, data: new Uint8ClampedArray(page.image.data) };
+      if (variant.erased !== null) paintOver(image, variant.erased, 245);
+      const score = scoreVariant(variant, locateLines(image, variant.transcript).lines);
+      all.push(score);
+      if (variant.name === 'unverändert') unchanged = sumScores([unchanged, score]);
+    }
+  }
+
+  it('finds every line when the transcript matches the page', () => {
+    expect(unchanged.correct).toBe(unchanged.expected);
+  });
+
+  it('returns a confident wrong box for less than one percent of all lines', () => {
+    const total = sumScores(all);
+    expect(total.wrong / total.expected).toBeLessThan(0.01);
+    expect(total.spurious / total.expected).toBeLessThan(0.01);
+  });
+});

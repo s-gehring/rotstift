@@ -1,3 +1,4 @@
+import { gaussianSmooth } from './signal.ts';
 import type { GrayImage } from './types.ts';
 
 export interface InkMask {
@@ -66,6 +67,8 @@ function inkPoints(mask: InkMask, limit: number): { xs: Int32Array; ys: Int32Arr
   return { xs: xs.subarray(0, count), ys: ys.subarray(0, count) };
 }
 
+const SKEW_SMOOTHING = 2;
+
 function sharpness(xs: Int32Array, ys: Int32Array, tan: number, height: number, width: number) {
   const offset = Math.ceil(width * Math.abs(tan)) + 1;
   const histogram = new Int32Array(height + offset * 2 + 1);
@@ -73,9 +76,10 @@ function sharpness(xs: Int32Array, ys: Int32Array, tan: number, height: number, 
     const bin = (ys[i] ?? 0) - Math.round((xs[i] ?? 0) * tan) + offset;
     histogram[bin] = (histogram[bin] ?? 0) + 1;
   }
+  const smooth = gaussianSmooth(histogram, SKEW_SMOOTHING);
   let energy = 0;
-  for (let i = 1; i < histogram.length; i += 1) {
-    const diff = (histogram[i] ?? 0) - (histogram[i - 1] ?? 0);
+  for (let i = 1; i < smooth.length; i += 1) {
+    const diff = (smooth[i] ?? 0) - (smooth[i - 1] ?? 0);
     energy += diff * diff;
   }
   return energy;

@@ -1,7 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CorrectorStatus } from '../correction/provider.ts';
 import type { ImportPage } from '../import/pages.ts';
-import { createLayoutLocator } from '../layout/layout-client.ts';
+import { createLayoutLocator, observeLocate } from '../layout/layout-client.ts';
+import { browserDiagnostics, logLayout } from '../pipeline/diagnostics.ts';
 import type { Runner } from '../pipeline/runner.ts';
 import { loadPageImage } from './page-image.ts';
 import { createReviewFlow } from './review-flow.ts';
@@ -13,11 +14,14 @@ export function useReview(
 ) {
   const [{ flow, locator }] = useState(() => {
     const created = createLayoutLocator();
+    const diagnostics = browserDiagnostics();
     return {
       locator: created,
       flow: createReviewFlow({
         transcription: runner,
-        locator: created,
+        locator: observeLocate(created, (counts, durationMs) => {
+          logLayout(diagnostics, counts === null ? null : { ...counts, durationMs });
+        }),
         loadImage: loadPageImage,
       }),
     };

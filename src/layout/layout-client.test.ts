@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createLayoutLocator, type WorkerLike } from './layout-client.ts';
+import {
+  createLayoutLocator,
+  observeLocate,
+  type LayoutCounts,
+  type LayoutLocator,
+  type WorkerLike,
+} from './layout-client.ts';
 import type { LayoutRequest, LayoutResponse } from './protocol.ts';
 import { renderPage, sampleLines } from './synthetic.ts';
 import type { LayoutResult } from './types.ts';
@@ -133,5 +139,43 @@ describe('createLayoutLocator', () => {
     const struck = await createLayoutLocator(null).struckWords(page.image, lines);
     expect(struck[1]).toEqual([1]);
     expect(struck.filter((_, index) => index !== 1).flat()).toEqual([]);
+  });
+});
+
+function fakeLocator(locate: LayoutLocator['locate']): LayoutLocator {
+  return { locate, struckWords: () => Promise.resolve([]), dispose: () => undefined };
+}
+
+describe('observeLocate', () => {
+  const box = { x: 0, y: 0, width: 10, height: 5 };
+  const image = { width: 1, height: 1, data: new Uint8ClampedArray(4) };
+
+  it('reports found, transcribed, assigned and roughly placed lines with the duration', async () => {
+    const result: LayoutResult = {
+      lines: [{ bbox: box, confidence: 0.9 }, { bbox: box, confidence: 0, rough: true }, null],
+      skewDegrees: 0,
+      detectedLines: 3,
+    };
+    const reports: [LayoutCounts | null, number][] = [];
+    const times = [100, 340];
+    const observed = observeLocate(
+      fakeLocator(() => Promise.resolve(result)),
+      (counts, ms) => reports.push([counts, ms]),
+      () => times.shift() ?? 0,
+    );
+    expect(await observed.locate(image, ['eins', 'zwei', ' '])).toBe(result);
+    expect(reports).toEqual([
+      [{ foundLines: 3, transcriptLines: 2, assignedLines: 1, roughLines: 1 }, 240],
+    ]);
+  });
+
+  it('reports a failed search and passes the error on', async () => {
+    const reports: (LayoutCounts | null)[] = [];
+    const observed = observeLocate(
+      fakeLocator(() => Promise.reject(new Error('kaputt'))),
+      (counts) => reports.push(counts),
+    );
+    await expect(observed.locate(image, ['eins'])).rejects.toThrow('kaputt');
+    expect(reports).toEqual([null]);
   });
 });

@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
-import type { Transcript } from '../annotations/transcript.ts';
+import type { Bbox, Transcript } from '../annotations/transcript.ts';
+import type { LineBox } from '../layout/types.ts';
 import { estimateTextWidth } from './char-width.ts';
 import { FIXTURE_PAGE, roomyPage, tightPage, wideNoMarginPage } from './fixtures.ts';
 import { layoutOverlay } from './layout.ts';
 import type { TextLocator } from './locator.ts';
 import type { OverlayModel, StrokeItem, TextItem } from './model.ts';
+
+const lineBox = (value: LineBox): Bbox => value;
 
 const options = { page: FIXTURE_PAGE, profile: DEUTSCH };
 
@@ -497,5 +500,82 @@ describe('layoutOverlay with a narrow margin', () => {
 
   it('writes a long fix in the margin as its code', () => {
     expect(rows(3)).toEqual(['R']);
+  });
+});
+
+const upperError = (original: string, offset: number) => ({
+  kind: 'error' as const,
+  type: 'R',
+  original,
+  correction: original.toUpperCase(),
+  offset,
+});
+
+const paragraphRow = (k: number) => ({ x: 150, y: 300 + k * 110, width: 860, height: 60 });
+
+describe('layoutOverlay on lines with a band', () => {
+  const band = {
+    top: [
+      { x: 150, y: 300 },
+      { x: 1010, y: 386 },
+    ],
+    height: 50,
+  };
+
+  it('bends the strokes and tilts the fix along the slope of the line', () => {
+    const text = 'aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn';
+    const model = layoutOverlay(
+      {
+        lines: [
+          {
+            number: 1,
+            bbox: lineBox({ x: 150, y: 300, width: 860, height: 136, band }),
+            text,
+            marks: [upperError('aaaa', 0), upperError('nnnn', text.length - 4)],
+          },
+        ],
+      },
+      options,
+    );
+    const [first, last] = strokes(model).map((item) => {
+      const ys = pathPoints(item).map((point) => point.y);
+      return (Math.min(...ys) + Math.max(...ys)) / 2;
+    });
+    expect(defined(last) - defined(first)).toBeGreaterThan(60);
+    const fix = defined(texts(model, 'fix').find((item) => item.mark === 1));
+    expect(fix.rotate).toBeGreaterThan(3);
+  });
+
+  it('spreads a paragraph line over its rows and keeps the mark numbers', () => {
+    const model = layoutOverlay(
+      {
+        lines: [
+          {
+            number: 1,
+            bbox: lineBox({
+              x: 150,
+              y: 300,
+              width: 860,
+              height: 170,
+              rows: [
+                { ...paragraphRow(0), from: 0, to: 0.5 },
+                { ...paragraphRow(1), from: 0.5, to: 1 },
+              ],
+            }),
+            text: 'eins zwei drei vier fünf sechs sieben acht',
+            marks: [upperError('zwei', 5), upperError('sieben', 31)],
+          },
+        ],
+      },
+      options,
+    );
+    const lines = strokes(model).map((item) => ({
+      mark: item.mark,
+      y: Math.max(...pathPoints(item).map((point) => point.y)),
+    }));
+    expect(lines.map((item) => item.mark)).toEqual([0, 1]);
+    expect(defined(lines[0]).y).toBeLessThan(370);
+    expect(defined(lines[1]).y).toBeGreaterThan(410);
+    expect(texts(model, 'code').map((code) => code.text)).toEqual(['R', 'R']);
   });
 });

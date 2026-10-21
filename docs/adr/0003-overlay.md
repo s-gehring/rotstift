@@ -42,6 +42,16 @@ Die Spalte beginnt rechts vom Textblock (rechteste Kante aller Zeilen plus ein A
 
 Bekannt sind nur Zeilenboxen. `TextLocator.span(line, start, end)` liefert den x-Bereich eines Zeichenbereichs. Die Standardimplementierung `proportionalLocator` verteilt die Zeilenbreite proportional auf die Zeichen, gewichtet nach Zeichenbreite (schmal: `i l j .`, breit: `m w`, Großbuchstaben und Leerzeichen eigene Gewichte). Eine Auslassung nach einem Leerzeichen sitzt in der Mitte der Lücke. Mit echten Wortboxen ersetzt eine andere Implementierung der Schnittstelle sie, `layoutOverlay` und `AnnotatedPage` nehmen sie über `locator` entgegen.
 
+### Zeilenmodell
+
+Eine Zeile ist ein Band entlang ihrer eigenen Grundlinie, kein Rechteck. `segmentLines` zerlegt die Seite in überlappende senkrechte Streifen, sucht in jedem Streifen die Zeilen im Projektionsprofil und verkettet sie über die Streifen zu Spuren. Aus jeder Spur entsteht eine stückweise lineare Oberkante mit fester Bandhöhe (`LineBand`). So bekommt jede Zeile ihre eigene Neigung und eine leichte Welle, ohne dass die Seite vorher begradigt wird.
+
+- Die Zuordnung zu den Transkriptzeilen nutzt die Bänder, die Zeichnung biegt Striche entlang der Oberkante und dreht Korrekturtext um den örtlichen Winkel. Das umschließende Rechteck bleibt als Hülle erhalten, zum Beispiel für die Erkennung von Durchgestrichenem.
+- Schreibt die Transkription einen ganzen Absatz als eine Zeile, wird sie nach der geschätzten Zeilenlänge in Stücke geteilt, zugeordnet und wieder zusammengesetzt. Die Zeile trägt dann `rows`, je mit dem Anteil des Textes, der darauf steht, und die Marken landen auf der richtigen Zeile.
+- Findet eine Transkriptzeile keine sichere Zeile, bekommt sie eine grobe Platzierung über der Tinte zwischen ihren Nachbarn (`rough`, Konfidenz 0). Sie wird gezeichnet wie jede andere Zeile, ohne erklärenden Text.
+- Je Seite protokolliert `page_layout` nur Zahlen: Gefundene Zeilen, Transkriptzeilen, zugeordnete und grob platzierte Zeilen und die Dauer.
+- Band und Zeilen reisen als zusätzliche Felder der `bbox` durch das Transkript. Wer sie nicht kennt, sieht das Rechteck wie bisher.
+
 ### Darstellung und Export
 
 `layoutOverlay` rechnet in Seitenpixeln ein Modell aus Strichen und Texten. Daraus entstehen beide Ausgaben mit identischer Geometrie:

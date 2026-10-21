@@ -320,7 +320,17 @@ export function findStruckWords(
   options: StrikeOptions = STRIKE_OPTIONS,
 ): number[][] {
   const plain = lines.map((line) => line.replaceAll('~~', ''));
-  const boxes = locateLines(image, plain).lines.map((line) => line?.bbox ?? null);
-  const words = detectStrikes(image, boxes, options);
-  return plain.map((line, index) => struckWordIndices(line, words[index] ?? []));
+  const parts = locateLines(image, plain).lines.map((line): BBox[] => {
+    if (line === null || line.rough === true) return [];
+    return line.bbox.rows === undefined ? [line.bbox] : [...line.bbox.rows];
+  });
+  const words = detectStrikes(image, parts.flat(), options);
+  let next = 0;
+  return plain.map((line, index) => {
+    const found = (parts[index] ?? []).flatMap(() => {
+      next += 1;
+      return words[next - 1] ?? [];
+    });
+    return struckWordIndices(line, found);
+  });
 }
