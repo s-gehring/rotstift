@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { clearDiagnostics, readDiagnostics } from '../pipeline/diagnostics.ts';
 import { Button } from '../ui/Button.tsx';
 
@@ -26,6 +26,12 @@ export function DiagnosticsLog({
   const [failed, setFailed] = useState(false);
   const [copy, setCopy] = useState<CopyState>('idle');
   const [confirming, setConfirming] = useState(false);
+  const entries = useRef<HTMLPreElement>(null);
+
+  useLayoutEffect(() => {
+    const element = entries.current;
+    if (element !== null && lines !== null) element.scrollTop = element.scrollHeight;
+  }, [lines]);
 
   const load = () => {
     setFailed(false);
@@ -51,7 +57,12 @@ export function DiagnosticsLog({
         <>
           {failed && <p role="alert">Das Protokoll konnte nicht gelesen werden.</p>}
           {lines !== null && (
-            <pre className="diagnostics-entries" tabIndex={0} aria-label="Protokolleinträge">
+            <pre
+              ref={entries}
+              className="diagnostics-entries"
+              tabIndex={0}
+              aria-label="Protokolleinträge"
+            >
               {lines.length === 0 ? 'Noch keine Einträge.' : text}
             </pre>
           )}

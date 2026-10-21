@@ -167,6 +167,7 @@ thead th {
   grid-template-columns: minmax(max-content, 1fr) minmax(0, 2fr) minmax(max-content, 1fr);
   align-items: center;
   gap: var(--space-4);
+  box-sizing: border-box;
   height: var(--header-height);
   padding: 0 var(--space-4) 0 var(--space-5);
   border-bottom: 1px solid var(--color-border);
@@ -244,6 +245,8 @@ thead th {
 
 .app-main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 1120px;
   box-sizing: border-box;
@@ -408,9 +411,32 @@ thead th {
 
 .settings-model {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.settings-model-label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.settings-model-label input {
+  margin-top: 3px;
+}
+
+.settings-model-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-model-line {
+  display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: var(--space-1) var(--space-3);
 }
 
 .settings-model-name {
@@ -418,8 +444,13 @@ thead th {
 }
 
 .settings-model-size,
-.settings-model-state {
+.settings-model-state,
+.settings-model-note {
   color: var(--color-text-muted);
+}
+
+.settings-model-note {
+  font-size: var(--font-size-sm);
 }
 
 .settings-model-state[data-state='corrupt'] {
@@ -441,30 +472,10 @@ thead th {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin: 0 0 var(--space-3);
+  min-width: 0;
+  margin: 0;
   padding: 0;
   border: none;
-}
-
-.model-choice label {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-
-.model-choice input {
-  margin-top: 3px;
-}
-
-.model-choice-size {
-  margin-left: var(--space-2);
-  color: var(--color-text-muted);
-}
-
-.model-choice-note {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
 }
 
 .diagnostics {

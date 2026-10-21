@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/app-context.tsx';
 import type { ModelRole } from '../app/types.ts';
 import { formatRemaining } from '../pipeline/progress.ts';
@@ -37,11 +37,19 @@ function stateOf(entry: RoleSetup): ModelState | null {
   return entry.setup.status?.state ?? null;
 }
 
-function doneBytes(entry: RoleSetup): number {
+function toLoadBytes(entry: RoleSetup): number {
   const { status, model } = entry.setup;
-  if (status === null) return 0;
-  if (status.state === 'ready') return totalBytes(model);
-  return status.state === 'downloading' ? status.downloadedBytes : 0;
+  const total = totalBytes(model);
+  if (status === null) return total;
+  if (status.state === 'ready') return 0;
+  const present = status.state === 'downloading' ? entry.setup.baseline : status.downloadedBytes;
+  return Math.max(0, total - present);
+}
+
+function doneBytes(entry: RoleSetup): number {
+  const { status } = entry.setup;
+  if (status?.state !== 'downloading') return 0;
+  return Math.max(0, status.downloadedBytes - entry.setup.baseline);
 }
 
 function remainingText(entries: readonly RoleSetup[]): string | null {
@@ -155,7 +163,7 @@ export function SetupDialog() {
     setup: role === 'transcriber' ? models.transcriber : models.corrector,
   }));
   const available = entries.every((entry) => entry.setup.available);
-  const total = entries.reduce((sum, entry) => sum + totalBytes(entry.setup.model), 0);
+  const total = entries.reduce((sum, entry) => sum + toLoadBytes(entry), 0);
   const done = entries.reduce((sum, entry) => sum + doneBytes(entry), 0);
   const states = entries.map(stateOf);
   const downloading = states.includes('downloading');
@@ -170,17 +178,24 @@ export function SetupDialog() {
       !entry.setup.state.importing
     );
   });
-  const neededBytes = startable.reduce(
-    (sum, entry) =>
-      sum + totalBytes(entry.setup.model) - (entry.setup.status?.downloadedBytes ?? 0),
-    0,
-  );
+  const neededBytes = startable.reduce((sum, entry) => sum + toLoadBytes(entry), 0);
   const hardware = models.transcriber.state.hardware ?? models.corrector.state.hardware;
   const lowMemory = entries.find(
     (entry) => hardware != null && isLowOnMemory(entry.setup.model, hardware.totalRamBytes),
   );
   const freeDisk = hardware?.freeDiskBytes ?? null;
   const lowDisk = freeDisk !== null && startable.length > 0 && freeDisk < neededBytes;
+  const open = request.open && available;
+  const canStart = !downloading && startable.length > 0;
+  const startButton = useRef<HTMLButtonElement>(null);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!open) focused.current = false;
+    else if (canStart && !focused.current) {
+      focused.current = true;
+      startButton.current?.focus();
+    }
+  }, [open, canStart]);
   const progressText = downloading
     ? [`${formatSize(done)} von ${formatSize(total)}`, remainingText(entries)]
         .filter(Boolean)
@@ -191,7 +206,7 @@ export function SetupDialog() {
 
   return (
     <Dialog
-      open={request.open && available}
+      open={open}
       onClose={request.close}
       title="Einmalige Einrichtung"
       size="md"
@@ -212,6 +227,7 @@ export function SetupDialog() {
             <Button onClick={request.close}>Abbrechen</Button>
             <Button
               variant="primary"
+              ref={startButton}
               disabled={startable.length === 0}
               onClick={() => {
                 for (const entry of startable) void entry.setup.download();
@@ -230,7 +246,9 @@ export function SetupDialog() {
           return (
             <li key={entry.role} data-state={state ?? 'unknown'}>
               <span className="setup-model-name">{ROLE_NAME[entry.role]}</span>
-              <span className="setup-model-size">{formatSize(totalBytes(entry.setup.model))}</span>
+              <span className="setup-model-size">
+                {state === 'ready' ? '' : formatSize(toLoadBytes(entry))}
+              </span>
               <span className="setup-model-state">
                 {state === 'ready' && <Icon name="check" />}
                 {label}
