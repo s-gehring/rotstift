@@ -13,6 +13,7 @@ Rotstift erkennt handschriftliche Texte, zählt ihre Wörter und korrigiert sie,
 - **Laden:** Bilder (PNG, JPEG, WebP) und PDFs ins Fenster ziehen. Jede Datei wird eine Arbeit (eine Schülerin oder ein Schüler) und heißt wie die Datei. Über das „…“-Menü einer Arbeit lässt sie sich umbenennen, mit einer anderen zusammenführen oder entfernen. Seiten lassen sich drehen, umsortieren (auch per Ziehen), in eine andere Arbeit verschieben, und „Ab hier neue Arbeit“ trennt einen Stapel, der als ein PDF gescannt wurde. Entfernen lässt sich rückgängig machen.
 - **Korrigieren:** Nach Wahl des Fachs (Deutsch, Englisch, Französisch, Spanisch und „Sachfach“ für alle Fächer, in denen nur die deutsche Sprachrichtigkeit korrigiert wird) liest Rotstift alle Seiten mit einem lokalen KI-Modell (GLM-OCR), korrigiert den Text mit einem zweiten (Gemma 4 E2B) und schreibt die Korrekturzeichen aus [ADR 0002](docs/adr/0002-korrekturschema.md) wie mit rotem Fineliner auf das Original: Unterstreichung, Verbesserung darüber, Fehlerzeichen (etwa R, Z, G, A) am Rand. Ein Fortschrittsbalken zeigt die Restzeit.
 - **Prüfen:** Ein Klick auf eine Arbeit öffnet sie groß, mit den Fehlern je Seite in einer Spalte daneben. Pfeiltasten blättern durch die Klasse. Den erkannten Text kann man je Seite bearbeiten, Wortzahl und Korrektur folgen. Die Klassenübersicht zeigt Wörter, Fehler und Fehlerarten je Arbeit und für die Klasse.
+- **Gewichten:** Die Klassenübersicht und die Tabelle zeigen neben der Fehlerzahl den gewichteten Fehlerquotienten (gewichtete Fehler je 100 Wörter). Wiederholungsfehler zählen einmal je Arbeit, in den Fremdsprachen zählt die Rechtschreibung halb und die Zeichensetzung nicht. Die Gewichte je Fach lassen sich unter ⚙ Einstellungen, „Fehlergewichtung“ ändern ([ADR 0006](docs/adr/0006-fehlergewichtung.md)).
 - **Unsicher gelesen:** Wo die Texterkennung selbst unsicher war, setzt Rotstift keine rote Marke, sondern unterstreicht die Stelle grau gepunktet. Die Lehrkraft übernimmt den Vorschlag als Fehler oder verwirft ihn. Solche Stellen fehlen in Statistik und PDF, solange sie nicht übernommen sind.
 - **Nur Wörter zählen:** Erkennt die Seiten ohne Korrektur und braucht kein Korrekturmodell. Getrennte Wörter am Zeilenende zählen einmal, auch über Seitengrenzen derselben Arbeit. Leere Seiten zählen mit 0 Wörtern. Ist eine Arbeit nur teilweise gezählt, steht „mind.“ vor der Zahl.
 - **Exportieren:** PDF je Arbeit oder für die ganze Klasse, eine Tabelle als CSV, die deutsches Excel direkt öffnet (UTF-8 mit BOM, Semikolon), oder dieselbe Tabelle in die Zwischenablage. Den Speicherort wählt man im Systemdialog.
@@ -27,7 +28,6 @@ Geplant:
 
 - Weniger Stellen „unsicher gelesen“ durch eine genauere Texterkennung, Schwelle auf echter Schülerhandschrift prüfen.
 - Durchgestrichenes zuverlässiger erkennen, auch Gekritzel und Überschreibungen.
-- Statistik nach Schwere der Fehler.
 - Signierte Installer für Windows und macOS, vorbereitet in [docs/signieren.md](docs/signieren.md).
 
 ## Erster Start

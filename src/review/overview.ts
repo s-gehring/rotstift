@@ -1,10 +1,13 @@
 import type { Arbeit } from '../import/arbeiten.ts';
+import type { Weighting } from '../stats/weighting.ts';
 import { buildResults, classTotals } from '../results/summary.ts';
 import type { ReviewState } from './review-flow.ts';
 import {
   sortedTypes,
   summarizeArbeit,
   summarizeClass,
+  weighArbeit,
+  weighClass,
   type ArbeitReview,
   type Entries,
   type TypeCount,
@@ -20,7 +23,8 @@ export interface OverviewRow {
   readonly name: string;
   readonly words: number | null;
   readonly errors: number | null;
-  readonly rate: number | null;
+  readonly weighted: number | null;
+  readonly quotient: number | null;
   readonly top: readonly TypeCount[];
   readonly tag: OverviewTag | null;
 }
@@ -28,7 +32,8 @@ export interface OverviewRow {
 export interface OverviewTotal {
   readonly words: number;
   readonly errors: number | null;
-  readonly rate: number | null;
+  readonly weighted: number | null;
+  readonly quotient: number | null;
   readonly average: number | null;
 }
 
@@ -60,22 +65,31 @@ export function buildOverview(
   review: ReviewState,
   entries: Entries,
   order: readonly string[] = [],
+  weighting: Weighting | null = null,
 ): Overview {
   const corrected = Object.keys(review.pages).length > 0;
+  const profile = review.profile;
   if (corrected) {
     const summary = summarizeClass(arbeiten, review, entries);
     const total = summary.statistics;
+    const weightedTotal =
+      profile === null || weighting === null
+        ? null
+        : weighClass(summary.arbeiten, profile, weighting);
     return {
       corrected,
       rows: arbeiten.map((arbeit) => {
         const row = summarizeArbeit(arbeit, review, entries);
         const statistics = row.statistics;
+        const weighted =
+          profile === null || weighting === null ? null : weighArbeit(row, profile, weighting);
         return {
           id: arbeit.id,
           name: arbeit.name,
           words: statistics?.words ?? null,
           errors: statistics?.errors ?? null,
-          rate: statistics?.errorsPer100Words ?? null,
+          weighted: weighted?.weighted ?? null,
+          quotient: weighted?.quotient ?? null,
           top: statistics === null ? [] : sortedTypes(statistics, order).slice(0, TOP_TYPES),
           tag: correctedTag(row),
         };
@@ -86,7 +100,8 @@ export function buildOverview(
           : {
               words: total.words,
               errors: total.errors,
-              rate: total.errorsPer100Words,
+              weighted: weightedTotal?.weighted ?? null,
+              quotient: weightedTotal?.quotient ?? null,
               average: null,
             },
       types: total === null ? [] : sortedTypes(total, order),
@@ -101,7 +116,8 @@ export function buildOverview(
       name: result.name,
       words: result.countedPages === 0 ? null : result.words,
       errors: null,
-      rate: null,
+      weighted: null,
+      quotient: null,
       top: [],
       tag:
         result.countedPages === result.pageCount
@@ -114,7 +130,13 @@ export function buildOverview(
     total:
       totals.countedPages === 0
         ? null
-        : { words: totals.words, errors: null, rate: null, average: totals.average },
+        : {
+            words: totals.words,
+            errors: null,
+            weighted: null,
+            quotient: null,
+            average: totals.average,
+          },
     types: [],
   };
 }

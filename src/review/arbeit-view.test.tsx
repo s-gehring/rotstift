@@ -164,6 +164,7 @@ describe('the head of an Arbeit', () => {
     expect(query('h1')?.textContent).toBe('Aufsatz Ada');
     expect(query('.detail-position')?.textContent).toBe('1 von 2');
     expect(query('.detail-figures')?.textContent).toBe('10 Wörter · 1 Fehler');
+    expect(query('.detail-figures')?.title).toBe('1 gewichtete Fehler · Fehlerquotient 10,0');
     expect(button('Vorherige Arbeit').disabled).toBe(true);
     expect(button('Nächste Arbeit').disabled).toBe(false);
   });

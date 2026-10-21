@@ -8,6 +8,7 @@ import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { WordCount } from '../results/use-word-count.ts';
 import type { ReviewEngine } from '../review/engine-phase.ts';
 import type { Review } from '../review/use-review.ts';
+import type { WeightingModel } from '../stats/use-weighting.ts';
 import type { Toasts } from '../ui/Toast.tsx';
 
 export type RunKind = 'correct' | 'count';
@@ -102,6 +103,7 @@ export interface AppModel {
   readonly navigation: Navigation;
   readonly run: RunController;
   readonly subject: Subject;
+  readonly weighting: WeightingModel;
   readonly work: Work;
   readonly models: Models;
   readonly toasts: Toasts;

@@ -72,7 +72,7 @@ Ein `CorrectionProfile` hat `id`, `name`, `subject`, `language` und `allowedType
 
 ### Statistik
 
-`computeStatistics` (`src/stats/`) liefert Wörter (`countWords` über den Originaltext ohne gestrichenen Text), Fehler gesamt, Fehler je Art und Fehler pro 100 Wörter. Auslassungen zählen als Fehler, nicht als Wörter. Am Zeilenende getrennte Wörter („Rut-“ / „sche“) zählen einfach; ein Bindestrich nach einem Buchstaben mit Kleinbuchstabe am Anfang der nächsten Zeile gilt als Silbentrennung.
+`computeStatistics` (`src/stats/`) liefert Wörter (`countWords` über den Originaltext ohne gestrichenen Text), Fehler gesamt, Fehler je Art und Fehler pro 100 Wörter. Auslassungen zählen als Fehler, nicht als Wörter. Gewichtete Fehler und der Fehlerquotient stehen in [0006](0006-fehlergewichtung.md). Am Zeilenende getrennte Wörter („Rut-“ / „sche“) zählen einfach; ein Bindestrich nach einem Buchstaben mit Kleinbuchstabe am Anfang der nächsten Zeile gilt als Silbentrennung.
 
 ## Begründung
 
