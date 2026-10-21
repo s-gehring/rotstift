@@ -1,0 +1,35 @@
+Fach: Deutsch
+Form: Bewerbungsschreiben
+Aufgabe: Schreibe ein Bewerbungsschreiben für ein dreiwöchiges Schülerpraktikum in der Stadtbibliothek Freiburg.
+Mangel: form | Betreffzeile fehlt | betreff, bewerbung um, betreffzeile | @first
+Mangel: form | Anrede zu locker | anrede, hallo, förmlich, locker, sehr geehrte, umgangssprach, salopp, informell | @Hallo Leute
+Mangel: form | Duzen statt Siezen | duzen, siezen, euch, höflich, förmlich, du-form, anredepronomen | @ob ihr noch
+Mangel: form | Grußformel zu locker | gruß, grüße, mit freundlichen, ciao, verabschied, schlussformel, locker, förmlich, informell | @Ciao und bis bald
+---
+Freiburg, 2. Oktober 2026
+Hallo Leute von der Stadtbibliothek,
+ich heiße Emma Wolf, bin vierzehn Jahre alt und gehe in die
+neunte Klasse der Realschule am Seepark. Im Februar müssen
+wir ein dreiwöchiges Praktikum machen, und ich wollte
+fragen, ob ihr noch einen Platz für mich habt.
+Ich lese seit ich klein bin sehr viel, am liebsten Fantasy
+und Krimis. Fast jede Woche bin ich bei euch in der
+Jugendabteilung und leihe mir neue Bücher aus. Deshalb
+weiß ich schon ziemlich gut, wo welche Bücher stehen.
+In der Schule bin ich in der Lese-AG. Dort lesen wir den
+Kindern aus der fünften Klasse in der Pause vor. Das macht
+mir großen Spaß, und die Kleinen hören immer gespannt zu.
+Außerdem helfe ich in unserer Schulbibliothek beim
+Ausleihen und Sortieren der Bücher.
+Ich interessiere mich auch dafür, wie eine Bibliothek
+hinter den Kulissen funktioniert, also wie neue Bücher
+ausgesucht und eingetragen werden und wie die
+Veranstaltungen geplant werden. Später möchte ich
+vielleicht Bibliothekarin werden oder in einem Verlag
+arbeiten.
+Ich bin zuverlässig und pünktlich und arbeite gern im
+Team. Mit dem Computer komme ich gut zurecht. Mein Zeugnis
+und meinen Lebenslauf habe ich angehängt. Ich würde mich
+sehr freuen, wenn ihr mich zu einem Gespräch einladet.
+Ciao und bis bald
+Emma

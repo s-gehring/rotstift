@@ -1,0 +1,31 @@
+Fach: Deutsch
+Form: Persönlicher Brief
+Aufgabe: Schreibe deiner Tante Petra einen Brief, in dem du von deinem Betriebspraktikum erzählst. Achte auf die Merkmale eines persönlichen Briefs.
+Mangel: form | Ort und Datum fehlen | datum, ort und datum, ort, datumsangabe | @first
+Mangel: form | Anrede fehlt | anrede, liebe tante, begrüßung, briefanfang | @first
+Mangel: form | Grußformel fehlt | gruß, grüße, verabschied, schlussformel, unterschrift, abschied, briefschluss, abschluss | @last
+---
+Ich habe jetzt endlich zwei Wochen Praktikum hinter mir
+und wollte dir unbedingt davon erzählen. Ich war in der
+Tischlerei Brandt bei uns im Ort, die kennst du bestimmt.
+Am ersten Tag musste ich schon um sieben Uhr da sein, das
+war ganz schön früh. Der Meister hat mir zuerst die
+Werkstatt gezeigt und mir erklärt, wie man die Maschinen
+sicher bedient. An die große Kreissäge durfte ich aber
+nicht, das dürfen nur die Gesellen.
+In der ersten Woche habe ich vor allem Bretter geschliffen
+und aufgeräumt. Das war manchmal langweilig, aber ich habe
+gemerkt, wie viel Arbeit in einem einzigen Schrank steckt.
+In der zweiten Woche durfte ich dann mit einem Gesellen
+zu einer Kundin fahren und eine Küche einbauen. Wir haben
+die Schränke an die Wand geschraubt und die Arbeitsplatte
+zugeschnitten. Die Kundin hat uns sogar Kuchen gebracht.
+Am letzten Tag habe ich ein kleines Vogelhaus gebaut, das
+ich mitnehmen durfte. Es hängt jetzt in unserem Garten.
+Mama meint, ich soll es dir bei eurem nächsten Besuch
+zeigen. Ich glaube, dass ich später gern einen Beruf mit
+Holz lernen möchte. Der Meister hat gesagt, dass ich mich
+im nächsten Jahr für eine Ausbildung bewerben kann.
+Wie geht es dir und deinem Hund? Kommt ihr im Sommer
+wieder an die Ostsee? Ich würde mich sehr freuen, wenn
+wir dann zusammen segeln gehen.

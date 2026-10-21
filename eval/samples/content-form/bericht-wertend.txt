@@ -1,0 +1,32 @@
+Fach: Deutsch
+Form: Bericht
+Aufgabe: Schreibe für die Schülerzeitung einen sachlichen Bericht über den Brand in der Schulküche. Beantworte die W-Fragen.
+Mangel: form | Wertung statt Sachlichkeit | wertung, wertend, sachlich, meinung, subjektiv, persönlich, gefühl, unsachlich, umgangssprach | @Das war total peinlich
+Mangel: form | Wertung statt Sachlichkeit | wertung, wertend, sachlich, meinung, subjektiv, persönlich, gefühl, unsachlich, übertrieb | @Ich finde, der
+Mangel: content | Zeitpunkt fehlt | wann, zeitpunkt, datum, uhrzeit, zeitangabe, w-frage, tag | @*
+---
+Brand in der Schulküche
+In der Schulküche des Goethe-Gymnasiums in Kassel ist ein
+kleiner Brand ausgebrochen. Die Klasse 8b hatte im Fach
+Hauswirtschaft gerade Pommes frites zubereitet, als das Öl
+in einer Pfanne zu heiß wurde und Feuer fing.
+Die Lehrerin Frau Kaya versuchte zuerst, die Flammen mit
+einem Deckel zu ersticken. Das gelang nicht, weil der Deckel
+zu klein war. Das war total peinlich, und alle haben
+gelacht. Daraufhin löste ein Schüler den Feueralarm aus.
+Alle Klassen verließen das Gebäude über die Fluchtwege und
+sammelten sich auf dem Sportplatz.
+Der Hausmeister Herr Brandt löschte das Feuer mit einem
+Feuerlöscher, bevor die Feuerwehr eintraf. Ich finde, der
+Hausmeister ist ein echter Held und sollte eine Medaille
+bekommen. Die Feuerwehr kam mit zwei Fahrzeugen und
+kontrollierte die Küche und den Flur. Verletzt wurde
+niemand. Nur eine Schülerin klagte über Kopfschmerzen und
+wurde von einem Sanitäter untersucht.
+Der Schaden ist gering. Die Pfanne, ein Herd und ein Teil
+der Dunstabzugshaube müssen ersetzt werden. Bis dahin
+findet der Hauswirtschaftsunterricht im Klassenraum statt.
+Die Schulleiterin Frau Wagner bedankte sich bei allen für
+die ruhige Räumung. Sie kündigte an, dass alle Klassen im
+nächsten Monat eine zusätzliche Brandschutzübung machen
+werden.

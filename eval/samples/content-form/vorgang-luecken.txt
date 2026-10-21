@@ -1,0 +1,33 @@
+Fach: Deutsch
+Form: Vorgangsbeschreibung
+Aufgabe: Beschreibe, wie man Pfannkuchen backt, sodass ein Kind es allein nachmachen kann. Nenne zuerst die Zutaten und Geräte.
+Mangel: form | Zutatenliste fehlt | zutat, geräte, material, liste, benötigt, braucht | @first
+Mangel: content | Schritt fehlt: Eier | eier, schritt fehlt, fehlender schritt, unvollständig, lücke | @rührt man das Mehl
+Mangel: form | Erlebnis statt Anleitung | erzähl, ich-form, ich form, persönlich, präteritum, tempus, sachlich, anleitung, erlebnis | @Als ich das letzte Mal
+---
+Pfannkuchen sind ein einfaches Gericht, das fast alle
+Kinder mögen. Man kann sie süß mit Zucker und Apfelmus
+oder herzhaft mit Käse und Schinken essen.
+Zuerst gibt man das Mehl in eine große Schüssel. Dann
+rührt man das Mehl mit der Milch zu einem glatten Teig.
+Dabei muss man aufpassen, dass keine Klümpchen entstehen.
+Am besten nimmt man dafür einen Schneebesen und gießt die
+Milch nach und nach dazu. Zum Schluss kommt eine Prise
+Salz in den Teig. Danach sollte der Teig etwa eine
+halbe Stunde ruhen, damit er schön dickflüssig wird.
+Nun stellt man eine Pfanne auf den Herd und gibt ein
+Stück Butter hinein. Wenn die Butter zischt, ist die
+Pfanne heiß genug. Mit einer Kelle gießt man so viel Teig
+in die Pfanne, dass der Boden dünn bedeckt ist. Man
+schwenkt die Pfanne ein wenig, damit sich der Teig gut
+verteilt.
+Als ich das letzte Mal Pfannkuchen gemacht habe, ist mir
+der erste beim Wenden auf den Boden gefallen. Mein Hund
+hat sich sehr gefreut, und meine Mutter musste lachen.
+Danach habe ich den Pfannkuchen mit einem Pfannenwender
+gewendet, und es hat viel besser geklappt.
+Wenn die Unterseite goldbraun ist, wendet man den
+Pfannkuchen und backt die andere Seite noch etwa eine
+Minute. Dann legt man ihn auf einen Teller und backt den
+nächsten. Die fertigen Pfannkuchen kann man im Backofen
+bei wenig Hitze warm halten, bis alle fertig sind.
