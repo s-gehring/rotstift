@@ -30,6 +30,7 @@ export interface SetupState {
   readonly hardware: HardwareInfo | null;
   readonly selectedId: string | null;
   readonly samples: Readonly<Record<string, readonly Sample[]>>;
+  readonly baselines: Readonly<Record<string, number>>;
   readonly errors: Readonly<Record<string, DownloadError>>;
   readonly note: string | null;
   readonly importing: boolean;
@@ -43,6 +44,7 @@ export type SetupAction =
       selectedId?: string | null;
     }
   | { type: 'selected'; modelId: string }
+  | { type: 'started'; modelId: string; presentBytes: number }
   | { type: 'status'; status: ModelStatus }
   | { type: 'mark'; modelId: string; state: ModelStatus['state'] }
   | { type: 'event'; event: DownloadEvent; at: number }
@@ -56,6 +58,7 @@ export const INITIAL_SETUP: SetupState = {
   hardware: null,
   selectedId: null,
   samples: {},
+  baselines: {},
   errors: {},
   note: null,
   importing: false,
@@ -81,6 +84,10 @@ function withoutSamples(state: SetupState, modelId: string): SetupState['samples
 
 export function samplesOf(state: SetupState, modelId: string): readonly Sample[] {
   return state.samples[modelId] ?? [];
+}
+
+export function baselineOf(state: SetupState, modelId: string): number {
+  return state.baselines[modelId] ?? 0;
 }
 
 export function errorOf(state: SetupState, modelId: string): DownloadError | null {
@@ -186,6 +193,11 @@ export function setupReducer(state: SetupState, action: SetupAction): SetupState
     }
     case 'selected':
       return { ...state, selectedId: action.modelId, note: null };
+    case 'started':
+      return {
+        ...state,
+        baselines: { ...state.baselines, [action.modelId]: action.presentBytes },
+      };
     case 'status':
       return { ...state, statuses: withStatus(state, action.status) };
     case 'mark': {

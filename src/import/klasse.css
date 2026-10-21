@@ -1,7 +1,7 @@
 .klasse {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  min-height: calc(100vh - var(--header-height) - var(--space-5) - var(--space-6));
 }
 
 .klasse-drop {

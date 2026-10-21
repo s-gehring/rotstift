@@ -13,6 +13,7 @@ import {
 import {
   ANY_MODEL,
   activeModel,
+  baselineOf,
   errorOf,
   hasRunningJob,
   INITIAL_SETUP,
@@ -136,11 +137,12 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     if (client === null) return;
     dispatch({ type: 'error', modelId: model.id, error: null });
     dispatch({ type: 'note', note: null });
+    dispatch({ type: 'started', modelId: model.id, presentBytes: status?.downloadedBytes ?? 0 });
     await guard(model.id, async () => {
       await client.startDownload(model.id);
       await refresh();
     });
-  }, [client, guard, model.id, refresh]);
+  }, [client, guard, model.id, refresh, status?.downloadedBytes]);
 
   const cancel = useCallback(async () => {
     if (client === null) return;
@@ -149,16 +151,19 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     });
   }, [client, guard, model.id]);
 
-  const remove = useCallback(async () => {
-    if (client === null) return;
-    dispatch({ type: 'note', note: null });
-    await guard(model.id, async () => {
-      dispatch({ type: 'status', status: await client.remove(model.id) });
-      if (!choosable) return;
-      const selectedId = await client.selection().catch(() => null);
-      dispatch({ type: 'selected', modelId: selectedId ?? DEFAULT_MODEL_ID });
-    });
-  }, [client, guard, model.id, choosable]);
+  const remove = useCallback(
+    async (modelId: string = model.id) => {
+      if (client === null) return;
+      dispatch({ type: 'note', note: null });
+      await guard(modelId, async () => {
+        dispatch({ type: 'status', status: await client.remove(modelId) });
+        if (!choosable) return;
+        const selectedId = await client.selection().catch(() => null);
+        dispatch({ type: 'selected', modelId: selectedId ?? DEFAULT_MODEL_ID });
+      });
+    },
+    [client, guard, model.id, choosable],
+  );
 
   const importFiles = useCallback(async () => {
     if (client === null) return;
@@ -187,6 +192,7 @@ function useRoleSetup<T extends AnyModelInfo>(client: ModelClient | null, models
     error: errorOf(state, model.id),
     loadError: state.loaded ? null : (state.errors[ANY_MODEL] ?? null),
     samples: samplesOf(state, model.id),
+    baseline: baselineOf(state, model.id),
     select,
     download,
     cancel,

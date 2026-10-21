@@ -1,5 +1,7 @@
 mod diagnostics;
 mod llm;
+#[cfg(target_os = "macos")]
+mod menu;
 mod models;
 mod save;
 
@@ -9,7 +11,10 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(menu::build);
+    builder
         .plugin(tauri_plugin_dialog::init())
         .manage(llm::LlmRuntime::new())
         .manage(Arc::new(models::ModelManager::new()))

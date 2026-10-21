@@ -5,6 +5,7 @@ import type { DownloadEvent, HardwareInfo, ModelState, ModelStatus } from './typ
 
 export interface FakeClientOptions {
   readonly states?: Readonly<Record<string, ModelState>>;
+  readonly present?: Readonly<Record<string, number>>;
   readonly hardware?: HardwareInfo | null;
 }
 
@@ -18,7 +19,7 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
         {
           modelId: model.id,
           state,
-          downloadedBytes: state === 'ready' ? total : 0,
+          downloadedBytes: state === 'ready' ? total : (options.present?.[model.id] ?? 0),
           totalBytes: total,
         },
       ];
@@ -57,7 +58,7 @@ export function fakeModelClient(options: FakeClientOptions = {}) {
     Promise.resolve(write(modelId, 'ready', read(modelId).totalBytes)),
   );
   const startDownload = vi.fn<ModelClient['startDownload']>((modelId) => {
-    write(modelId, 'downloading', 0);
+    write(modelId, 'downloading');
     return Promise.resolve(undefined);
   });
   const cancelDownload = vi.fn<ModelClient['cancelDownload']>((modelId) => {
