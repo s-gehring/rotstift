@@ -4,9 +4,10 @@ import { Button } from '../ui/Button.tsx';
 import { IconButton } from '../ui/IconButton.tsx';
 import { SplitButton } from '../ui/Menu.tsx';
 import { ProgressBar } from '../ui/ProgressBar.tsx';
+import { ROLE_NAME } from '../models/role-text.ts';
 import { useApp } from './app-context.tsx';
 import { SubjectSelect } from './SubjectSelect.tsx';
-import type { RunKind } from './types.ts';
+import type { ModelRole, RunKind } from './types.ts';
 
 const MAIN_LABEL: Readonly<Record<RunKind, string>> = {
   correct: 'Korrigieren',
@@ -81,6 +82,29 @@ function MainAction() {
   );
 }
 
+const ROLES: readonly ModelRole[] = ['transcriber', 'corrector', 'reviewer'];
+
+function CloudSign() {
+  const { models } = useApp();
+  const { steps } = models.cloud;
+  if (!ROLES.some((role) => steps[role] !== undefined)) return null;
+  const label = ROLES.map((role) => {
+    const step = steps[role];
+    return step === undefined
+      ? `${ROLE_NAME[role]} lokal`
+      : `${ROLE_NAME[role]} über ${step.label}`;
+  }).join(', ');
+  return (
+    <IconButton
+      label={label}
+      icon="cloud"
+      className="cloud-sign"
+      tooltipAlign="end"
+      onClick={models.settings.show}
+    />
+  );
+}
+
 export function Header() {
   const { demo, models } = useApp();
   return (
@@ -93,6 +117,7 @@ export function Header() {
         <RunStatus />
       </div>
       <div className="app-header-end">
+        <CloudSign />
         <MainAction />
         <IconButton
           label="Einstellungen"

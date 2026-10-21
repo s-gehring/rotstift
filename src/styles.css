@@ -701,3 +701,35 @@ thead th {
 .notice.warn {
   border-color: var(--color-red);
 }
+
+.cloud-sign {
+  color: var(--color-text-muted);
+}
+
+.cloud-model,
+.cloud-model-key {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+
+.cloud-model input,
+.cloud-model select {
+  width: min(24rem, 100%);
+}
+
+.cloud-model .settings-actions,
+.cloud-model .settings-error,
+.cloud-model-key .settings-error {
+  margin-top: var(--space-1);
+}
+
+.cloud-warning {
+  margin-top: var(--space-3);
+}
+
+.cloud-warning-title {
+  font-weight: 600;
+}

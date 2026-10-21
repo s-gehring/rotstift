@@ -1,3 +1,4 @@
+import { cloudUnavailable, describeCloudError } from '../cloud/errors.ts';
 import { readWords, type PageReading } from '../correction/uncertain-reading.ts';
 import { LlmCallError, visionMessage, type Completion } from '../llm/client.ts';
 import {
@@ -83,6 +84,11 @@ export function describeLlmError(error: LlmError): TranscribeError {
         kind: 'failed',
         message: `Die Texterkennung hat einen internen Fehler gemeldet (${error.kind})`,
       };
+    case 'cloud':
+      if (error.detail === 'cancelled') return { kind: 'cancelled' };
+      return cloudUnavailable(error.detail)
+        ? { kind: 'unavailable', message: describeCloudError(error.detail) }
+        : { kind: 'failed', message: describeCloudError(error.detail) };
     default: {
       const unreachable: never = error;
       return unreachable;

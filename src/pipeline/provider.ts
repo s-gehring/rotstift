@@ -10,6 +10,7 @@ import type {
 export interface ModelAvailability {
   readonly model: ModelInfo;
   readonly state: ModelState;
+  readonly remote?: boolean;
 }
 
 export interface TranscriberEnvironment {
@@ -19,6 +20,7 @@ export interface TranscriberEnvironment {
   readonly createModelTranscriber: (
     model: ModelInfo,
     onUnavailable?: () => void,
+    remote?: boolean,
   ) => PageTranscriber & { readonly engine?: EngineMonitor };
 }
 
@@ -38,7 +40,11 @@ export async function resolveTranscriber(
     if (availability.state !== 'ready') {
       return { state: 'needs-model', problem: modelProblem(availability.state) };
     }
-    const transcriber = env.createModelTranscriber(availability.model, onUnavailable);
+    const transcriber = env.createModelTranscriber(
+      availability.model,
+      onUnavailable,
+      availability.remote === true,
+    );
     return { state: 'ready', transcriber, demo: false, engine: transcriber.engine };
   }
   if (env.isDev) return { state: 'ready', transcriber: await env.loadDemo(), demo: true };

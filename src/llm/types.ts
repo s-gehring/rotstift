@@ -3,6 +3,8 @@ export interface ExitReport {
   log: string;
 }
 
+import type { CloudError } from '../cloud/errors.ts';
+
 export type LlmError =
   | {
       kind:
@@ -17,7 +19,8 @@ export type LlmError =
     }
   | { kind: 'exitedDuringStartup' | 'exitedUnexpectedly'; detail: ExitReport }
   | { kind: 'startupTimeout' | 'notReady' | 'cancelled' | 'timeout' }
-  | { kind: 'server'; detail: { status: number; body: string } };
+  | { kind: 'server'; detail: { status: number; body: string } }
+  | CloudError;
 
 export type RuntimeStatus =
   | { state: 'stopped' }

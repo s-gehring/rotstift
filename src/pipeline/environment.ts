@@ -1,3 +1,4 @@
+import { cloudLlmClient, remoteEngine } from '../cloud/remote.ts';
 import { createLayoutLocator, type LayoutLocator } from '../layout/layout-client.ts';
 import { createLlmClient } from '../llm/client.ts';
 import { sharedEngine } from '../llm/engine.ts';
@@ -36,11 +37,11 @@ export function browserEnvironment(): TranscriberEnvironment {
     isDev: import.meta.env.DEV,
     isTauri: isTauri(),
     loadDemo,
-    createModelTranscriber: (model: ModelInfo, onUnavailable?: () => void) =>
+    createModelTranscriber: (model: ModelInfo, onUnavailable?: () => void, remote = false) =>
       withStruckWords(
         createLlmTranscriber({
-          client: createLlmClient(),
-          engine: sharedEngine(),
+          client: remote ? cloudLlmClient('transcriber') : createLlmClient(),
+          engine: remote ? remoteEngine() : sharedEngine(),
           model,
           ...(onUnavailable && { onUnavailable }),
         }),

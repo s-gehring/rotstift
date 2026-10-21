@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CloudStep } from '../cloud/client.ts';
+import { cloudBlockedMessage } from '../cloud/remote.ts';
 import type { ModelClient } from '../models/client.ts';
 import {
   useCorrectorSetup,
@@ -66,24 +68,33 @@ function useCorrectorStatus(
 ): CorrectorChoice {
   const browser = useBrowserCorrector(client === null, texts);
   const modelState = setup.setup.status?.state;
-  const sidecar = useMemo(
-    () =>
-      sidecarCorrectorStatus(
-        modelState === undefined ? null : { state: modelState, corrector: setup.corrector },
-        texts,
-      ),
-    [modelState, setup.corrector, texts],
-  );
+  const { cloud, corrector } = setup;
+  const sidecar = useMemo((): CorrectorStatus | null => {
+    if (cloud !== null) {
+      return corrector === null
+        ? { state: 'unavailable', message: cloudBlockedMessage(cloud) }
+        : { state: 'ready', corrector, preview: false, engine: corrector.engine };
+    }
+    return sidecarCorrectorStatus(
+      modelState === undefined ? null : { state: modelState, corrector },
+      texts,
+    );
+  }, [modelState, corrector, cloud, texts]);
   return { status: client === null ? browser : sidecar, setup };
 }
 
 export function useCorrector(
   client: ModelClient | null,
   create?: CreateCorrector,
+  cloud: CloudStep | null = null,
 ): CorrectorChoice {
-  return useCorrectorStatus(client, useCorrectorSetup(client, create), CORRECTOR_TEXTS);
+  return useCorrectorStatus(client, useCorrectorSetup(client, create, cloud), CORRECTOR_TEXTS);
 }
 
-export function useReviewer(client: ModelClient | null, create?: CreateCorrector): CorrectorChoice {
-  return useCorrectorStatus(client, useReviewerSetup(client, create), REVIEWER_TEXTS);
+export function useReviewer(
+  client: ModelClient | null,
+  create?: CreateCorrector,
+  cloud: CloudStep | null = null,
+): CorrectorChoice {
+  return useCorrectorStatus(client, useReviewerSetup(client, create, cloud), REVIEWER_TEXTS);
 }

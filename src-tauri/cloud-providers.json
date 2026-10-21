@@ -1,0 +1,53 @@
+{
+  "templates": [
+    {
+      "id": "ionos",
+      "label": "IONOS AI Model Hub",
+      "baseUrl": "https://openai.inference.de-txl.ionos.com/v1",
+      "key": "required",
+      "tokenField": "max_tokens"
+    },
+    {
+      "id": "mistral",
+      "label": "Mistral AI",
+      "baseUrl": "https://api.mistral.ai/v1",
+      "key": "required",
+      "tokenField": "max_tokens"
+    },
+    {
+      "id": "stackit",
+      "label": "STACKIT AI Model Serving",
+      "baseUrl": "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1",
+      "key": "required",
+      "tokenField": "max_tokens"
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "baseUrl": "https://api.openai.com/v1",
+      "key": "required",
+      "tokenField": "max_completion_tokens"
+    },
+    {
+      "id": "openai-eu",
+      "label": "OpenAI (EU-Projekt)",
+      "baseUrl": "https://eu.api.openai.com/v1",
+      "key": "required",
+      "tokenField": "max_completion_tokens"
+    },
+    {
+      "id": "server",
+      "label": "Eigener Server",
+      "baseUrl": null,
+      "key": "optional",
+      "tokenField": "max_tokens"
+    },
+    {
+      "id": "custom",
+      "label": "Anderer Anbieter",
+      "baseUrl": null,
+      "key": "optional",
+      "tokenField": "max_tokens"
+    }
+  ]
+}

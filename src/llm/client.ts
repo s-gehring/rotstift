@@ -34,7 +34,15 @@ export function isLlmError(value: unknown): value is LlmError {
   return typeof value === 'object' && value !== null && 'kind' in value;
 }
 
-export function createLlmClient(invoke: Invoke = tauriInvoke) {
+export interface ChatRoute {
+  readonly chat: string;
+  readonly cancel: string;
+  readonly args?: Readonly<Record<string, unknown>>;
+}
+
+const SIDECAR_ROUTE: ChatRoute = { chat: 'llm_chat', cancel: 'llm_cancel' };
+
+export function createLlmClient(invoke: Invoke = tauriInvoke, route: ChatRoute = SIDECAR_ROUTE) {
   async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
     try {
       return await invoke<T>(command, args);
@@ -45,15 +53,16 @@ export function createLlmClient(invoke: Invoke = tauriInvoke) {
 
   async function chat(request: ChatRequest, options: ChatOptions = {}): Promise<ChatResponse> {
     const { signal } = options;
-    if (!signal) return call<ChatResponse>('llm_chat', { request });
+    const extra = route.args ?? {};
+    if (!signal) return call<ChatResponse>(route.chat, { ...extra, request });
     signal.throwIfAborted();
     const requestId = crypto.randomUUID();
     const cancel = () => {
-      invoke('llm_cancel', { requestId }).catch(() => undefined);
+      invoke(route.cancel, { requestId }).catch(() => undefined);
     };
     signal.addEventListener('abort', cancel, { once: true });
     try {
-      return await call<ChatResponse>('llm_chat', { requestId, request });
+      return await call<ChatResponse>(route.chat, { ...extra, requestId, request });
     } catch (error) {
       signal.throwIfAborted();
       throw error;

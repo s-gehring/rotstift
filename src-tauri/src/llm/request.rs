@@ -118,6 +118,15 @@ fn check_image(url: &str) -> Result<(), LlmError> {
 }
 
 impl ChatRequest {
+    pub fn has_images(&self) -> bool {
+        self.messages.iter().any(|message| match &message.content {
+            Content::Parts(parts) => parts
+                .iter()
+                .any(|part| matches!(part, Part::ImageUrl { .. })),
+            Content::Text(_) => false,
+        })
+    }
+
     pub fn parse(value: Value) -> Result<Self, LlmError> {
         let mut request: Self =
             serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
