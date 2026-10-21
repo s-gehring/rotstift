@@ -429,6 +429,16 @@
   padding: var(--space-1) 0;
 }
 
+.toast-progress {
+  flex: none;
+  width: 96px;
+  background: color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.toast-progress .progress-bar-fill {
+  background: currentColor;
+}
+
 .toast .btn-quiet,
 .toast .icon-btn.btn-quiet {
   color: inherit;

@@ -14,8 +14,6 @@ import { pageCondition, summarizeArbeit, type Entries } from './summary.ts';
 
 export const PDF_FOOTER = 'Vorschau: automatisch erstellte Korrektur, bitte prüfen';
 
-export type ExportBlock = 'running' | 'preview' | 'incomplete' | null;
-
 export function createReviewExport(
   render: (page: ImportPage) => Promise<Blob> = renderPageToPng,
   encode: PageImageEncoder = encodePageImage,
@@ -83,21 +81,3 @@ export function createReviewExport(
 }
 
 export type ReviewExport = ReturnType<typeof createReviewExport>;
-
-export function arbeitExportBlock(
-  arbeit: Arbeit,
-  state: ReviewState,
-  entries: Entries,
-): ExportBlock {
-  if (state.run !== null) return 'running';
-  const summary = summarizeArbeit(arbeit, state, entries);
-  if (summary.preview) return 'preview';
-  if (!summary.complete || summary.statistics === null) return 'incomplete';
-  return null;
-}
-
-export const EXPORT_BLOCK_TEXT: Readonly<Record<Exclude<ExportBlock, null>, string>> = {
-  running: 'Während der Berichtigung lässt sich nichts speichern.',
-  preview: 'Vorschau-Korrekturen werden nicht als PDF gespeichert.',
-  incomplete: 'Als PDF speichern lässt sich die Arbeit erst, wenn alle Seiten berichtigt sind.',
-};

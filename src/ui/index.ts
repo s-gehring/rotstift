@@ -21,5 +21,6 @@ export {
   type ToastAction,
   type ToastMessage,
   type ToastOptions,
+  type ToastProgress,
   type Toasts,
 } from './Toast.tsx';

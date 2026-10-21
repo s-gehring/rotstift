@@ -19,6 +19,7 @@ export interface MenuAction {
   readonly disabled?: boolean;
   readonly icon?: IconName;
   readonly danger?: boolean;
+  readonly hint?: string;
 }
 
 export interface MenuSubmenu {
@@ -212,6 +213,7 @@ function MenuList({
               role="menuitem"
               tabIndex={-1}
               aria-disabled={entry.disabled === true || undefined}
+              title={sub ? undefined : entry.hint}
               aria-haspopup={sub ? 'menu' : undefined}
               aria-expanded={sub ? expanded : undefined}
               className={classNames(

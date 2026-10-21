@@ -1,5 +1,5 @@
 import { incompleteArbeitenNote, incompletePagesNote } from '../export/notes.ts';
-import { arbeitenText, classTotals, isComplete, type ArbeitResult } from './summary.ts';
+import { classTotals, isComplete, type ArbeitResult } from './summary.ts';
 
 const BOM = '\uFEFF';
 const HEADER = ['Name', 'Seiten', 'Wörter', 'Hinweis'] as const;
@@ -52,13 +52,6 @@ export function formatClipboardTable(results: readonly ArbeitResult[]): string {
   return tableRows(results)
     .map((row) => row.map(tsvField).join('\t'))
     .join('\n');
-}
-
-export function incompleteNote(results: readonly ArbeitResult[]): string | null {
-  const open = results.filter((result) => !isComplete(result)).length;
-  return open === 0
-    ? null
-    : `${arbeitenText(open)} ${open === 1 ? 'ist' : 'sind'} noch nicht vollständig gezählt.`;
 }
 
 export const CSV_FILE_NAME = 'Wortzahlen';
