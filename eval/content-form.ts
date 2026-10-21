@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { cpus, hostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -65,18 +66,40 @@ async function verify(port: number, sample: ReviewSample, output: string) {
 
 const RUN_VARIANTS = [...PROMPT_VARIANTS, 'features'] as const;
 
+function answerCache(file: string | undefined, model: string) {
+  const entries = new Map<string, string>();
+  if (file !== undefined && existsSync(file)) {
+    for (const row of readFileSync(file, 'utf8').split('\n').filter(Boolean)) {
+      const { key, content } = record(JSON.parse(row));
+      if (typeof key === 'string' && typeof content === 'string') entries.set(key, content);
+    }
+  }
+  return {
+    key: (payload: unknown) =>
+      createHash('sha256').update(JSON.stringify({ model, payload })).digest('hex'),
+    get: (key: string) => entries.get(key),
+    set(key: string, content: string) {
+      entries.set(key, content);
+      if (file !== undefined) appendFileSync(file, `${JSON.stringify({ key, content })}\n`);
+    },
+  };
+}
+
+type AnswerCache = ReturnType<typeof answerCache>;
+
 async function featureReview(
   port: number,
   sample: ReviewSample,
   temperature: number,
   seed: number,
+  cache: AnswerCache,
 ) {
   const answers: unknown[] = [];
   const input = sampleInput(sample);
   const result = await reviewContent(
     input,
     async (request) => {
-      const response = await postJson(port, '/v1/chat/completions', {
+      const payload = {
         messages: request.messages,
         temperature,
         seed,
@@ -85,9 +108,17 @@ async function featureReview(
           type: 'json_schema',
           json_schema: { name: 'antwort', schema: request.schema },
         },
-      });
+      };
+      const key = cache.key(payload);
+      const cached = cache.get(key);
+      if (cached !== undefined) {
+        answers.push(cached);
+        return cached;
+      }
+      const response = await postJson(port, '/v1/chat/completions', payload);
       if (response.status !== 200) throw new Error(`HTTP ${response.status}: ${response.body}`);
       const content = readCompletion(JSON.parse(response.body)).content;
+      cache.set(key, content);
       answers.push(content);
       return content;
     },
@@ -102,6 +133,7 @@ async function featureReview(
   return {
     output: serializeReview({ comments, summary: summaryText(result.comments) ?? '' }),
     answers,
+    ...(result.checkedAs !== undefined && { checkedAs: result.checkedAs }),
   };
 }
 
@@ -121,6 +153,10 @@ async function runReview(
   const task = TASK_MODES.find((mode) => mode === string('task', 'keep'));
   if (!task) throw new Error(`--task (${TASK_MODES.join(', ')})`);
   const tasked = withTask(samples, task);
+  const cache = answerCache(
+    typeof values['cache'] === 'string' ? values['cache'] : undefined,
+    basename(modelFile),
+  );
   const server = await launchServer({
     model: modelFile,
     contextSize: model.server.contextSize,
@@ -137,7 +173,7 @@ async function runReview(
       for (const sample of tasked) {
         const started = performance.now();
         if (variant === 'features') {
-          const result = await featureReview(server.port, sample, temperature, seed);
+          const result = await featureReview(server.port, sample, temperature, seed, cache);
           const seconds = (performance.now() - started) / 1000;
           docs.push({
             id: sample.id,
@@ -219,6 +255,7 @@ async function main() {
       list: { type: 'boolean', default: false },
       verify: { type: 'boolean', default: false },
       task: { type: 'string' },
+      cache: { type: 'string' },
       defects: { type: 'boolean', default: false },
     },
   });

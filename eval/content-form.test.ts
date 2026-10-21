@@ -187,8 +187,10 @@ describe('features', () => {
   it('replaces every sample form with a name outside the catalogue', () => {
     const unknown = withTask(loadSamples(), 'unknown-form');
     expect(unknown.filter((sample) => findTextForm(sample.form) !== null)).toEqual([]);
-    const [question] = featuresFor(unknown[0] ?? parseSample('probe', SOURCE));
-    expect(question?.question.startsWith('Entspricht der Text der Textform')).toBe(true);
+    const generic = unknown.filter((sample) =>
+      featuresFor(sample)[0]?.question.startsWith('Entspricht der Text der Textform'),
+    );
+    expect(generic.map((sample) => sample.form)).toEqual(['Argumentation', 'Argumentation']);
   });
 
   it('keeps system prompt and text identical across questions so the prefix is cached', () => {

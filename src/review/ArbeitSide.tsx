@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import { splitStruck, strokeStruck, unstrokeStruck } from '../annotations/struck.ts';
 import type { HintStatus } from '../correction/uncertain-reading.ts';
 import type { CommentStatus } from './review-flow.ts';
 import { formatCount, wordsText } from '../results/summary.ts';
@@ -227,7 +228,12 @@ function ContentSection({
 }) {
   const open = content.comments.filter((comment) => comment.status === 'open');
   if (content.status === 'done' && content.comments.length === 0) {
-    return <p className="side-empty">Inhalt und Form: keine Auffälligkeiten</p>;
+    return (
+      <p className="side-empty">
+        Inhalt und Form: keine Auffälligkeiten
+        {content.checkedAs !== null && ` · geprüft als ${content.checkedAs}`}
+      </p>
+    );
   }
   const figure =
     content.status === 'reviewing' || content.status === 'cancelled'
@@ -241,6 +247,7 @@ function ContentSection({
         <h2 id="side-content">Inhalt und Form</h2>
         <span className="side-page-figure">{figure}</span>
       </header>
+      {content.checkedAs !== null && <p className="side-empty">geprüft als {content.checkedAs}</p>}
       {content.status === 'failed' && content.message !== null && (
         <p className="side-empty">{content.message}</p>
       )}
@@ -301,7 +308,7 @@ function TextEditor({
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => area.current?.focus({ preventScroll: true }), []);
-  const text = page.text ?? '';
+  const text = strokeStruck(page.text ?? '');
   return (
     <div className="side-editor">
       <textarea
@@ -311,7 +318,7 @@ function TextEditor({
         readOnly={locked || !page.editable}
         rows={Math.min(Math.max(text.split('\n').length + 1, 6), 24)}
         spellCheck={false}
-        onChange={(event) => onEdit(event.target.value)}
+        onChange={(event) => onEdit(unstrokeStruck(event.target.value))}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
@@ -388,7 +395,13 @@ export function ArbeitSide({
             </>
           );
         } else if (!corrected && page.text !== null && page.text.trim() !== '') {
-          body = <p className="side-text">{page.text}</p>;
+          body = (
+            <p className="side-text">
+              {splitStruck(page.text).map((part, index) =>
+                part.struck ? <s key={index}>{part.text}</s> : part.text,
+              )}
+            </p>
+          );
         }
         return (
           <section key={id} className="side-page" aria-labelledby={headingId}>

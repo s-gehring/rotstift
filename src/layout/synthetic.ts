@@ -19,6 +19,7 @@ export interface PageSpec {
   readonly noise?: number;
   readonly indent?: readonly number[];
   readonly struck?: readonly (readonly number[])[];
+  readonly wavyStrikes?: boolean;
 }
 
 export interface SyntheticPage {
@@ -234,15 +235,17 @@ export function renderPage(spec: PageSpec): SyntheticPage {
     const strikeWord = () => {
       if (!struck.has(word)) return;
       const middle = baseline - xHeight * 0.45;
-      stroke(
-        ink,
-        [
-          [wordStart - advance * 0.3, middle + wobbleAt(wordStart)],
-          [x + advance * 0.3, middle + wobbleAt(x) - pitch * 0.03],
-        ],
-        penRadius * scale,
-        box,
-      );
+      const from = wordStart - advance * 0.3;
+      const to = x + advance * 0.3;
+      const steps = spec.wavyStrikes ? Math.max(2, Math.round((to - from) / 2)) : 1;
+      const points = Array.from({ length: steps + 1 }, (_, step): [number, number] => {
+        const at = from + ((to - from) * step) / steps;
+        const wave = spec.wavyStrikes
+          ? xHeight * 0.15 * Math.sin((at - from) / (advance * 0.5))
+          : 0;
+        return [at, middle + wobbleAt(at) - (pitch * 0.03 * (at - from)) / (to - from) + wave];
+      });
+      stroke(ink, points, penRadius * scale, box);
     };
     for (const [at, character] of Array.from(text).entries()) {
       if (character === ' ') {

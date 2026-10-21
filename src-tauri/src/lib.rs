@@ -37,6 +37,7 @@ pub fn run() {
             cloud::commands::cloud_use,
             cloud::commands::cloud_set_key,
             cloud::commands::cloud_clear,
+            cloud::commands::cloud_models,
             cloud::commands::cloud_check,
             cloud::commands::cloud_chat,
             cloud::commands::cloud_cancel,

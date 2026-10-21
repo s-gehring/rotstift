@@ -1,7 +1,9 @@
 import type { PDFDocument } from 'pdf-lib';
 import { CATALOG, findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import { gradeColumn, type GradeScale } from '../stats/grading.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import { formatWeighted, type WeightedStatistics } from '../stats/weighting.ts';
 import { COLORS, Sheet, type Fonts } from './sheet.ts';
 import type { ContentReport } from './types.ts';
 import { formatDate, formatDecimal } from './text.ts';
@@ -36,11 +38,13 @@ function drawFacts(sheet: Sheet, facts: readonly (readonly [string, string])[]):
   sheet.y -= 10;
 }
 
-function drawFigures(sheet: Sheet, figures: readonly (readonly [string, string])[]): void {
+type Figure = readonly [label: string, value: string, note?: string];
+
+function drawFigures(sheet: Sheet, figures: readonly Figure[]): void {
   const gap = 14;
   const boxWidth = (sheet.width - gap * (figures.length - 1)) / figures.length;
   const boxHeight = 72;
-  figures.forEach(([label, value], index) => {
+  figures.forEach(([label, value, note], index) => {
     const x = sheet.left + index * (boxWidth + gap);
     sheet.rect(x, sheet.y - boxHeight, boxWidth, boxHeight, COLORS.track);
     sheet.text(label, x + 12, sheet.y - 22, {
@@ -49,6 +53,13 @@ function drawFigures(sheet: Sheet, figures: readonly (readonly [string, string])
       maxWidth: boxWidth - 24,
     });
     sheet.text(value, x + 12, sheet.y - 54, { size: 28, bold: true, color: COLORS.ink });
+    if (note !== undefined) {
+      sheet.text(note, x + 12, sheet.y - 66, {
+        size: 8.5,
+        color: COLORS.muted,
+        maxWidth: boxWidth - 24,
+      });
+    }
   });
   sheet.y -= boxHeight + 30;
 }
@@ -83,10 +94,17 @@ function profileLabel(profile: CorrectionProfile): string {
   return profile.name === language ? profile.name : `${profile.name} (${language})`;
 }
 
+export interface Grade {
+  readonly value: string;
+  readonly scale: GradeScale;
+}
+
 export interface StatisticsPageInput {
   readonly title: string;
   readonly profile: CorrectionProfile;
   readonly statistics: Statistics;
+  readonly weighted: WeightedStatistics;
+  readonly grade: Grade | null;
   readonly date: Date;
   readonly content?: ContentReport;
 }
@@ -125,7 +143,7 @@ function drawContent(sheet: Sheet, content: ContentReport): void {
 export function drawStatisticsPage(
   doc: PDFDocument,
   fonts: Fonts,
-  { title, profile, statistics, date, content }: StatisticsPageInput,
+  { title, profile, statistics, weighted, grade, date, content }: StatisticsPageInput,
 ): void {
   const sheet = new Sheet(doc, fonts);
   drawHeading(sheet, { label: 'Auswertung', title });
@@ -135,8 +153,9 @@ export function drawStatisticsPage(
   ]);
   drawFigures(sheet, [
     ['Wörter', String(statistics.words)],
-    ['Fehler gesamt', String(statistics.errors)],
-    ['Fehler pro 100 Wörter', formatDecimal(statistics.errorsPer100Words)],
+    ['Fehler', String(statistics.errors), `${formatWeighted(weighted.weighted)} gewichtet`],
+    ['Fehlerquotient', formatDecimal(weighted.quotient)],
+    ...(grade === null ? [] : [[gradeColumn(grade.scale), grade.value] as const]),
   ]);
   sheet.text('Fehler nach Art', sheet.left, sheet.y, { size: 13, bold: true });
   sheet.y -= 12;
@@ -231,6 +250,8 @@ export interface CoverEntry {
   readonly pages: number;
   readonly words: number | undefined;
   readonly errors: number | undefined;
+  readonly weighted?: WeightedStatistics;
+  readonly grade?: string;
   readonly note?: string;
 }
 
@@ -239,22 +260,68 @@ export interface CoverPageInput {
   readonly entries: readonly CoverEntry[];
   readonly total: CoverEntry;
   readonly date: Date;
+  readonly quotients: boolean;
+  readonly scale: GradeScale | null;
 }
 
-const coverColumns = (sheet: Sheet) =>
-  [
-    ['Name', sheet.left, false],
-    ['Seiten', sheet.right - 170, true],
-    ['Wörter', sheet.right - 90, true],
-    ['Fehler', sheet.right, true],
-  ] as const;
+type CoverCell = (entry: CoverEntry) => string;
 
-function drawCoverRow(sheet: Sheet, entry: CoverEntry, bold = false): void {
+interface CoverColumn {
+  readonly label: string;
+  readonly width: number;
+  readonly cell: CoverCell;
+}
+
+const quotientCell: CoverCell = (entry) =>
+  entry.weighted === undefined ? DASH : formatDecimal(entry.weighted.quotient);
+
+function coverColumns(quotients: boolean, scale: GradeScale | null): readonly CoverColumn[] {
+  return [
+    { label: 'Seiten', width: 60, cell: (entry) => String(entry.pages) },
+    { label: 'Wörter', width: 70, cell: (entry) => figure(entry.words) },
+    { label: 'Fehler', width: 60, cell: (entry) => figure(entry.errors) },
+    ...(quotients ? [{ label: 'Fehlerquotient', width: 90, cell: quotientCell }] : []),
+    ...(scale === null
+      ? []
+      : [{ label: gradeColumn(scale), width: 55, cell: (entry: CoverEntry) => entry.grade ?? '' }]),
+  ];
+}
+
+function columnRights(sheet: Sheet, columns: readonly CoverColumn[]): number[] {
+  const rights: number[] = [];
+  let right = sheet.right;
+  for (let index = columns.length - 1; index >= 0; index -= 1) {
+    rights[index] = right;
+    right -= columns[index]?.width ?? 0;
+  }
+  return rights;
+}
+
+function coverHead(sheet: Sheet, columns: readonly CoverColumn[]) {
+  const rights = columnRights(sheet, columns);
+  return [
+    ['Name', sheet.left, false] as const,
+    ...columns.map((column, index) => [column.label, rights[index] ?? sheet.right, true] as const),
+  ];
+}
+
+function drawCoverRow(
+  sheet: Sheet,
+  columns: readonly CoverColumn[],
+  entry: CoverEntry,
+  bold = false,
+): void {
   sheet.ensure(entry.note === undefined ? ROW : ROW + 12);
-  sheet.text(entry.name, sheet.left, sheet.y, { size: 11, bold, maxWidth: sheet.width - 200 });
-  sheet.text(String(entry.pages), sheet.right - 170, sheet.y, { size: 11, bold, align: 'right' });
-  sheet.text(figure(entry.words), sheet.right - 90, sheet.y, { size: 11, bold, align: 'right' });
-  sheet.text(figure(entry.errors), sheet.right, sheet.y, { size: 11, bold: true, align: 'right' });
+  const rights = columnRights(sheet, columns);
+  const nameWidth = (rights[0] ?? sheet.right) - (columns[0]?.width ?? 0) - sheet.left;
+  sheet.text(entry.name, sheet.left, sheet.y, { size: 11, bold, maxWidth: nameWidth });
+  columns.forEach((column, index) => {
+    sheet.text(column.cell(entry), rights[index] ?? sheet.right, sheet.y, {
+      size: 11,
+      bold: bold || index >= 2,
+      align: 'right',
+    });
+  });
   sheet.y -= ROW;
   if (entry.note !== undefined) {
     sheet.text(entry.note, sheet.left, sheet.y + 8, { size: 9, color: COLORS.muted });
@@ -265,17 +332,18 @@ function drawCoverRow(sheet: Sheet, entry: CoverEntry, bold = false): void {
 export function drawCoverPage(
   doc: PDFDocument,
   fonts: Fonts,
-  { title, entries, total, date }: CoverPageInput,
+  { title, entries, total, date, quotients, scale }: CoverPageInput,
 ): void {
-  const sheet = new Sheet(doc, fonts, (next) => drawTableHead(next, coverColumns(next)));
+  const columns = coverColumns(quotients, scale);
+  const sheet = new Sheet(doc, fonts, (next) => drawTableHead(next, coverHead(next, columns)));
   drawHeading(sheet, { label: 'Klassenübersicht', title });
   drawFacts(sheet, [
     ['Datum', formatDate(date)],
     ['Arbeiten', String(entries.length)],
   ]);
-  drawTableHead(sheet, coverColumns(sheet));
-  for (const entry of entries) drawCoverRow(sheet, entry);
+  drawTableHead(sheet, coverHead(sheet, columns));
+  for (const entry of entries) drawCoverRow(sheet, columns, entry);
   sheet.rule(sheet.y + ROW - 8, COLORS.text, 1);
-  drawCoverRow(sheet, total, true);
+  drawCoverRow(sheet, columns, total, true);
   drawFooter(sheet);
 }

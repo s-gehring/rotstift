@@ -62,7 +62,7 @@ export function parseReview(output: string, lineCount: number): Review {
   return { comments, summary: summaries[0] ?? '', issues };
 }
 
-const LINE_TOLERANCE = 2;
+export const LINE_TOLERANCE = 2;
 
 function mentions(text: string, keyword: string): boolean {
   const lower = text.toLowerCase();
@@ -81,6 +81,7 @@ export interface DefectScore {
   readonly byComment: boolean;
   readonly bySummary: boolean;
   readonly kindAgrees: boolean;
+  readonly distance: number | null;
 }
 
 export interface ReviewScore {
@@ -92,8 +93,16 @@ export interface ReviewScore {
 export function scoreReview(sample: ReviewSample, review: Review): ReviewScore {
   const defects = sample.defects.map((defect) => {
     const hits = review.comments.filter((comment) => matches(defect, comment.text, comment.line));
+    const anchor = defect.line;
+    const distances =
+      anchor === null
+        ? []
+        : review.comments
+            .filter((comment) => matches(defect, comment.text))
+            .map((comment) => Math.abs(comment.line - anchor));
     return {
       label: defect.label,
+      distance: distances.length === 0 ? null : Math.min(...distances),
       byComment: hits.length > 0,
       bySummary: matches(defect, review.summary),
       kindAgrees: hits.some((comment) => comment.kind === defect.kind),

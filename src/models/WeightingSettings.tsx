@@ -4,6 +4,7 @@ import type { CorrectionProfile } from '../annotations/profile.ts';
 import { useApp } from '../app/app-context.tsx';
 import { formatWeighted, WEIGHT_STEPS, weightOf } from '../stats/weighting.ts';
 import { Button } from '../ui/Button.tsx';
+import { GradingSettings } from './GradingSettings.tsx';
 
 export function WeightingSettings() {
   const { subject, weighting } = useApp();
@@ -15,7 +16,7 @@ export function WeightingSettings() {
   );
   return (
     <details className="weighting">
-      <summary>Fehlergewichtung</summary>
+      <summary>Gewichtung und Noten</summary>
       <div className="weighting-body">
         <label className="weighting-subject">
           <span className="visually-hidden">Fach</span>
@@ -78,6 +79,7 @@ export function WeightingSettings() {
             Zurücksetzen
           </Button>
         </div>
+        <GradingSettings key={profile.id} profile={profile} />
       </div>
     </details>
   );

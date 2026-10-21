@@ -9,6 +9,14 @@ pub enum KeyNeed {
     Optional,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Api {
+    #[default]
+    Openai,
+    Anthropic,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TokenField {
@@ -33,6 +41,8 @@ pub struct Template {
     pub base_url: Option<String>,
     pub key: KeyNeed,
     pub token_field: TokenField,
+    #[serde(default)]
+    pub api: Api,
 }
 
 #[derive(Deserialize)]
@@ -57,7 +67,7 @@ mod tests {
 
     #[test]
     fn every_template_parses_and_fixed_urls_use_https() {
-        assert_eq!(TEMPLATES.len(), 7);
+        assert_eq!(TEMPLATES.len(), 8);
         for template in TEMPLATES.iter() {
             if let Some(url) = &template.base_url {
                 assert!(url.starts_with("https://"), "{}", template.id);
@@ -65,6 +75,7 @@ mod tests {
             }
         }
         assert!(find("server").unwrap().base_url.is_none());
-        assert!(find("anthropic").is_none());
+        assert_eq!(find("anthropic").unwrap().api, Api::Anthropic);
+        assert_eq!(find("mistral").unwrap().api, Api::Openai);
     }
 }

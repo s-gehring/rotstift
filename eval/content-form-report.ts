@@ -1,4 +1,10 @@
-import { MISSING_KIND, parseReview, scoreReview, wordCount } from './content-form-review.ts';
+import {
+  LINE_TOLERANCE,
+  MISSING_KIND,
+  parseReview,
+  scoreReview,
+  wordCount,
+} from './content-form-review.ts';
 import type { ReviewComment } from './content-form-review.ts';
 import { withTask } from './content-form-sample.ts';
 import type { ReviewSample, TaskMode } from './content-form-sample.ts';
@@ -9,6 +15,7 @@ export interface ReviewDoc {
   readonly rawOutput?: string;
   readonly checklist?: string;
   readonly answers?: readonly unknown[];
+  readonly checkedAs?: string;
   readonly checks?: readonly { readonly comment: string; readonly keep: boolean }[];
   readonly seconds: number;
   readonly promptTokens: number;
@@ -39,6 +46,9 @@ export interface RunFigures {
   readonly byComment: number;
   readonly withSummary: number;
   readonly kindAgrees: number;
+  readonly located: number;
+  readonly exactLine: number;
+  readonly nearLine: number;
   readonly unmatchedFlawed: number;
   readonly flawedDocs: number;
   readonly unmatchedClean: number;
@@ -59,6 +69,9 @@ export function figures(samples: readonly ReviewSample[], docs: readonly ReviewD
     byComment: 0,
     withSummary: 0,
     kindAgrees: 0,
+    located: 0,
+    exactLine: 0,
+    nearLine: 0,
     unmatchedFlawed: 0,
     flawedDocs: 0,
     unmatchedClean: 0,
@@ -91,6 +104,12 @@ export function figures(samples: readonly ReviewSample[], docs: readonly ReviewD
     totals.byComment += score.defects.filter((defect) => defect.byComment).length;
     totals.withSummary += score.defects.filter((d) => d.byComment || d.bySummary).length;
     totals.kindAgrees += score.defects.filter((defect) => defect.kindAgrees).length;
+    const located = score.defects.flatMap((defect) =>
+      defect.distance === null ? [] : [defect.distance],
+    );
+    totals.located += located.length;
+    totals.exactLine += located.filter((distance) => distance === 0).length;
+    totals.nearLine += located.filter((distance) => distance <= LINE_TOLERANCE).length;
     if (sample.defects.length === 0) {
       totals.cleanDocs += 1;
       totals.unmatchedClean += score.unmatched.length;
@@ -115,6 +134,7 @@ export function summaryTable(
         `${percent(f.byComment, f.defects)} (${f.byComment}/${f.defects})`,
         percent(f.withSummary, f.defects),
         percent(f.kindAgrees, f.byComment),
+        `${f.exactLine} / ${f.nearLine} von ${f.located}`,
         decimal(f.unmatchedFlawed / Math.max(1, f.flawedDocs)),
         `${decimal(f.unmatchedClean / Math.max(1, f.cleanDocs))} (max ${f.cleanMax})`,
         `${percent(f.valid, f.docs)} / ${percent(f.validWithoutKind, f.docs)}`,
@@ -129,6 +149,7 @@ export function summaryTable(
     'Treffer Rand',
     'Treffer mit Schluss',
     'Art richtig',
+    'Zeile genau / ±2',
     'Unbelegt je Arbeit mit Mängeln',
     'Kommentare je saubere Arbeit',
     'Format gültig (streng / kind optional)',
@@ -180,7 +201,7 @@ export function listing(samples: readonly ReviewSample[], docs: readonly ReviewD
       const review = parseReview(doc.output, sample.lines.length);
       const score = scoreReview(sample, review);
       return [
-        `## ${doc.id} (${decimal(doc.seconds)} s)`,
+        `## ${doc.id} (${decimal(doc.seconds)} s)${doc.checkedAs === undefined ? '' : `, ${sample.form} geprüft als ${doc.checkedAs}`}`,
         ...score.defects.map(
           (d) => `  [${d.byComment ? 'R' : ' '}${d.bySummary ? 'S' : ' '}] ${d.label}`,
         ),

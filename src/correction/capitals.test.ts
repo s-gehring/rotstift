@@ -55,6 +55,71 @@ describe('keepCapitals', () => {
     expect(keep(text, corrected)).toBe(corrected);
   });
 
+  it('keeps a lowered adjective of a fixed name', () => {
+    expect(
+      keep('Im Sommer waren wir am Schwarzen Meer.', 'Im Sommer waren wir am schwarzen Meer.'),
+    ).toBe('Im Sommer waren wir am Schwarzen Meer.');
+  });
+
+  it('keeps every lowered adjective of a fixed name with several adjectives', () => {
+    expect(
+      keep(
+        'Viele Länder gehörten zum Heiligen Römischen Reich.',
+        'Viele Länder gehörten zum heiligen römischen Reich.',
+      ),
+    ).toBe('Viele Länder gehörten zum Heiligen Römischen Reich.');
+  });
+
+  it('keeps fixed names in every inflection', () => {
+    const text = 'Mein Opa erzählt vom Zweiten Weltkrieg und vom Kalten Krieg.';
+    const corrected = 'Mein Opa erzählt vom zweiten Weltkrieg und vom kalten Krieg.';
+    expect(keep(text, corrected)).toBe(text);
+  });
+
+  it('lowers capitalised adjectives before ordinary nouns', () => {
+    expect(keep('Wir sahen ein Rotes Auto.', 'Wir sahen ein rotes Auto.')).toBe(
+      'Wir sahen ein rotes Auto.',
+    );
+  });
+
+  it('lowers a listed adjective when the noun is not capitalised', () => {
+    expect(keep('Er malte ein Rotes kreuz.', 'Er malte ein rotes Kreuz.')).toBe(
+      'Er malte ein rotes Kreuz.',
+    );
+  });
+
+  it('keeps lowered adjectives before capitalised nouns out of the collapse share', () => {
+    const corrected = 'Wir hatten einen schönen Ausflug, sahen kleine Affen und waren müde.';
+    expect(
+      keep('Wir hatten einen Schönen Ausflug, sahen Kleine Affen und waren Müde.', corrected),
+    ).toBe(corrected);
+  });
+
+  it('capitalises a lowercase proper name after a definite article', () => {
+    expect(
+      keep(
+        'Wir waren am schwarzen Meer und im heiligen römischen Reich.',
+        'Wir waren am schwarzen Meer und im heiligen römischen Reich.',
+      ),
+    ).toBe('Wir waren am Schwarzen Meer und im Heiligen Römischen Reich.');
+  });
+
+  it('leaves lowercase phrases that are also ordinary German', () => {
+    const text = 'Der große Wagen meines Vaters steht am runden Tisch vor dem weißen Haus.';
+    expect(keep(text, text)).toBe(text);
+  });
+
+  it('capitalises proper names only after a definite article', () => {
+    const text = 'Sie malte ein rotes Kreuz auf ein schwarzes Meer aus Papier.';
+    expect(keep(text, text)).toBe(text);
+  });
+
+  it('protects fixed names only in German', () => {
+    expect(keep('Il a vu la Mer Noire.', 'Il a vu la mer Noire.', 'fr')).toBe(
+      'Il a vu la mer Noire.',
+    );
+  });
+
   it('applies the share rule only to German', () => {
     const text = 'Le Lundi et le Mardi, Marie parle Anglais.';
     const corrected = 'Le lundi et le mardi, Marie parle anglais.';
@@ -67,6 +132,21 @@ describe('deriveMarks with lowered capitals', () => {
     const lines = ['Die Fähre fährt zur Insel. Die Überfahrt dauert eine Stunde.'];
     const corrected = 'die fähre fährt zur insel. die überfahrt dauert eine stunde.';
     expect(deriveMarks(lines, corrected, { profile: DEUTSCH })[0]?.marks).toEqual([]);
+  });
+
+  it('marks no lowered adjective of a fixed name', () => {
+    const lines = ['Meine Mutter arbeitet beim Roten Kreuz und liebt das Rote Auto.'];
+    const corrected = 'Meine Mutter arbeitet beim roten Kreuz und liebt das rote Auto.';
+    const marks = deriveMarks(lines, corrected, { profile: DEUTSCH })[0]?.marks;
+    expect(marks?.map((mark) => [mark.original, mark.correction])).toEqual([['Rote', 'rote']]);
+  });
+
+  it('marks a lowercase proper name', () => {
+    const lines = ['Meine Tante arbeitet beim roten Kreuz.'];
+    const marks = deriveMarks(lines, lines[0] ?? '', { profile: DEUTSCH })[0]?.marks;
+    expect(marks?.map((mark) => [mark.original, mark.correction, mark.type])).toEqual([
+      ['roten', 'Roten', 'R'],
+    ]);
   });
 
   it('still marks lowered French nationality words', () => {

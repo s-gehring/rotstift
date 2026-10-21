@@ -22,6 +22,8 @@ import { layoutOverlay } from '../overlay/layout.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createLlmTranscriber } from '../pipeline/llm-transcriber.ts';
 import { createRunner } from '../pipeline/runner.ts';
+import { defaultGrading } from '../stats/grading.ts';
+import { defaultWeighting } from '../stats/weighting.ts';
 import { buildArbeitModel } from './arbeit-model.ts';
 import { createReviewExport } from './export-input.ts';
 import { createReviewFlow, reviewWorks, type ContentReviewLog } from './review-flow.ts';
@@ -189,7 +191,10 @@ describe.skipIf(!available)('Inhalt und Form end to end with the real sidecar', 
       writeFileSync(join(OUT, 'brief.png'), new Uint8Array(await png.arrayBuffer()));
 
       const exporter = createReviewExport();
-      const input = exporter.correctedArbeit(arbeit, state, entries, DEUTSCH);
+      const input = exporter.correctedArbeit(arbeit, state, entries, DEUTSCH, {
+        weighting: defaultWeighting(DEUTSCH),
+        grading: defaultGrading(),
+      });
       if (input === null) throw new Error('the Arbeit is not exportable');
       const pdf = await buildCorrectedPdf(input, { encodePage: exporter.encodePage });
       writeFileSync(join(OUT, 'brief.pdf'), pdf);

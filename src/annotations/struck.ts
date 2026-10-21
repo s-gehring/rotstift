@@ -15,6 +15,33 @@ export interface VisibleLine {
 
 const MARKED = /~~([^\s~](?:[^~\n]*[^\s~])?)~~/gu;
 const WORD = /\S+/gu;
+const STROKE = '\u0336';
+const STROKED = /(?:[^\u0336\n]\u0336)+/gu;
+const PADDED = /^(\s*)(.*?)(\s*)$/su;
+
+export function strokeStruck(text: string): string {
+  return text.replace(MARKED, (_match, inner: string) => inner.replace(/./gu, `$&${STROKE}`));
+}
+
+export function unstrokeStruck(text: string): string {
+  return text.replace(STROKED, (run) => {
+    const plain = run.replaceAll(STROKE, '');
+    const [, before = '', inner = '', after = ''] = PADDED.exec(plain) ?? [];
+    return inner === '' ? plain : `${before}~~${inner}~~${after}`;
+  });
+}
+
+export function splitStruck(text: string): { readonly text: string; readonly struck: boolean }[] {
+  const parts: { text: string; struck: boolean }[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(MARKED)) {
+    if (match.index > cursor) parts.push({ text: text.slice(cursor, match.index), struck: false });
+    parts.push({ text: match[1] ?? '', struck: true });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < text.length) parts.push({ text: text.slice(cursor), struck: false });
+  return parts;
+}
 
 export function readStruck(line: string): StruckLine {
   let text = '';

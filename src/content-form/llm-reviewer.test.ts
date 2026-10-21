@@ -24,7 +24,7 @@ const input: ContentInput = {
   },
 };
 
-const unmet = JSON.stringify({ erfuellt: false, zeile: 2, kommentar: 'Thema verfehlt' });
+const unmet = JSON.stringify({ erfuellt: false, zitat: 'Tschüss', kommentar: 'Thema verfehlt' });
 
 function clientReturning(text: string, finishReason: string | null = 'stop') {
   const complete = vi.fn<Complete>(() => Promise.resolve({ text, finishReason }));

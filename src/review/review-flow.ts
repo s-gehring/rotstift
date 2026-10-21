@@ -82,6 +82,7 @@ export interface WorkReview {
   readonly sources: readonly (string | null)[];
   readonly comments: readonly WorkComment[];
   readonly message: string | null;
+  readonly checkedAs?: string;
 }
 
 export interface ReviewWork {
@@ -610,6 +611,7 @@ export function createReviewFlow(deps: ReviewDeps) {
         sources,
         comments: keepDismissed(result.comments, previous),
         message: null,
+        ...(result.checkedAs !== undefined && { checkedAs: result.checkedAs }),
       });
     } else if (result.error.kind === 'cancelled') {
       patchWork(work.id, { status: 'cancelled', key, sources, comments: [], message: null });

@@ -3,6 +3,7 @@ import { DEUTSCH } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import type { ArbeitReview } from '../review/summary.ts';
 import type { Statistics } from '../stats/statistics.ts';
+import { defaultGrading } from '../stats/grading.ts';
 import { defaultWeighting } from '../stats/weighting.ts';
 import {
   csvFileName,
@@ -178,6 +179,32 @@ describe('corrected table', () => {
     expect(csv).toContain(
       'Gesamt;3;100;;;;;;Unvollständig: 1 von 2 Arbeiten vollständig korrigiert',
     );
+  });
+
+  it('adds the grade of each complete Arbeit when limits are set', () => {
+    const graded: CorrectionColumns = {
+      ...corrections,
+      grading: {
+        ...defaultGrading(),
+        enabled: true,
+        scale: 'points',
+        limits: {
+          ...defaultGrading().limits,
+          points: [2.9, 3, ...Array.from({ length: 13 }, () => null)],
+        },
+      },
+    };
+    expect(formatCsv(klasse100, graded)).toBe(
+      '\uFEFFName;Seiten;Wörter;Fehler;Fehler je 100 Wörter;Gewichtete Fehler;Fehlerquotient;Punkte;R;Z;Gr;Hinweis\r\n' +
+        'Anna;2;70;3;4,3;2;2,9;15;2;0;1;\r\n' +
+        'Ben;1;30;1;3,3;1;3,3;0;0;1;0;\r\n' +
+        'Gesamt;3;100;4;4,0;3;3,0;;2;1;1;\r\n',
+    );
+  });
+
+  it('has no grade column while grading is off', () => {
+    const off: CorrectionColumns = { ...corrections, grading: defaultGrading() };
+    expect(formatCsv(klasse100, off)).toBe(formatCsv(klasse100, corrections));
   });
 
   it('protects error type codes in the header against formulas', () => {
