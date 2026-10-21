@@ -167,3 +167,23 @@ describe('correctPage', () => {
     expect(reparsed).toEqual({ ok: true, transcript: result.transcript });
   });
 });
+
+describe('correctPage without spelling and grammar', () => {
+  it('does not call the corrector and leaves the transcript without marks', async () => {
+    const corrector = createFakeCorrector('Anderer Text');
+    const result = await correctPage({
+      lines: ['Das ist ein Text', 'Und noch einer'],
+      profile: DEUTSCH,
+      scope: { ...DEFAULT_SCOPE, spelling: false, grammar: false, content: true, assignment: 'A' },
+      corrector,
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.error));
+    expect(corrector.calls).toHaveLength(0);
+    expect(result.transcript.lines.map((line) => line.text)).toEqual([
+      'Das ist ein Text',
+      'Und noch einer',
+    ]);
+    expect(result.transcript.lines.every((line) => line.marks.length === 0)).toBe(true);
+    expect(result.statistics.errors).toBe(0);
+  });
+});

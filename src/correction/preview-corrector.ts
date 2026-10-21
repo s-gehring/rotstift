@@ -1,3 +1,9 @@
+import {
+  contentQuestions,
+  type ContentComment,
+  type ContentInput,
+  type ContentResult,
+} from '../content-form/review.ts';
 import type { CorrectResult, Corrector } from './corrector.ts';
 import { createFakeCorrector } from './fake-corrector.ts';
 
@@ -25,6 +31,24 @@ export function previewCorrection(lines: readonly string[]): string {
     .join('\n');
 }
 
+export function previewReview(input: ContentInput): ContentResult {
+  const questions = contentQuestions(input.scope);
+  const written = input.lines.filter((line) => line.text.trim() !== '');
+  const first = written[0];
+  const middle = written[Math.floor(written.length / 2)];
+  const form = questions.find((question) => question.kind === 'form');
+  const content = questions.find((question) => question.kind === 'content');
+  const comments: ContentComment[] = [
+    ...(form !== undefined && first !== undefined
+      ? [{ ...first, kind: 'form' as const, text: form.comment ?? 'Textform nicht eingehalten' }]
+      : []),
+    ...(content !== undefined && middle !== undefined && middle !== first
+      ? [{ ...middle, kind: 'content' as const, text: 'Vorgabe der Aufgabe fehlt' }]
+      : []),
+  ].map(({ pageId, line, kind, text }) => ({ pageId, line, kind, text }));
+  return { ok: true, comments, questions: questions.length };
+}
+
 function wait(ms: number, signal: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {
     if (signal.aborted) {
@@ -50,6 +74,10 @@ export function createPreviewCorrector(options: PreviewOptions = {}): Corrector 
     async correct(lines, profile, signal, scope): Promise<CorrectResult> {
       if (!(await wait(delayMs, signal))) return { ok: false, error: { kind: 'cancelled' } };
       return fake.correct(lines, profile, signal, scope);
+    },
+    async review(input, signal): Promise<ContentResult> {
+      if (!(await wait(delayMs, signal))) return { ok: false, error: { kind: 'cancelled' } };
+      return previewReview(input);
     },
   };
 }

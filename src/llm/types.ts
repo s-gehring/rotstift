@@ -41,6 +41,12 @@ export interface ChatRequest {
   seed?: number;
   stop?: string[];
   logprobs?: boolean;
+  response_format?: ResponseFormat;
+}
+
+export interface ResponseFormat {
+  type: 'json_schema';
+  json_schema: { name: string; schema: Readonly<Record<string, unknown>> };
 }
 
 export interface TokenLogprob {

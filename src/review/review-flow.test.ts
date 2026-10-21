@@ -1,8 +1,19 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
-import { CORRECTOR_MISSING, IMAGE_FAILED, LAYOUT_FAILED, NOT_RERECOGNIZED } from './review-flow.ts';
-import { DEFAULT_SCOPE } from '../correction/scope.ts';
+import {
+  CORRECTOR_MISSING,
+  IMAGE_FAILED,
+  LAYOUT_FAILED,
+  NOT_RERECOGNIZED,
+  type ContentReviewLog,
+  type ReviewFlow,
+  type ReviewWork,
+} from './review-flow.ts';
+import type { ContentComment, ContentResult } from '../content-form/review.ts';
+import type { Corrector } from '../correction/corrector.ts';
+import { createFakeCorrector } from '../correction/fake-corrector.ts';
+import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import { requestedTypes } from './summary.ts';
 import { deferred, readingOf, setupReview, tick, waitFor } from './test-support.ts';
 
@@ -484,5 +495,571 @@ describe('createReviewFlow', () => {
     gate.resolve();
     await running;
     expect(flow.getState()).toMatchObject({ stopping: false, run: null, outcome: 'cancelled' });
+  });
+});
+
+const ASSIGNMENT = 'Schreibe über deinen Tag im Schwimmbad.';
+const CONTENT: CorrectionScope = { ...DEFAULT_SCOPE, content: true, assignment: ASSIGNMENT };
+const MISSING_TASK: ContentComment = {
+  pageId: 'a',
+  line: 2,
+  kind: 'content',
+  text: 'Aufgabe nicht erfüllt',
+};
+const FORM_NAME: ContentComment = { pageId: 'b', line: 1, kind: 'form', text: 'Anrede fehlt' };
+
+function contentSetup(
+  ids: readonly string[] = ['a', 'b'],
+  extra: Parameters<typeof setupReview>[1] = {},
+) {
+  const setup = setupReview(ids, extra);
+  const answer: { current: ContentResult } = {
+    current: { ok: true, comments: [MISSING_TASK], questions: 2 },
+  };
+  const fake = createFakeCorrector(
+    (lines) => lines.join('\n'),
+    () => answer.current,
+  );
+  setup.flow.setCorrector(fake);
+  const works: ReviewWork[] = [{ id: 'w', pageIds: [...ids] }];
+  return { ...setup, answer, fake, works };
+}
+
+function watchRuns(flow: ReviewFlow) {
+  const phases: string[] = [];
+  const stages: string[] = [];
+  flow.subscribe(() => {
+    const run = flow.getState().run;
+    if (run === null) return;
+    if (phases.at(-1) !== run.phase) phases.push(run.phase);
+    const key = JSON.stringify(run.stages);
+    if (stages.at(-1) !== key) stages.push(key);
+  });
+  return { phases, stages };
+}
+
+describe('content review', () => {
+  it('reviews each work after all pages are corrected and stores the comments as open', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const watched = watchRuns(flow);
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(watched.phases).toEqual(['transcribing', 'locating', 'correcting', 'reviewing']);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.reviews).toHaveLength(1);
+    expect(fake.reviews[0]?.scope).toEqual(CONTENT);
+    expect(fake.reviews[0]?.profile.id).toBe('deutsch');
+    expect(fake.reviews[0]?.lines).toEqual([
+      { pageId: 'a', line: 1, text: 'Ich war im Schwimbad.' },
+      { pageId: 'a', line: 2, text: 'Es war schön.' },
+      { pageId: 'b', line: 1, text: 'Wir gingen heim.' },
+    ]);
+    expect(flow.getState().works.w).toEqual({
+      status: 'done',
+      key: expect.any(String),
+      sources: ['Ich war im Schwimbad.\nEs war schön.', 'Wir gingen heim.'],
+      comments: [{ ...MISSING_TASK, status: 'open' }],
+      message: null,
+    });
+    expect(flow.getState()).toMatchObject({ run: null, outcome: 'finished' });
+  });
+
+  it('weights the review stage only when something is to be reviewed', async () => {
+    const { pages, flow, works } = contentSetup();
+    const watched = watchRuns(flow);
+    await flow.start(pages, DEUTSCH, DEFAULT_SCOPE, works);
+    expect(watched.stages).toEqual([JSON.stringify({ pages: true, review: false })]);
+    expect(flow.getState().works).toEqual({});
+  });
+
+  it('does not review again when nothing it depends on changed', async () => {
+    const { pages, h, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    h.log.length = 0;
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(fake.reviews).toHaveLength(1);
+    expect(h.log).toEqual([]);
+    expect(flow.getState().outcome).toBe('finished');
+  });
+
+  it('does not review again when the assignment only differs in surrounding whitespace', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    await flow.start(pages, DEUTSCH, { ...CONTENT, assignment: `  ${ASSIGNMENT}\n\n` }, works);
+    expect(fake.reviews).toHaveLength(1);
+  });
+
+  it.each([
+    ['the assignment changes', { ...CONTENT, assignment: 'Beschreibe einen Ausflug.' }],
+    ['a form is added', { ...CONTENT, form: true, formName: 'Persönlicher Brief' }],
+  ])('reviews again when %s', async (_name, scope) => {
+    const { pages, h, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    const before = flow.getState().works.w?.key;
+    h.log.length = 0;
+    await flow.start(pages, DEUTSCH, scope, works);
+
+    expect(fake.reviews).toHaveLength(2);
+    expect(fake.reviews[1]?.scope).toEqual(scope);
+    expect(flow.getState().works.w?.key).not.toBe(before);
+    expect(h.log).toEqual([]);
+  });
+
+  it('reviews again when the form name changes but ignores the form name while form is off', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const form = { ...CONTENT, form: true, formName: 'Persönlicher Brief' };
+    await flow.start(pages, DEUTSCH, form, works);
+    await flow.start(pages, DEUTSCH, { ...form, formName: 'Bericht' }, works);
+    expect(fake.reviews).toHaveLength(2);
+    await flow.start(pages, DEUTSCH, { ...CONTENT, formName: 'Gedicht' }, works);
+    expect(fake.reviews).toHaveLength(3);
+    await flow.start(pages, DEUTSCH, { ...CONTENT, formName: 'Märchen' }, works);
+    expect(fake.reviews).toHaveLength(3);
+  });
+
+  it('reviews again after the profile changed and rebuilds the work from scratch', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    await flow.start(pages, ENGLISCH, CONTENT, works);
+
+    expect(fake.reviews.map((input) => input.profile.id)).toEqual(['deutsch', 'englisch']);
+    expect(flow.getState().works.w?.status).toBe('done');
+  });
+
+  it('runs only the review phase when every page is already corrected', async () => {
+    const { pages, h, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, DEFAULT_SCOPE, works);
+    h.log.length = 0;
+    const watched = watchRuns(flow);
+
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(h.log).toEqual([]);
+    expect(watched.phases).toEqual(['reviewing']);
+    expect(watched.stages).toEqual([JSON.stringify({ pages: false, review: true })]);
+    expect(fake.calls).toHaveLength(2);
+    expect(fake.reviews).toHaveLength(1);
+    expect(flow.getState().works.w?.status).toBe('done');
+    expect(flow.getState().outcome).toBe('finished');
+  });
+
+  it('reviews again when a corrected page was edited and corrects only that page', async () => {
+    const { pages, h, runner, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    runner.edit('b', 'Wir gingen nach Hause.');
+    h.log.length = 0;
+
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(h.log).toEqual(['L:b']);
+    expect(fake.reviews).toHaveLength(2);
+    expect(fake.reviews[1]?.lines.at(-1)?.text).toBe('Wir gingen nach Hause.');
+    expect(flow.getState().works.w?.sources).toEqual([
+      'Ich war im Schwimbad.\nEs war schön.',
+      'Wir gingen nach Hause.',
+    ]);
+  });
+
+  it('reviews the work again after a retried page was recognised with a new text', async () => {
+    const { pages, h, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    h.transcripts.b = { ok: true, lines: ['Wir gingen nach Hause.'] };
+    const [, second] = pages;
+    if (second === undefined) throw new Error('missing page');
+
+    await flow.retry(second, { recognize: true });
+
+    expect(fake.reviews).toHaveLength(2);
+    expect(fake.reviews[1]?.lines.at(-1)?.text).toBe('Wir gingen nach Hause.');
+  });
+
+  it('does not review a retried page again when its text stayed the same', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    const [first] = pages;
+    if (first === undefined) throw new Error('missing page');
+    await flow.retry(first);
+    expect(fake.reviews).toHaveLength(1);
+  });
+
+  it('skips a work that contains an unreadable or failed page', async () => {
+    const { pages, h, fake, flow, works } = contentSetup(['a', 'b', 'c']);
+    h.transcripts.b = { ok: false, error: { kind: 'failed', message: 'Bild leer' } };
+    flow.setCorrector({
+      correct: (lines, profile, signal, scope) =>
+        lines[0] === 'Der Tag war lang.'
+          ? Promise.resolve({ ok: false, error: { kind: 'failed', message: 'Zeitüberschreitung' } })
+          : fake.correct(lines, profile, signal, scope),
+      review: (input, signal) => fake.review?.(input, signal) ?? Promise.reject(new Error('none')),
+    });
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(flow.getState().pages.b?.status).toBe('unreadable');
+    expect(flow.getState().pages.c?.status).toBe('failed');
+    expect(fake.reviews).toHaveLength(0);
+    expect(flow.getState().works).toEqual({});
+    expect(flow.getState()).toMatchObject({ run: null, outcome: 'finished' });
+  });
+
+  it('reviews a work again once the failed page is retried', async () => {
+    const { pages, h, fake, flow, works } = contentSetup();
+    h.transcripts.b = { ok: false, error: { kind: 'failed', message: 'Bild leer' } };
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    expect(fake.reviews).toHaveLength(0);
+
+    h.transcripts.b = { ok: true, lines: ['Wir gingen heim.'] };
+    const [, second] = pages;
+    if (second === undefined) throw new Error('missing page');
+    await flow.retry(second);
+
+    expect(fake.reviews).toHaveLength(1);
+    expect(flow.getState().works.w?.status).toBe('done');
+  });
+
+  it('reviews only the readable works and keeps blank pages as empty lines', async () => {
+    const { pages, h, fake, flow } = contentSetup(['a', 'b', 'c']);
+    h.transcripts.b = { ok: true, lines: ['', '  '] };
+    h.transcripts.c = { ok: false, error: { kind: 'failed', message: 'Bild leer' } };
+    const works: ReviewWork[] = [
+      { id: 'first', pageIds: ['a', 'b'] },
+      { id: 'second', pageIds: ['c'] },
+    ];
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(flow.getState().pages.b?.status).toBe('empty');
+    expect(fake.reviews).toHaveLength(1);
+    expect(fake.reviews[0]?.lines).toEqual([
+      { pageId: 'a', line: 1, text: 'Ich war im Schwimbad.' },
+      { pageId: 'a', line: 2, text: 'Es war schön.' },
+      { pageId: 'b', line: 1, text: '' },
+      { pageId: 'b', line: 2, text: '' },
+    ]);
+    expect(Object.keys(flow.getState().works)).toEqual(['first']);
+  });
+
+  it('reviews every work in order and counts them in the run', async () => {
+    const { pages, fake, flow } = contentSetup(['a', 'b', 'c']);
+    const works: ReviewWork[] = [
+      { id: 'w1', pageIds: ['a'] },
+      { id: 'w2', pageIds: ['b', 'c'] },
+    ];
+    const seen: string[] = [];
+    flow.subscribe(() => {
+      const run = flow.getState().run;
+      if (run?.phase !== 'reviewing') return;
+      const entry = `${run.finished}/${run.total}`;
+      if (seen.at(-1) !== entry) seen.push(entry);
+    });
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(seen).toEqual(['0/2', '1/2', '2/2']);
+    expect(fake.reviews.map((input) => input.lines.map((line) => line.pageId))).toEqual([
+      ['a', 'a'],
+      ['b', 'c'],
+    ]);
+    expect(Object.keys(flow.getState().works)).toEqual(['w1', 'w2']);
+  });
+
+  it.each([
+    ['without an assignment', { ...DEFAULT_SCOPE, content: true }],
+    ['with a blank assignment', { ...DEFAULT_SCOPE, content: true, assignment: ' \n\t ' }],
+    ['without a form name', { ...DEFAULT_SCOPE, form: true }],
+  ])('does not review %s', async (_name, scope) => {
+    const { pages, fake, flow, works } = contentSetup();
+    const watched = watchRuns(flow);
+    await flow.start(pages, DEUTSCH, scope, works);
+
+    expect(fake.reviews).toHaveLength(0);
+    expect(watched.phases).not.toContain('reviewing');
+    expect(flow.getState().works).toEqual({});
+  });
+
+  it('reviews the form alone when only a form name is given', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const scope = { ...DEFAULT_SCOPE, form: true, formName: 'Persönlicher Brief' };
+    await flow.start(pages, DEUTSCH, scope, works);
+    expect(fake.reviews).toHaveLength(1);
+    expect(flow.getState().works.w?.status).toBe('done');
+  });
+
+  it('keeps a failed review as a message on the work and leaves the pages untouched', async () => {
+    const { pages, answer, flow, works } = contentSetup();
+    answer.current = { ok: false, error: { kind: 'failed', message: 'Zeitüberschreitung' } };
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(flow.getState().works.w).toMatchObject({
+      status: 'failed',
+      message: 'Der Text konnte nicht korrigiert werden (Zeitüberschreitung).',
+      comments: [],
+    });
+    expect(flow.getState().pages.a?.status).toBe('done');
+    expect(flow.getState().pages.b?.status).toBe('done');
+    expect(flow.getState().outcome).toBe('finished');
+  });
+
+  it('runs a failed review again on the next start and clears the message', async () => {
+    const { pages, answer, fake, flow, works } = contentSetup();
+    answer.current = { ok: false, error: { kind: 'failed', message: 'Zeitüberschreitung' } };
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    answer.current = { ok: true, comments: [FORM_NAME], questions: 1 };
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(fake.reviews).toHaveLength(2);
+    expect(flow.getState().works.w).toMatchObject({
+      status: 'done',
+      message: null,
+      comments: [{ ...FORM_NAME, status: 'open' }],
+    });
+  });
+
+  it('reports an unexpected exception from the review without failing the run', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const throwing: Corrector = {
+      correct: (lines, profile, signal, scope) => fake.correct(lines, profile, signal, scope),
+      review: () => Promise.reject(new Error('Speicher voll')),
+    };
+    flow.setCorrector(throwing);
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    expect(flow.getState().works.w).toMatchObject({
+      status: 'failed',
+      message: 'Der Text konnte nicht korrigiert werden (unerwarteter Fehler).',
+    });
+    expect(flow.getState().outcome).toBe('finished');
+  });
+
+  it('finishes a work without comments when the corrector cannot review', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    flow.setCorrector({
+      correct: (lines, profile, signal, scope) => fake.correct(lines, profile, signal, scope),
+    });
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    expect(flow.getState().works.w).toMatchObject({ status: 'done', comments: [] });
+  });
+
+  it('fails the review of a readable work when no corrector is set after the pages were read', async () => {
+    const { pages, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, DEFAULT_SCOPE, works);
+    flow.setCorrector(null);
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    expect(flow.getState().works.w).toMatchObject({ status: 'failed', message: CORRECTOR_MISSING });
+  });
+
+  it('marks the work as cancelled when the run is cancelled during the review', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const started = deferred();
+    const gated: Corrector = {
+      correct: (lines, profile, signal, scope) => fake.correct(lines, profile, signal, scope),
+      review: (_input, signal) =>
+        new Promise<ContentResult>((resolve) => {
+          started.resolve();
+          signal.addEventListener(
+            'abort',
+            () => {
+              resolve({ ok: false, error: { kind: 'cancelled' } });
+            },
+            { once: true },
+          );
+        }),
+    };
+    flow.setCorrector(gated);
+    const running = flow.start(pages, DEUTSCH, CONTENT, works);
+    await waitFor(() => flow.getState().run?.phase === 'reviewing');
+    await started.promise;
+    expect(flow.getState().works.w?.status).toBe('reviewing');
+
+    flow.cancel();
+    await running;
+
+    expect(flow.getState().works.w?.status).toBe('cancelled');
+    expect(flow.getState()).toMatchObject({ outcome: 'cancelled', run: null, stopping: false });
+    expect(flow.getState().pages.a?.status).toBe('done');
+    expect(flow.getState().pages.b?.status).toBe('done');
+
+    flow.setCorrector(fake);
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    expect(flow.getState().works.w?.status).toBe('done');
+    expect(fake.reviews).toHaveLength(1);
+  });
+
+  it('does not start the review when the run is cancelled while correcting', async () => {
+    const { pages, h, fake, flow, works } = contentSetup();
+    const gate = deferred();
+    h.locateGate = gate.promise;
+    const running = flow.start(pages, DEUTSCH, CONTENT, works);
+    await waitFor(() => h.log.includes('L:a'));
+    flow.cancel();
+    gate.resolve();
+    await running;
+
+    expect(fake.reviews).toHaveLength(0);
+    expect(flow.getState().works.w).toBeUndefined();
+    expect(flow.getState().outcome).toBe('cancelled');
+  });
+
+  it('dismisses and restores a comment and ignores unknown targets', async () => {
+    const { pages, answer, flow, works } = contentSetup();
+    answer.current = { ok: true, comments: [MISSING_TASK, FORM_NAME], questions: 2 };
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    const statuses = () => flow.getState().works.w?.comments.map((comment) => comment.status);
+
+    flow.setComment('w', 1, 'dismissed');
+    expect(statuses()).toEqual(['open', 'dismissed']);
+    flow.setComment('w', 1, 'open');
+    expect(statuses()).toEqual(['open', 'open']);
+
+    const before = flow.getState();
+    flow.setComment('w', 1, 'open');
+    flow.setComment('w', 9, 'dismissed');
+    flow.setComment('missing', 0, 'dismissed');
+    expect(flow.getState()).toBe(before);
+  });
+
+  it('keeps a dismissed comment dismissed when a rerun returns the same comment', async () => {
+    const { pages, answer, flow, works } = contentSetup();
+    answer.current = { ok: true, comments: [MISSING_TASK, FORM_NAME], questions: 2 };
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    flow.setComment('w', 0, 'dismissed');
+
+    await flow.start(
+      pages,
+      DEUTSCH,
+      { ...CONTENT, assignment: 'Beschreibe einen Ausflug.' },
+      works,
+    );
+
+    expect(flow.getState().works.w?.comments.map((comment) => comment.status)).toEqual([
+      'dismissed',
+      'open',
+    ]);
+  });
+
+  it.each([
+    ['another text', { ...MISSING_TASK, text: 'Thema verfehlt' }],
+    ['another line', { ...MISSING_TASK, line: 1 }],
+    ['another page', { ...MISSING_TASK, pageId: 'b', line: 1 }],
+  ])('shows a comment with %s as open again after a rerun', async (_name, changed) => {
+    const { pages, answer, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    flow.setComment('w', 0, 'dismissed');
+    answer.current = { ok: true, comments: [changed], questions: 2 };
+
+    await flow.start(
+      pages,
+      DEUTSCH,
+      { ...CONTENT, assignment: 'Beschreibe einen Ausflug.' },
+      works,
+    );
+
+    expect(flow.getState().works.w?.comments).toEqual([{ ...changed, status: 'open' }]);
+  });
+
+  it('loses the dismissal when a review in between failed', async () => {
+    const { pages, answer, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    flow.setComment('w', 0, 'dismissed');
+    answer.current = { ok: false, error: { kind: 'failed', message: 'weg' } };
+    await flow.start(
+      pages,
+      DEUTSCH,
+      { ...CONTENT, assignment: 'Beschreibe einen Ausflug.' },
+      works,
+    );
+    expect(flow.getState().works.w?.comments).toEqual([]);
+    answer.current = { ok: true, comments: [MISSING_TASK], questions: 2 };
+    await flow.start(
+      pages,
+      DEUTSCH,
+      { ...CONTENT, assignment: 'Beschreibe einen Ausflug.' },
+      works,
+    );
+    expect(flow.getState().works.w?.comments).toEqual([{ ...MISSING_TASK, status: 'open' }]);
+  });
+
+  it('removes works that left the import and keeps works when no work ids are passed', async () => {
+    const { pages, flow, works } = contentSetup();
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+
+    flow.prune(new Set(['a', 'b']));
+    expect(Object.keys(flow.getState().works)).toEqual(['w']);
+    flow.prune(new Set(['a', 'b']), new Set(['w']));
+    expect(Object.keys(flow.getState().works)).toEqual(['w']);
+    flow.prune(new Set(['a', 'b']), new Set());
+    expect(flow.getState().works).toEqual({});
+    expect(Object.keys(flow.getState().pages)).toEqual(['a', 'b']);
+  });
+
+  it('logs only counts, flags and the duration of a review', async () => {
+    const entries: ContentReviewLog[] = [];
+    let clock = 1000;
+    const { pages, answer, flow, works } = contentSetup(['a', 'b'], {
+      logReview: (entry) => entries.push(entry),
+      now: () => {
+        clock += 40;
+        return clock;
+      },
+    });
+    await flow.start(pages, DEUTSCH, CONTENT, works);
+    answer.current = { ok: false, error: { kind: 'failed', message: 'Geheimer Fehlertext' } };
+    await flow.start(
+      pages,
+      DEUTSCH,
+      { ...CONTENT, assignment: 'Beschreibe einen Ausflug.' },
+      works,
+    );
+
+    expect(entries).toEqual([
+      { ok: true, pages: 2, lines: 3, questions: 2, comments: 1, durationMs: 40 },
+      { ok: false, pages: 2, lines: 3, questions: 0, comments: 0, durationMs: 40 },
+    ]);
+    for (const entry of entries) {
+      expect(
+        Object.values(entry).every((v) => typeof v === 'number' || typeof v === 'boolean'),
+      ).toBe(true);
+    }
+    const serialized = JSON.stringify(entries);
+    for (const secret of ['Schwimbad', 'Wir gingen', ASSIGNMENT, MISSING_TASK.text, 'Geheimer']) {
+      expect(serialized).not.toContain(secret);
+    }
+  });
+
+  it('does not log a review that was cancelled', async () => {
+    const entries: ContentReviewLog[] = [];
+    const { pages, fake, flow, works } = contentSetup(['a', 'b'], {
+      logReview: (entry) => entries.push(entry),
+    });
+    const gated: Corrector = {
+      correct: (lines, profile, signal, scope) => fake.correct(lines, profile, signal, scope),
+      review: (_input, signal) =>
+        new Promise<ContentResult>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              resolve({ ok: false, error: { kind: 'cancelled' } });
+            },
+            { once: true },
+          );
+        }),
+    };
+    flow.setCorrector(gated);
+    const running = flow.start(pages, DEUTSCH, CONTENT, works);
+    await waitFor(() => flow.getState().works.w?.status === 'reviewing');
+    flow.cancel();
+    await running;
+    expect(entries).toEqual([]);
+  });
+
+  it('still reviews the content when spelling and grammar are switched off', async () => {
+    const { pages, fake, flow, works } = contentSetup();
+    const scope = { ...CONTENT, spelling: false, grammar: false };
+    await flow.start(pages, DEUTSCH, scope, works);
+
+    expect(fake.calls).toHaveLength(0);
+    expect(flow.getState().pages.a?.status).toBe('done');
+    expect(flow.getState().pages.b?.status).toBe('done');
+    expect(flow.getState().pages.a?.result?.statistics.errors).toBe(0);
+    expect(fake.reviews).toHaveLength(1);
+    expect(flow.getState().works.w?.status).toBe('done');
   });
 });

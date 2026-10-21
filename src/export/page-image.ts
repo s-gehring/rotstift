@@ -14,7 +14,12 @@ function layoutMarks(page: ExportPage, profile: CorrectionProfile | undefined): 
   if (profile === undefined || page.transcript === undefined) {
     return { page: size, items: [], skippedLines: [] };
   }
-  return layoutOverlay(page.transcript, { page: size, profile });
+  return layoutOverlay(page.transcript, {
+    page: size,
+    profile,
+    ...(page.comments && { comments: page.comments }),
+    summary: page.summary ?? null,
+  });
 }
 
 function requireMatchingAspect(page: ExportPage, bitmap: ImageBitmap): void {

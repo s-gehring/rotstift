@@ -1,4 +1,5 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import type { ContentInput, ContentResult } from '../content-form/review.ts';
 import type { CorrectError, CorrectResult, Corrector } from './corrector.ts';
 import type { CorrectionScope } from './scope.ts';
 
@@ -13,12 +14,26 @@ export interface FakeCall {
   readonly scope?: CorrectionScope;
 }
 
-export type FakeCorrector = Corrector & { readonly calls: readonly FakeCall[] };
+export type FakeReview = (input: ContentInput) => ContentResult;
 
-export function createFakeCorrector(script: FakeScript): FakeCorrector {
+export type FakeCorrector = Corrector & {
+  readonly calls: readonly FakeCall[];
+  readonly reviews: readonly ContentInput[];
+};
+
+export function createFakeCorrector(script: FakeScript, review?: FakeReview): FakeCorrector {
   const calls: FakeCall[] = [];
+  const reviews: ContentInput[] = [];
   return {
     calls,
+    reviews,
+    ...(review !== undefined && {
+      review(input: ContentInput, signal: AbortSignal): Promise<ContentResult> {
+        reviews.push(input);
+        if (signal.aborted) return Promise.resolve({ ok: false, error: { kind: 'cancelled' } });
+        return Promise.resolve(review(input));
+      },
+    }),
     correct(lines, profile, signal, scope): Promise<CorrectResult> {
       calls.push({ lines, profile, ...(scope !== undefined && { scope }) });
       if (signal.aborted) return Promise.resolve({ ok: false, error: { kind: 'cancelled' } });

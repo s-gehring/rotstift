@@ -66,7 +66,11 @@ export interface Subject {
   readonly select: (profile: CorrectionProfile) => void;
   readonly scope: CorrectionScope;
   readonly setScope: (scope: CorrectionScope) => void;
+  readonly missing: ScopeField | null;
+  readonly clearMissing: () => void;
 }
+
+export type ScopeField = 'assignment' | 'formName';
 
 export interface Work {
   readonly count: WordCount;

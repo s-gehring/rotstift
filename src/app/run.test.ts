@@ -4,7 +4,7 @@ import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { PageEntry, RunState } from '../pipeline/runner.ts';
 import { IDLE_ENGINE, type ReviewEngine } from '../review/engine-phase.ts';
-import type { ReviewPage, ReviewState } from '../review/review-flow.ts';
+import type { ReviewPage, ReviewPhase, ReviewState, RunStages } from '../review/review-flow.ts';
 import { page } from '../review/test-support.ts';
 import {
   countFinishedText,
@@ -13,6 +13,7 @@ import {
   readiness,
   reviewFinishedText,
   RUN_KIND_STORAGE_KEY,
+  reviewFraction,
   runProgress,
   saveRunKind,
   startDecision,
@@ -56,7 +57,15 @@ function reviewState(
   pages: Record<string, ReviewPage>,
   overrides: Partial<ReviewState> = {},
 ): ReviewState {
-  return { pages, profile: DEUTSCH, run: null, stopping: false, outcome: null, ...overrides };
+  return {
+    pages,
+    works: {},
+    profile: DEUTSCH,
+    run: null,
+    stopping: false,
+    outcome: null,
+    ...overrides,
+  };
 }
 
 const EMPTY_REVIEW = reviewState({}, { profile: null });
@@ -390,5 +399,149 @@ describe('run kind storage', () => {
     expect(loadRunKind(broken)).toBe('correct');
     expect(() => saveRunKind('count', broken)).not.toThrow();
     expect(loadRunKind(null)).toBe('correct');
+  });
+});
+
+describe('progress of the content review phase', () => {
+  const done = reviewed('text');
+  const pageIds = ['a', 'b'];
+  const finishedCount = runState({ a: pending('done'), b: pending('done') });
+
+  function inRun(
+    phase: ReviewPhase,
+    total: number,
+    finished: number,
+    stages?: RunStages,
+  ): ReviewState {
+    return reviewState(
+      { a: done, b: done },
+      { run: { phase, total, finished, ...(stages !== undefined && { stages }) } },
+    );
+  }
+
+  const withReview: RunStages = { pages: true, review: true };
+  const reviewOnly: RunStages = { pages: false, review: true };
+
+  const fraction = (phase: ReviewPhase, total: number, finished: number) =>
+    reviewFraction(inRun(phase, total, finished, withReview), finishedCount, pageIds);
+
+  const onlyReview = (total: number, finished: number) =>
+    reviewFraction(inRun('reviewing', total, finished, reviewOnly), finishedCount, []);
+
+  it('gives the review the last 15 percent of a run that also corrects pages', () => {
+    expect(fraction('correcting', 2, 0)).toBeCloseTo(0.5525);
+    expect(fraction('correcting', 2, 2)).toBeCloseTo(0.85);
+    expect(fraction('reviewing', 4, 0)).toBeCloseTo(0.85);
+    expect(fraction('reviewing', 4, 2)).toBeCloseTo(0.925);
+    expect(fraction('reviewing', 4, 4)).toBeCloseTo(1);
+  });
+
+  it('scales the page phases down only when a review follows', () => {
+    const plain = reviewFraction(
+      inRun('correcting', 2, 2, { pages: true, review: false }),
+      finishedCount,
+      pageIds,
+    );
+    const legacy = reviewFraction(inRun('correcting', 2, 2), finishedCount, pageIds);
+    expect(plain).toBeCloseTo(1);
+    expect(legacy).toBeCloseTo(1);
+  });
+
+  it('never moves backwards over all phases of a run with review', () => {
+    const steps: [ReviewPhase, number, number][] = [
+      ['locating', 2, 0],
+      ['locating', 2, 2],
+      ['correcting', 2, 0],
+      ['correcting', 2, 1],
+      ['correcting', 2, 2],
+      ['reviewing', 3, 0],
+      ['reviewing', 3, 1],
+      ['reviewing', 3, 3],
+    ];
+    const values = steps.map(([phase, total, finished]) =>
+      reviewFraction(inRun(phase, total, finished, withReview), finishedCount, pageIds),
+    );
+    for (let index = 1; index < values.length; index += 1) {
+      expect(values[index]).toBeGreaterThanOrEqual(values[index - 1] ?? 0);
+    }
+    expect(values.at(-1)).toBeCloseTo(1);
+  });
+
+  it('counts the transcription of pages within the first part of a run with review', () => {
+    const halfRead = runState({ a: pending('done'), b: pending('running') });
+    const begin = inRun('transcribing', 2, 1, withReview);
+    expect(reviewFraction(begin, halfRead, pageIds)).toBeCloseTo(0.6 * 0.85 * 0.5);
+  });
+
+  it('lets a review-only run fill the whole bar', () => {
+    expect(onlyReview(4, 0)).toBe(0);
+    expect(onlyReview(4, 1)).toBeCloseTo(0.25);
+    expect(onlyReview(4, 4)).toBe(1);
+  });
+
+  it('treats an empty review phase as complete', () => {
+    expect(
+      reviewFraction(inRun('reviewing', 0, 0, withReview), finishedCount, pageIds),
+    ).toBeCloseTo(1);
+    expect(onlyReview(0, 0)).toBe(1);
+  });
+
+  it('caps the share when more works finished than were planned', () => {
+    expect(onlyReview(2, 5)).toBe(1);
+  });
+
+  it('is zero without a run', () => {
+    expect(reviewFraction(reviewState({}), finishedCount, pageIds)).toBe(0);
+  });
+
+  it('shows the percentage of a review-only run and estimates its time', () => {
+    const begin = inRun('reviewing', 4, 0, reviewOnly);
+    const start = startRun(begin, finishedCount, 0);
+    expect(start).toEqual({ pageIds: [], at: 0, fraction: 0 });
+
+    const quarter = inRun('reviewing', 4, 1, reviewOnly);
+    expect(runProgress(quarter, finishedCount, IDLE_ENGINE, 10_000, start)).toEqual({
+      label: '25\u00a0%',
+      detail: 'noch etwa 30 Sekunden',
+      value: 25,
+      max: 100,
+    });
+    expect(runProgress(begin, finishedCount, IDLE_ENGINE, 10_000, start)?.detail).toBeNull();
+  });
+
+  it('shows the percentage of the review part within a run that also corrects pages', () => {
+    const correcting = inRun('correcting', 2, 0, withReview);
+    const start = startRun(correcting, finishedCount, 0);
+    const halfReviewed = inRun('reviewing', 2, 1, withReview);
+    expect(runProgress(halfReviewed, finishedCount, IDLE_ENGINE, 0, start)).toMatchObject({
+      label: '93\u00a0%',
+      value: 93,
+      max: 100,
+    });
+  });
+
+  it('mentions the corrector model while the review waits for it', () => {
+    const reviewing = inRun('reviewing', 1, 0, reviewOnly);
+    const start = startRun(reviewing, finishedCount, 0);
+    const detail = (engine: ReviewEngine) =>
+      runProgress(reviewing, finishedCount, engine, 0, start)?.detail;
+
+    expect(detail({ transcriber: 'idle', corrector: 'starting' })).toBe('Modell wird geladen …');
+    expect(detail({ transcriber: 'ready', corrector: 'idle' })).toBe('Modell wird geladen …');
+    expect(detail({ transcriber: 'idle', corrector: 'ready' })).toBeNull();
+  });
+
+  it('shows the cancellation during the review phase without progress', () => {
+    const stopping = reviewState(
+      {},
+      {
+        run: { phase: 'reviewing', total: 2, finished: 1, stages: reviewOnly },
+        stopping: true,
+      },
+    );
+    expect(runProgress(stopping, runState({}), IDLE_ENGINE, 0)).toMatchObject({
+      label: 'Wird abgebrochen …',
+      value: null,
+    });
   });
 });

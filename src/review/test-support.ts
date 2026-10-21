@@ -5,7 +5,7 @@ import type { LayoutResult } from '../layout/types.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createRunner } from '../pipeline/runner.ts';
 import type { PageTranscriber, TranscribeResult } from '../pipeline/transcriber.ts';
-import { createReviewFlow, type ReviewImage } from './review-flow.ts';
+import { createReviewFlow, type ReviewDeps, type ReviewImage } from './review-flow.ts';
 
 export function page(id: string): ImportPage {
   return {
@@ -72,7 +72,10 @@ export interface Harness {
   correctThrows: boolean;
 }
 
-export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
+export function setupReview(
+  ids: readonly string[] = ['a', 'b', 'c'],
+  extra: Pick<ReviewDeps, 'logReview' | 'now'> = {},
+) {
   const pages = ids.map(page);
   const h: Harness = {
     log: [],
@@ -117,6 +120,7 @@ export function setupReview(ids: readonly string[] = ['a', 'b', 'c']) {
   runner.setTranscriber(transcriber);
   runner.setPages(pages);
   const flow = createReviewFlow({
+    ...extra,
     transcription: runner,
     loadImage: (p): Promise<ReviewImage> =>
       h.imageFails

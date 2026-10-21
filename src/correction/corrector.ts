@@ -1,4 +1,5 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
+import type { ContentInput, ContentResult } from '../content-form/review.ts';
 import type { CorrectionScope } from './scope.ts';
 
 export type CorrectError =
@@ -17,6 +18,7 @@ export interface Corrector {
     signal: AbortSignal,
     scope?: CorrectionScope,
   ): Promise<CorrectResult>;
+  review?(input: ContentInput, signal: AbortSignal): Promise<ContentResult>;
 }
 
 function detail(message: string): string {

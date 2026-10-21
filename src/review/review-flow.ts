@@ -1,8 +1,20 @@
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Bbox, Transcript } from '../annotations/transcript.ts';
-import { correctPage, type CorrectPageResult } from '../correction/correct-page.ts';
+import {
+  cleanFormName,
+  reviewsContent,
+  type ContentComment,
+  type ContentResult,
+  type WorkLine,
+} from '../content-form/review.ts';
+import { correctPage, visibleText, type CorrectPageResult } from '../correction/correct-page.ts';
 import { describeCorrectError, type Corrector } from '../correction/corrector.ts';
-import { DEFAULT_SCOPE, requestedCodes, type CorrectionScope } from '../correction/scope.ts';
+import {
+  cleanAssignment,
+  DEFAULT_SCOPE,
+  requestedCodes,
+  type CorrectionScope,
+} from '../correction/scope.ts';
 import {
   separateUncertain,
   withAcceptedHints,
@@ -23,10 +35,12 @@ export interface ReviewImage {
   readonly height: number;
 }
 
-export type ReviewPhase = 'transcribing' | 'locating' | 'correcting';
+export type ReviewPhase = 'transcribing' | 'locating' | 'correcting' | 'reviewing';
+
+export type PagePhase = Exclude<ReviewPhase, 'reviewing'>;
 
 export type ReviewStatus =
-  'waiting' | ReviewPhase | 'done' | 'empty' | 'unreadable' | 'failed' | 'cancelled';
+  'waiting' | PagePhase | 'done' | 'empty' | 'unreadable' | 'failed' | 'cancelled';
 
 export interface CorrectedPage {
   readonly transcript: Transcript;
@@ -56,14 +70,49 @@ export interface ReviewPage {
   readonly detail: string | null;
 }
 
+export type CommentStatus = 'open' | 'dismissed';
+
+export interface WorkComment extends ContentComment {
+  readonly status: CommentStatus;
+}
+
+export interface WorkReview {
+  readonly status: 'reviewing' | 'done' | 'failed' | 'cancelled';
+  readonly key: string;
+  readonly sources: readonly (string | null)[];
+  readonly comments: readonly WorkComment[];
+  readonly message: string | null;
+}
+
+export interface ReviewWork {
+  readonly id: string;
+  readonly pageIds: readonly string[];
+}
+
+export interface ContentReviewLog {
+  readonly ok: boolean;
+  readonly pages: number;
+  readonly lines: number;
+  readonly questions: number;
+  readonly comments: number;
+  readonly durationMs: number;
+}
+
+export interface RunStages {
+  readonly pages: boolean;
+  readonly review: boolean;
+}
+
 export interface ReviewRun {
   readonly phase: ReviewPhase;
   readonly total: number;
   readonly finished: number;
+  readonly stages?: RunStages;
 }
 
 export interface ReviewState {
   readonly pages: Readonly<Record<string, ReviewPage>>;
+  readonly works: Readonly<Record<string, WorkReview>>;
   readonly profile: CorrectionProfile | null;
   readonly run: ReviewRun | null;
   readonly stopping: boolean;
@@ -79,6 +128,8 @@ export interface ReviewDeps {
   readonly transcription: TranscriptionSource;
   readonly locator: Pick<LayoutLocator, 'locate'>;
   readonly loadImage: (page: ImportPage) => Promise<ReviewImage>;
+  readonly logReview?: (entry: ContentReviewLog) => void;
+  readonly now?: () => number;
 }
 
 export const CORRECTOR_MISSING =
@@ -98,6 +149,7 @@ const UNEXPECTED = 'unerwarteter Fehler';
 
 const EMPTY: ReviewState = {
   pages: {},
+  works: {},
   profile: null,
   run: null,
   stopping: false,
@@ -169,6 +221,65 @@ function withHints(
   };
 }
 
+export function reviewWorks(
+  arbeiten: readonly { readonly id: string; readonly pages: readonly { readonly id: string }[] }[],
+): ReviewWork[] {
+  return arbeiten.map((arbeit) => ({
+    id: arbeit.id,
+    pageIds: arbeit.pages.map((page) => page.id),
+  }));
+}
+
+export function reviewKey(
+  work: ReviewWork,
+  pages: Readonly<Record<string, ReviewPage>>,
+  profile: CorrectionProfile,
+  scope: CorrectionScope,
+): string {
+  return JSON.stringify([
+    profile.id,
+    scope.form ? cleanFormName(scope.formName) : null,
+    scope.content ? cleanAssignment(scope.assignment) : null,
+    work.pageIds.map((id) => pages[id]?.source ?? null),
+  ]);
+}
+
+export function workLines(
+  work: ReviewWork,
+  pages: Readonly<Record<string, ReviewPage>>,
+): WorkLine[] {
+  return work.pageIds.flatMap((pageId) =>
+    visibleText(pages[pageId]?.source?.split('\n') ?? []).map((text, index) => ({
+      pageId,
+      line: index + 1,
+      text,
+    })),
+  );
+}
+
+function isReviewable(work: ReviewWork, pages: Readonly<Record<string, ReviewPage>>): boolean {
+  const statuses = work.pageIds.map((id) => pages[id]?.status);
+  return (
+    statuses.includes('done') && statuses.every((status) => status === 'done' || status === 'empty')
+  );
+}
+
+function keepDismissed(
+  comments: readonly ContentComment[],
+  previous: WorkReview | undefined,
+): WorkComment[] {
+  return comments.map((comment) => {
+    const dismissed = previous?.comments.some(
+      (old) =>
+        old.status === 'dismissed' &&
+        old.pageId === comment.pageId &&
+        old.line === comment.line &&
+        old.text === comment.text,
+    );
+    return { ...comment, status: dismissed === true ? 'dismissed' : 'open' };
+  });
+}
+
 function blankPage(rotation: Rotation): ReviewPage {
   return {
     status: 'waiting',
@@ -217,6 +328,9 @@ export function createReviewFlow(deps: ReviewDeps) {
   let corrector: Corrector | null = null;
   let preview = false;
   let lastScope: CorrectionScope = DEFAULT_SCOPE;
+  let lastWorks: readonly ReviewWork[] = [];
+  let stages: RunStages = { pages: true, review: false };
+  const now = deps.now ?? (() => performance.now());
 
   const commit = (next: ReviewState) => {
     state = next;
@@ -229,8 +343,12 @@ export function createReviewFlow(deps: ReviewDeps) {
     commit({ ...state, pages: { ...state.pages, [id]: { ...page, ...change } } });
   };
 
-  const setRun = (run: ReviewRun | null) => {
-    commit({ ...state, run });
+  const patchWork = (id: string, review: WorkReview) => {
+    commit({ ...state, works: { ...state.works, [id]: review } });
+  };
+
+  const setRun = (run: Omit<ReviewRun, 'stages'>) => {
+    commit({ ...state, run: { ...run, stages } });
   };
 
   const track = <T>(promise: Promise<T>): Promise<T> => {
@@ -288,6 +406,7 @@ export function createReviewFlow(deps: ReviewDeps) {
           phase: 'transcribing',
           total: batch?.total ?? 0,
           finished: batch?.finished ?? 0,
+          stages,
         },
       });
     };
@@ -427,10 +546,107 @@ export function createReviewFlow(deps: ReviewDeps) {
     }
   };
 
+  const dueWorks = (
+    works: readonly ReviewWork[],
+    profile: CorrectionProfile,
+    scope: CorrectionScope,
+  ): ReviewWork[] => {
+    if (!reviewsContent(scope)) return [];
+    return works.filter((work) => {
+      if (!isReviewable(work, state.pages)) return false;
+      const existing = state.works[work.id];
+      return (
+        existing?.status !== 'done' || existing.key !== reviewKey(work, state.pages, profile, scope)
+      );
+    });
+  };
+
+  const reviewWork = async (
+    work: ReviewWork,
+    current: Corrector,
+    profile: CorrectionProfile,
+    scope: CorrectionScope,
+    signal: AbortSignal,
+  ) => {
+    const key = reviewKey(work, state.pages, profile, scope);
+    const previous = state.works[work.id];
+    const lines = workLines(work, state.pages);
+    const sources = work.pageIds.map((id) => state.pages[id]?.source ?? null);
+    patchWork(work.id, { status: 'reviewing', key, sources, comments: [], message: null });
+    const started = now();
+    const pending: Promise<ContentResult> =
+      current.review === undefined
+        ? Promise.resolve({ ok: true, comments: [], questions: 0 })
+        : track(current.review({ lines, profile, scope }, signal));
+    const result = await abortable(pending, signal).catch((error: unknown): ContentResult => ({
+      ok: false,
+      error: { kind: 'failed', message: UNEXPECTED, detail: errorText(error) },
+    }));
+    if (result === ABORTED) return false;
+    deps.logReview?.({
+      ok: result.ok,
+      pages: work.pageIds.length,
+      lines: lines.filter((line) => line.text !== '').length,
+      questions: result.ok ? result.questions : 0,
+      comments: result.ok ? result.comments.length : 0,
+      durationMs: Math.round(now() - started),
+    });
+    if (result.ok) {
+      patchWork(work.id, {
+        status: 'done',
+        key,
+        sources,
+        comments: keepDismissed(result.comments, previous),
+        message: null,
+      });
+    } else if (result.error.kind === 'cancelled') {
+      patchWork(work.id, { status: 'cancelled', key, sources, comments: [], message: null });
+    } else {
+      patchWork(work.id, {
+        status: 'failed',
+        key,
+        sources,
+        comments: [],
+        message: describeCorrectError(result.error),
+      });
+    }
+    return true;
+  };
+
+  const reviewPhase = async (
+    works: readonly ReviewWork[],
+    profile: CorrectionProfile,
+    scope: CorrectionScope,
+    signal: AbortSignal,
+  ) => {
+    const due = dueWorks(works, profile, scope);
+    if (due.length === 0) return;
+    let finished = 0;
+    const current = corrector;
+    setRun({ phase: 'reviewing', total: due.length, finished });
+    for (const work of due) {
+      if (signal.aborted) return;
+      if (current === null) {
+        patchWork(work.id, {
+          status: 'failed',
+          key: reviewKey(work, state.pages, profile, scope),
+          sources: work.pageIds.map((id) => state.pages[id]?.source ?? null),
+          comments: [],
+          message: CORRECTOR_MISSING,
+        });
+      } else if (!(await reviewWork(work, current, profile, scope, signal))) {
+        return;
+      }
+      finished += 1;
+      setRun({ phase: 'reviewing', total: due.length, finished });
+    }
+  };
+
   const process = async (
     targets: readonly ImportPage[],
     profile: CorrectionProfile,
     scope: CorrectionScope,
+    works: readonly ReviewWork[],
     begin: () => void,
   ) => {
     const abort = new AbortController();
@@ -445,14 +661,19 @@ export function createReviewFlow(deps: ReviewDeps) {
           : { ...existing, status: 'waiting', message: null, detail: null };
     }
     lastScope = scope;
+    stages = { pages: targets.length > 0, review: reviewsContent(scope) && works.length > 0 };
     commit({ ...state, pages, profile, outcome: null, stopping: false });
     try {
-      await transcribePhase(targets, begin);
-      if (aborted()) return;
-      const readable = collectTranscripts(targets);
-      await locatePhase(readable, abort.signal);
-      if (aborted()) return;
-      await correctPhase(readable, profile, scope, abort.signal);
+      if (targets.length > 0) {
+        await transcribePhase(targets, begin);
+        if (aborted()) return;
+        const readable = collectTranscripts(targets);
+        await locatePhase(readable, abort.signal);
+        if (aborted()) return;
+        await correctPhase(readable, profile, scope, abort.signal);
+        if (aborted()) return;
+      }
+      await reviewPhase(works, profile, scope, abort.signal);
     } finally {
       const cancelled = aborted();
       if (cancelled) {
@@ -463,7 +684,11 @@ export function createReviewFlow(deps: ReviewDeps) {
             next[page.id] = { ...entry, status: 'cancelled' };
           }
         }
-        commit({ ...state, pages: next });
+        const nextWorks = { ...state.works };
+        for (const [id, work] of Object.entries(nextWorks)) {
+          if (work.status === 'reviewing') nextWorks[id] = { ...work, status: 'cancelled' };
+        }
+        commit({ ...state, pages: next, works: nextWorks });
         await inflight;
       }
       if (active === abort) active = null;
@@ -487,17 +712,19 @@ export function createReviewFlow(deps: ReviewDeps) {
       pages: readonly ImportPage[],
       profile: CorrectionProfile,
       scope: CorrectionScope = DEFAULT_SCOPE,
+      works: readonly ReviewWork[] = [],
     ): Promise<void> => {
       if (active !== null) return Promise.resolve();
       if (state.profile !== null && state.profile.id !== profile.id) {
-        commit({ ...state, pages: {} });
+        commit({ ...state, pages: {}, works: {} });
       }
+      lastWorks = works;
       const targets = pages.filter((page) => !isCurrent(page));
-      if (targets.length === 0) {
+      if (targets.length === 0 && dueWorks(works, profile, scope).length === 0) {
         commit({ ...state, profile, outcome: 'finished' });
         return Promise.resolve();
       }
-      return process(targets, profile, scope, () => {
+      return process(targets, profile, scope, works, () => {
         transcription.start();
       });
     },
@@ -510,7 +737,8 @@ export function createReviewFlow(deps: ReviewDeps) {
       if (active !== null || profile === null || state.pages[page.id] === undefined) {
         return Promise.resolve();
       }
-      return process([page], profile, options.scope ?? lastScope, () => {
+      const works = lastWorks.filter((work) => work.pageIds.includes(page.id));
+      return process([page], profile, options.scope ?? lastScope, works, () => {
         const entry = transcription.getState().entries[page.id];
         if (options.recognize === true || entry === undefined || needsRecognition(entry, page)) {
           transcription.enqueue(page.id);
@@ -528,6 +756,16 @@ export function createReviewFlow(deps: ReviewDeps) {
       patch(id, { result: withHints({ ...result, hints }) });
     },
 
+    setComment: (workId: string, index: number, status: CommentStatus) => {
+      const work = state.works[workId];
+      const comment = work?.comments[index];
+      if (work === undefined || comment === undefined || comment.status === status) return;
+      const comments = work.comments.map((entry, position) =>
+        position === index ? { ...entry, status } : entry,
+      );
+      patchWork(workId, { ...work, comments });
+    },
+
     setCorrector: (next: Corrector | null, isPreview = false) => {
       corrector = next;
       preview = next !== null && isPreview;
@@ -540,17 +778,23 @@ export function createReviewFlow(deps: ReviewDeps) {
       if (state.run?.phase === 'transcribing') transcription.cancel();
     },
 
-    prune: (present: ReadonlySet<string>) => {
+    prune: (present: ReadonlySet<string>, presentWorks?: ReadonlySet<string>) => {
       const removed = Object.keys(state.pages).filter((id) => !present.has(id));
-      if (removed.length === 0) return;
+      const removedWorks =
+        presentWorks === undefined
+          ? []
+          : Object.keys(state.works).filter((id) => !presentWorks.has(id));
+      if (removed.length === 0 && removedWorks.length === 0) return;
       const pages = { ...state.pages };
       for (const id of removed) delete pages[id];
-      commit({ ...state, pages });
+      const works = { ...state.works };
+      for (const id of removedWorks) delete works[id];
+      commit({ ...state, pages, works });
     },
 
     dispose: () => {
       active?.abort();
-      commit({ ...state, pages: {} });
+      commit({ ...state, pages: {}, works: {} });
     },
   };
 }

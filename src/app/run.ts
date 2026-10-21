@@ -6,9 +6,15 @@ import type { DownloadError } from '../models/types.ts';
 import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages, type RunState } from '../pipeline/runner.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
-import { buildResults, classTotals, pagesText, wordsText } from '../results/summary.ts';
+import {
+  arbeitenText,
+  buildResults,
+  classTotals,
+  pagesText,
+  wordsText,
+} from '../results/summary.ts';
 import { engineText, type ReviewEngine } from '../review/engine-phase.ts';
-import type { ReviewPhase, ReviewState, ReviewStatus } from '../review/review-flow.ts';
+import type { ReviewPhase, ReviewRun, ReviewState, ReviewStatus } from '../review/review-flow.ts';
 import { pageCondition, summarizeClass } from '../review/summary.ts';
 import type { ModelRole, RunKind, RunProgress } from './types.ts';
 
@@ -89,11 +95,23 @@ export function openPageCount(
   }).length;
 }
 
-const PHASE_WEIGHT: Readonly<Record<ReviewPhase, number>> = {
-  transcribing: 0.6,
-  locating: 0.05,
-  correcting: 0.35,
-};
+const PAGE_WEIGHT = { transcribing: 0.6, locating: 0.05, correcting: 0.35 } as const;
+
+const REVIEW_WEIGHT = 0.15;
+
+function phaseWeights(run: ReviewRun): Readonly<Record<ReviewPhase, number>> {
+  if (run.stages?.pages === false) {
+    return { transcribing: 0, locating: 0, correcting: 0, reviewing: 1 };
+  }
+  const reviewing = run.stages?.review === true ? REVIEW_WEIGHT : 0;
+  const scale = 1 - reviewing;
+  return {
+    transcribing: PAGE_WEIGHT.transcribing * scale,
+    locating: PAGE_WEIGHT.locating * scale,
+    correcting: PAGE_WEIGHT.correcting * scale,
+    reviewing,
+  };
+}
 
 const FINISHED: ReadonlySet<ReviewStatus> = new Set([
   'done',
@@ -128,7 +146,7 @@ export function reviewFraction(
 ): number {
   const { run } = review;
   if (run === null) return 0;
-  const { transcribing, locating, correcting } = PHASE_WEIGHT;
+  const { transcribing, locating, correcting, reviewing } = phaseWeights(run);
   if (run.phase === 'transcribing') {
     const transcribed = pageIds.filter((id) => {
       const status = count.entries[id]?.status;
@@ -137,7 +155,10 @@ export function reviewFraction(
     return transcribing * share(transcribed, pageIds.length);
   }
   if (run.phase === 'locating') return transcribing + locating * share(run.finished, run.total);
-  return transcribing + locating + correcting * share(run.finished, run.total);
+  if (run.phase === 'correcting') {
+    return transcribing + locating + correcting * share(run.finished, run.total);
+  }
+  return transcribing + locating + correcting + reviewing * share(run.finished, run.total);
 }
 
 export function startRun(review: ReviewState, count: RunState, at: number): RunStart {
@@ -217,7 +238,11 @@ export function reviewFinishedText(
   const pages = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.pageCount, 0);
   const corrected = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.corrected, 0);
   const problems = summary.arbeiten.reduce((sum, arbeit) => sum + arbeit.problems, 0);
+  const unchecked = arbeiten.filter((arbeit) => review.works[arbeit.id]?.status === 'failed');
   const parts = [`Fertig: ${corrected} von ${pagesText(pages)} korrigiert.`];
   if (problems > 0) parts.push(`${pagesText(problems)} mit Fehlern.`);
+  if (unchecked.length > 0) {
+    parts.push(`Inhalt und Form bei ${arbeitenText(unchecked.length)} nicht geprüft.`);
+  }
   return parts.join(' ');
 }

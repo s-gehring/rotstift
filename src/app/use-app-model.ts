@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILT_IN_PROFILES } from '../annotations/profile.ts';
+import { needsAssignment, needsFormName } from '../content-form/review.ts';
 import { useCorrectionScope } from '../correction/use-correction-scope.ts';
 import { useCorrector } from '../correction/use-corrector.ts';
 import { useProfileChoice } from '../correction/use-profile-choice.ts';
@@ -13,7 +14,7 @@ import { useEnginePhase } from '../pipeline/use-engine-phase.ts';
 import { useTranscriber } from '../pipeline/use-transcriber.ts';
 import { useWordCount } from '../results/use-word-count.ts';
 import { useMonitorPhase } from '../review/engine-phase.ts';
-import type { ReviewFlow } from '../review/review-flow.ts';
+import { reviewWorks, type ReviewFlow } from '../review/review-flow.ts';
 import { useReview } from '../review/use-review.ts';
 import { useWeighting } from '../stats/use-weighting.ts';
 import { useToast } from '../ui/Toast.tsx';
@@ -32,7 +33,7 @@ import {
   type Readiness,
   type RunStart,
 } from './run.ts';
-import type { AppModel, ModelRole, Navigation, Route, RunKind } from './types.ts';
+import type { AppModel, ModelRole, Navigation, Route, RunKind, ScopeField } from './types.ts';
 
 const modelClient = browserModelClient();
 
@@ -121,9 +122,11 @@ export function useAppModel(): AppModel {
   );
   const { profile, select: selectProfile } = useProfileChoice();
   const { scope, setScope } = useCorrectionScope(importState.arbeiten.length > 0);
+  const [missing, setMissing] = useState<ScopeField | null>(null);
+  const clearMissing = useCallback(() => setMissing(null), []);
   const weighting = useWeighting();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
-  const review = useReview(count.runner, pages, corrector);
+  const review = useReview(count.runner, pages, corrector, importState.arbeiten);
   const navigation = useNavigation(importState.arbeiten);
 
   const reviewing = review.state.run !== null;
@@ -166,12 +169,16 @@ export function useAppModel(): AppModel {
   const launch = (wanted: RunKind) => {
     cancelled.current = false;
     if (wanted === 'count') count.runner.start();
-    else void review.flow.start(pages, profile, scope);
+    else void review.flow.start(pages, profile, scope, reviewWorks(importState.arbeiten));
   };
 
   const start = (wanted: RunKind = kind) => {
     if (wanted !== kind) setKind(wanted);
     if (running || pages.length === 0) return;
+    if (wanted === 'correct' && (needsAssignment(scope) || needsFormName(scope))) {
+      setMissing(needsAssignment(scope) ? 'assignment' : 'formName');
+      return;
+    }
     const decision = startDecision(wanted, roleReadiness);
     if (decision.action === 'unavailable') {
       const message = unavailableText(wanted);
@@ -269,7 +276,15 @@ export function useAppModel(): AppModel {
       start,
       cancel,
     },
-    subject: { profile, profiles: BUILT_IN_PROFILES, select: selectProfile, scope, setScope },
+    subject: {
+      profile,
+      profiles: BUILT_IN_PROFILES,
+      select: selectProfile,
+      scope,
+      setScope,
+      missing,
+      clearMissing,
+    },
     weighting,
     work: {
       count,

@@ -203,6 +203,8 @@ function ArbeitBody({ arbeit }: { readonly arbeit: Arbeit }) {
       </ol>
       <ArbeitSide
         pages={model.pages}
+        content={model.content}
+        onComment={(index, status) => work.review.flow.setComment(arbeit.id, index, status)}
         corrected={corrected}
         profile={profile}
         editing={editing}

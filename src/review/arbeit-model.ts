@@ -7,7 +7,10 @@ import { markText } from '../overlay/hint-layout.ts';
 import { isOutdated } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
 import { buildResults } from '../results/summary.ts';
-import type { ReviewImage, ReviewState } from './review-flow.ts';
+import type { CommentKind } from '../content-form/catalog.ts';
+import { summaryText } from '../content-form/review.ts';
+import type { PageComment } from '../overlay/layout.ts';
+import type { CommentStatus, ReviewImage, ReviewState, WorkReview } from './review-flow.ts';
 import type { Weighting } from '../stats/weighting.ts';
 import { pageCondition, summarizeArbeit, weighArbeit, type Entries } from './summary.ts';
 
@@ -29,6 +32,24 @@ export interface PageCorrection {
   readonly hints: readonly HintEntry[];
   readonly marks: readonly MarkEntry[];
   readonly errors: number;
+  readonly comments: readonly PageComment[];
+  readonly summary: string | null;
+}
+
+export interface CommentEntry {
+  readonly index: number;
+  readonly status: CommentStatus;
+  readonly kind: CommentKind;
+  readonly text: string;
+  readonly page: number;
+  readonly line: number;
+}
+
+export interface ContentReviewModel {
+  readonly status: WorkReview['status'];
+  readonly comments: readonly CommentEntry[];
+  readonly summary: string | null;
+  readonly message: string | null;
 }
 
 export type PageActivity = 'reading' | 'correcting' | null;
@@ -62,6 +83,7 @@ export interface ArbeitModel {
   readonly pages: readonly PageModel[];
   readonly figures: ArbeitFigures;
   readonly openHints: number;
+  readonly content: ContentReviewModel | null;
 }
 
 const CANCELLED = 'Abgebrochen.';
@@ -83,6 +105,36 @@ function unplacedText(lines: readonly number[]): string | null {
     : `Zeilen ${lines.join(', ')} nicht auf der Seite gefunden`;
 }
 
+export function contentReview(arbeit: Arbeit, review: ReviewState): ContentReviewModel | null {
+  const work = review.works[arbeit.id];
+  if (work === undefined) return null;
+  const current = arbeit.pages.map((page) => review.pages[page.id]?.source ?? null);
+  const matches =
+    current.length === work.sources.length &&
+    current.every((source, index) => source === work.sources[index]);
+  if (!matches) return null;
+  const comments = work.comments.flatMap((comment, index): CommentEntry[] => {
+    const position = arbeit.pages.findIndex((page) => page.id === comment.pageId);
+    if (position < 0) return [];
+    return [
+      {
+        index,
+        status: comment.status,
+        kind: comment.kind,
+        text: comment.text,
+        page: position + 1,
+        line: comment.line,
+      },
+    ];
+  });
+  return {
+    status: work.status,
+    comments,
+    summary: summaryText(comments.filter((comment) => comment.status === 'open')),
+    message: work.message,
+  };
+}
+
 export function buildArbeitModel(
   arbeit: Arbeit,
   review: ReviewState,
@@ -91,6 +143,10 @@ export function buildArbeitModel(
 ): ArbeitModel {
   const corrected = arbeit.pages.some((page) => review.pages[page.id] !== undefined);
   const result = buildResults([arbeit], entries)[0];
+  const content = corrected ? contentReview(arbeit, review) : null;
+  const summaryPage = arbeit.pages.findLast(
+    (page) => review.pages[page.id]?.result != null && review.pages[page.id]?.status === 'done',
+  )?.id;
   const pages = arbeit.pages.map((page, index): PageModel => {
     const entry = entries[page.id];
     const reviewPage = corrected ? review.pages[page.id] : undefined;
@@ -125,6 +181,11 @@ export function buildArbeitModel(
         })),
         marks: markEntries(pageResult.transcript),
         errors: pageResult.statistics.errors,
+        comments:
+          content?.comments
+            .filter((comment) => comment.status === 'open' && comment.page === index + 1)
+            .map(({ line, text }) => ({ line, text })) ?? [],
+        summary: page.id === summaryPage ? (content?.summary ?? null) : null,
       };
     }
 
@@ -185,5 +246,6 @@ export function buildArbeitModel(
       sum + (page.correction?.hints.filter((hint) => hint.status === 'open').length ?? 0),
     0,
   );
-  return { corrected, pages, figures, openHints };
+  const stale = pages.some((page) => page.open);
+  return { corrected, pages, figures, openHints, content: stale ? null : content };
 }

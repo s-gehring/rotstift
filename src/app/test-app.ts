@@ -149,6 +149,8 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       select: noop,
       scope: DEFAULT_SCOPE,
       setScope: noop,
+      missing: null,
+      clearMissing: noop,
       ...parts.subject,
     },
     weighting: parts.weighting ?? fixedWeighting(),

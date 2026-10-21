@@ -22,6 +22,7 @@ export function useMonitorPhase(monitor: EngineMonitor | undefined): EnginePhase
 const LOADING_TEXT = {
   transcribing: 'Texterkennung wird geladen …',
   correcting: 'Korrekturmodell wird geladen …',
+  reviewing: 'Korrekturmodell wird geladen …',
 } as const;
 
 const SWITCH_TEXT = 'Modellwechsel wird vorbereitet …';
@@ -29,7 +30,7 @@ const SWITCH_TEXT = 'Modellwechsel wird vorbereitet …';
 export function engineText(run: ReviewRun, engine: ReviewEngine): string | null {
   if (run.phase === 'locating') return null;
   const [own, other] =
-    run.phase === 'correcting'
+    run.phase === 'correcting' || run.phase === 'reviewing'
       ? [engine.corrector, engine.transcriber]
       : [engine.transcriber, engine.corrector];
   if (own === 'starting') return LOADING_TEXT[run.phase];

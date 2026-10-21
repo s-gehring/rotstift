@@ -115,6 +115,8 @@ export function ArbeitPage({
               profile={profile}
               alt={`${alt}, korrigiert`}
               hints={correction.readingHints}
+              comments={correction.comments}
+              summary={correction.summary}
               activeMark={activeMark}
               onMarkHover={onMarkHover}
               onMarkSelect={onMarkSelect}
