@@ -22,8 +22,27 @@ describe('findTextForm', () => {
     expect(findTextForm('ERÖRTERUNG')?.name).toBe('Lineare Erörterung');
   });
 
+  it.each([
+    ['Gedichtinterpretation', 'Textinterpretation'],
+    ['Pro-Contra Erörterung', 'Dialektische Erörterung'],
+    ['Filmkritik', 'Rezension'],
+    ['Stellungnahme', 'Kommentar'],
+    ['Ergebnisprotokoll', 'Protokoll'],
+    ['Summary', 'Zusammenfassung'],
+    ['resume', 'Zusammenfassung'],
+    ['RESEÑA', 'Rezension'],
+    ['Lettre formelle', 'Formal letter'],
+    ['opinion essay', 'Essay'],
+    ['Correo electronico', 'E-Mail'],
+    ['Personenbeschreibung', 'Personenbeschreibung'],
+    ['Bildbeschreibung', 'Bildbeschreibung'],
+  ])('finds %s as %s', (name, form) => {
+    expect(findTextForm(name)?.name).toBe(form);
+  });
+
   it('returns null for unknown names', () => {
     expect(findTextForm('Gedicht')).toBeNull();
+    expect(findTextForm('Kochrezept')).toBeNull();
     expect(findTextForm('')).toBeNull();
   });
 });
