@@ -10,12 +10,24 @@ import type { ImportPage } from '../import/pages.ts';
 import { createRunner, type Runner } from '../pipeline/runner.ts';
 import type { PageTranscriber, TranscribeResult } from '../pipeline/transcriber.ts';
 import { saveCsv } from '../results/save-csv.ts';
-import type { Toasts } from '../ui/Toast.tsx';
+import { DEUTSCH } from '../annotations/profile.ts';
+import { setupReview } from '../review/test-support.ts';
+import type { ToastOptions, Toasts } from '../ui/Toast.tsx';
+import { cancelExport } from './export-job.ts';
 import { ExportMenu } from './ExportMenu.tsx';
-import type { SaveOutcome } from './save-file.ts';
-import { saveClassPdf, saveWordCountPdf, type SavePdfOptions } from './save-pdf.ts';
+import { canSaveFiles, type SaveOutcome } from './save-file.ts';
+import {
+  saveClassPdf,
+  saveCorrectedPdf,
+  saveWordCountPdf,
+  type SavePdfOptions,
+} from './save-pdf.ts';
 
 vi.mock('../results/save-csv.ts', () => ({ saveCsv: vi.fn<() => void>() }));
+vi.mock('./save-file.ts', async (original) => ({
+  ...(await original<typeof import('./save-file.ts')>()),
+  canSaveFiles: vi.fn<() => boolean>(),
+}));
 vi.mock('./save-pdf.ts', () => ({
   saveClassPdf: vi.fn<() => void>(),
   saveWordCountPdf: vi.fn<() => void>(),
@@ -91,16 +103,20 @@ function firstInput<T>(mock: { mock: { calls: readonly (readonly [T, ...unknown[
 let container: HTMLElement;
 let root: Root;
 let show: ReturnType<typeof vi.fn<Toasts['show']>>;
+let dismiss: ReturnType<typeof vi.fn<Toasts['dismiss']>>;
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(canSaveFiles).mockReturnValue(true);
   show = vi.fn<Toasts['show']>();
+  dismiss = vi.fn<Toasts['dismiss']>();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
 });
 
 afterEach(() => {
+  cancelExport();
   act(() => root.unmount());
   container.remove();
 });
@@ -118,7 +134,7 @@ function render(runner: Runner, options: Options = {}) {
         value={testAppModel({
           importState: { arbeiten },
           work: testWork({ count: { runner, state: runner.getState() } }),
-          toasts: testToasts({ show }),
+          toasts: testToasts({ show, dismiss }),
           ...(options.run !== undefined && { run: options.run }),
         })}
       >
@@ -183,9 +199,16 @@ const flush = () =>
     await Promise.resolve();
   });
 
-const progressText = () => container.querySelector('.export-progress-text')?.textContent;
-const cancelButton = () =>
-  container.querySelector<HTMLButtonElement>('button[aria-label="Export abbrechen"]');
+const hintOf = (label: string) => item(label).getAttribute('title');
+
+const lastShow = (): [string, ToastOptions | undefined] => {
+  const call = show.mock.calls.at(-1);
+  if (call === undefined) throw new Error('Keine Meldung');
+  return [call[0], call[1]];
+};
+
+const messages = () =>
+  show.mock.calls.filter(([, options]) => options?.progress === undefined).map(([text]) => text);
 
 describe('the export menu without counted pages', () => {
   it('offers the exports but keeps them disabled', () => {
@@ -300,9 +323,7 @@ describe('the PDF export', () => {
       ['wordCount', 'Anna', 2],
       ['wordCount', 'Ben', 1],
     ]);
-    expect(show).toHaveBeenCalledExactlyOnceWith('Gespeichert als „Klasse.pdf“.', {
-      tone: 'info',
-    });
+    expect(lastShow()).toEqual(['Gespeichert als „Klasse.pdf“.', { tone: 'info' }]);
   });
 
   it('saves the word count PDF of one Arbeit with its counted pages', async () => {
@@ -314,7 +335,7 @@ describe('the PDF export', () => {
     expect(input.title).toBe('Ben');
     expect(input.pages).toHaveLength(1);
     expect(input.words).toEqual([1]);
-    expect(show).toHaveBeenCalledExactlyOnceWith('Gespeichert als „Ben.pdf“.', { tone: 'info' });
+    expect(lastShow()).toEqual(['Gespeichert als „Ben.pdf“.', { tone: 'info' }]);
   });
 
   it('lists the PDF of one Arbeit before the class exports', async () => {
@@ -332,37 +353,41 @@ describe('the PDF export', () => {
     await counted({ arbeitId: 'ben' }, [2]);
     openMenu();
     expect(isDisabled('Diese Arbeit als PDF')).toBe(true);
+    expect(hintOf('Diese Arbeit als PDF')).toBe('Diese Arbeit ist noch nicht gezählt');
     expect(isDisabled('Klassen-PDF')).toBe(false);
   });
 
-  it('shows progress, blocks the menu and returns the focus afterwards', async () => {
+  it('shows the progress in a toast with a cancel action and blocks further exports', async () => {
     const save = pendingSave();
     vi.mocked(saveClassPdf).mockImplementation(save.implementation);
     await counted();
     openMenu();
     act(() => item('Klassen-PDF').click());
 
-    expect(progressText()).toBe('PDF wird vorbereitet …');
-    expect(container.querySelector('.export-progress-text')?.getAttribute('role')).toBe('status');
-    const bar = container.querySelector('[role=progressbar]');
-    expect(bar?.hasAttribute('aria-valuenow')).toBe(false);
-    expect(trigger().disabled).toBe(true);
-    expect(document.activeElement).toBe(cancelButton());
+    const [preparing, first] = lastShow();
+    expect(preparing).toBe('PDF wird vorbereitet …');
+    expect(first?.key).toBe('export');
+    expect(first?.progress).toEqual({ value: null, max: 1 });
+    expect(first?.action?.label).toBe('Abbrechen');
 
     act(() => save.options()?.onProgress?.(2, 3));
-    expect(progressText()).toBe('Seite 2 von 3');
-    expect(bar?.getAttribute('aria-valuenow')).toBe('2');
-    expect(bar?.getAttribute('aria-valuemax')).toBe('3');
+    const [text, options] = lastShow();
+    expect(text).toBe('PDF wird erstellt: Seite 2 von 3');
+    expect(options?.key).toBe('export');
+    expect(options?.progress).toEqual({ value: 2, max: 3 });
+
+    openMenu();
+    expect(isDisabled('Klassen-PDF')).toBe(true);
+    expect(hintOf('Klassen-PDF')).toBe('Ein Export läuft gerade');
+    expect(isDisabled('Tabelle kopieren')).toBe(true);
 
     save.pending.resolve({ state: 'saved', fileName: 'Klasse.pdf' });
     await flush();
-    expect(container.querySelector('[role=progressbar]')).toBeNull();
-    expect(cancelButton()).toBeNull();
-    expect(trigger().disabled).toBe(false);
-    expect(document.activeElement).toBe(trigger());
+    expect(lastShow()).toEqual(['Gespeichert als „Klasse.pdf“.', { tone: 'info' }]);
+    expect(isDisabled('Klassen-PDF')).toBe(false);
   });
 
-  it('says that a location is being chosen and offers no useless cancel while the dialog is open', async () => {
+  it('hides the progress while the save dialog is open and stays silent when it is cancelled', async () => {
     const save = pendingSave();
     vi.mocked(saveClassPdf).mockImplementation(save.implementation);
     await counted();
@@ -370,52 +395,41 @@ describe('the PDF export', () => {
     act(() => item('Klassen-PDF').click());
     act(() => save.options()?.onProgress?.(3, 3));
     act(() => save.options()?.onPhase?.('saving'));
-
-    expect(progressText()).toBe('Speicherort wählen …');
-    expect(cancelButton()?.disabled).toBe(true);
+    expect(dismiss).toHaveBeenCalledOnce();
 
     save.pending.resolve({ state: 'cancelled' });
     await flush();
-    expect(container.querySelector('.export-progress')).toBeNull();
-    expect(trigger().disabled).toBe(false);
-    expect(show).not.toHaveBeenCalled();
+    expect(messages()).toEqual([]);
+    openMenu();
+    expect(isDisabled('Klassen-PDF')).toBe(false);
   });
 
-  it('aborts the export on request and says so', async () => {
+  it('aborts the export from the toast and says so', async () => {
     const save = pendingSave();
     vi.mocked(saveClassPdf).mockImplementation(save.implementation);
     await counted();
     openMenu();
     act(() => item('Klassen-PDF').click());
-    act(() => cancelButton()?.click());
+    act(() => lastShow()[1]?.action?.onAction());
     expect(save.options()?.signal?.aborted).toBe(true);
 
     save.pending.resolve({ state: 'cancelled' });
     await flush();
-    expect(show).toHaveBeenCalledExactlyOnceWith('Das Speichern wurde abgebrochen.');
-    expect(container.querySelector('.export-progress')).toBeNull();
+    expect(messages()).toEqual(['Export abgebrochen.']);
   });
 
-  it('aborts a running export when the menu disappears', async () => {
+  it('keeps a running export when the menu disappears, for example after leaving the Arbeit', async () => {
     const save = pendingSave();
     vi.mocked(saveClassPdf).mockImplementation(save.implementation);
     await counted();
     openMenu();
     act(() => item('Klassen-PDF').click());
-    expect(save.options()?.signal?.aborted).toBe(false);
 
     act(() => root.render(<></>));
-    expect(save.options()?.signal?.aborted).toBe(true);
-    save.pending.resolve({ state: 'cancelled' });
+    expect(save.options()?.signal?.aborted).toBe(false);
+    save.pending.resolve({ state: 'saved', fileName: 'Klasse.pdf' });
     await flush();
-  });
-
-  it('stays silent when the save dialog is cancelled', async () => {
-    vi.mocked(saveClassPdf).mockResolvedValue({ state: 'cancelled' });
-    await counted();
-    await choose('Klassen-PDF');
-    expect(saveClassPdf).toHaveBeenCalledOnce();
-    expect(show).not.toHaveBeenCalled();
+    expect(messages()).toEqual(['Gespeichert als „Klasse.pdf“.']);
   });
 
   it.each([
@@ -432,9 +446,84 @@ describe('the PDF export', () => {
     vi.mocked(saveClassPdf).mockResolvedValue(outcome);
     await counted();
     await choose('Klassen-PDF');
-    expect(show).toHaveBeenCalledOnce();
-    const [message, options] = show.mock.calls[0] ?? [];
+    const [message, options] = lastShow();
     expect(message).toContain(expected);
     expect(options).toEqual({ tone: 'error' });
+  });
+});
+
+describe('exports that are not possible', () => {
+  it('grey out saving files in the browser but still copy the table', async () => {
+    vi.mocked(canSaveFiles).mockReturnValue(false);
+    await counted({ arbeitId: 'anna' });
+    openMenu();
+    for (const label of ['Diese Arbeit als PDF', 'Klassen-PDF', 'Tabelle (CSV)']) {
+      expect(isDisabled(label)).toBe(true);
+      expect(hintOf(label)).toBe('Nur in der Rotstift-App');
+    }
+    expect(isDisabled('Tabelle kopieren')).toBe(false);
+    expect(hintOf('Tabelle kopieren')).toBeNull();
+  });
+
+  it('say why while a run is going on or before anything is counted', async () => {
+    await counted({ run: { running: true } });
+    openMenu();
+    expect(hintOf('Klassen-PDF')).toBe('Erst nach dem Lauf möglich');
+    act(() => root.unmount());
+    root = createRoot(container);
+    mount();
+    openMenu();
+    expect(hintOf('Tabelle (CSV)')).toBe('Noch nichts gezählt');
+  });
+});
+
+async function corrected(preview = false) {
+  const { pages, flow, runner, corrector } = setupReview(['a', 'b']);
+  const [a, b] = pages;
+  if (a === undefined || b === undefined) throw new Error('missing pages');
+  if (preview) flow.setCorrector(corrector, true);
+  await flow.start(pages, DEUTSCH);
+  const arbeiten: Arbeit[] = [
+    { id: 'ada', name: 'Ada', pages: [a] },
+    { id: 'ben', name: 'Ben', pages: [b] },
+  ];
+  act(() =>
+    root.render(
+      <AppProvider
+        value={testAppModel({
+          importState: { arbeiten },
+          work: testWork({
+            count: { runner, state: runner.getState() },
+            review: { flow, state: flow.getState() },
+          }),
+          toasts: testToasts({ show, dismiss }),
+        })}
+      >
+        <ExportMenu arbeitId="ada" />
+      </AppProvider>,
+    ),
+  );
+}
+
+describe('the corrected PDF', () => {
+  it('saves the corrected Arbeit with its statistics and the review footer', async () => {
+    vi.mocked(saveCorrectedPdf).mockResolvedValue({ state: 'saved', fileName: 'Ada.pdf' });
+    await corrected();
+    await choose('Diese Arbeit als PDF');
+    const input = firstInput(vi.mocked(saveCorrectedPdf));
+    expect(input.title).toBe('Ada');
+    expect(input.statistics.errors).toBe(1);
+    expect(vi.mocked(saveCorrectedPdf).mock.calls[0]?.[1]?.footer).toBe(
+      'Vorschau: automatisch erstellte Korrektur, bitte prüfen',
+    );
+    expect(lastShow()).toEqual(['Gespeichert als „Ada.pdf“.', { tone: 'info' }]);
+  });
+
+  it('keeps demo corrections out of the PDFs', async () => {
+    await corrected(true);
+    openMenu();
+    expect(hintOf('Diese Arbeit als PDF')).toBe('Nicht mit Demo-Korrekturen');
+    expect(hintOf('Klassen-PDF')).toBe('Nicht mit Demo-Korrekturen');
+    expect(isDisabled('Tabelle (CSV)')).toBe(false);
   });
 });

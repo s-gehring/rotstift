@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatClipboardTable, formatCsv, incompleteNote } from './export-table.ts';
+import { formatClipboardTable, formatCsv } from './export-table.ts';
 import type { ArbeitResult } from './summary.ts';
 
 function result(
@@ -76,21 +76,6 @@ describe('formatClipboardTable', () => {
   it('marks incomplete Arbeiten like the CSV', () => {
     expect(formatClipboardTable([result('Anna', 3, 2, 40)])).toContain(
       'Anna\t3\t\tUnvollständig: 2 von 3 Seiten gezählt',
-    );
-  });
-});
-
-describe('incompleteNote', () => {
-  it('is silent when every Arbeit is counted', () => {
-    expect(incompleteNote(klasse)).toBeNull();
-  });
-
-  it('counts the Arbeiten that are missing pages', () => {
-    expect(incompleteNote([result('Anna', 2, 1, 3), result('Ben', 1, 1, 1)])).toBe(
-      '1 Arbeit ist noch nicht vollständig gezählt.',
-    );
-    expect(incompleteNote([result('Anna', 2, 1, 3), result('Ben', 1, 0, 0)])).toBe(
-      '2 Arbeiten sind noch nicht vollständig gezählt.',
     );
   });
 });

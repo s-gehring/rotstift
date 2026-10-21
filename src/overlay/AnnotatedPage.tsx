@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useMemo, useState, type KeyboardEvent } from 'react';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import type { ReadingHint } from '../correction/uncertain-reading.ts';
@@ -17,10 +17,44 @@ export interface AnnotatedPageProps {
   readonly alt?: string;
   readonly className?: string;
   readonly hints?: readonly ReadingHint[];
-  readonly onToggleHint?: (index: number) => void;
+  readonly activeMark?: string | null;
+  readonly onMarkHover?: (key: string | null) => void;
+  readonly onMarkSelect?: (key: string) => void;
+  readonly activeHint?: number | null;
+  readonly onHintHover?: (index: number | null) => void;
+  readonly onHintSelect?: (index: number) => void;
 }
 
 const HINT_COLOR = '#5f6368';
+
+export function markKey(line: number, mark: number): string {
+  return `${line}:${mark}`;
+}
+
+interface MarkGroup {
+  readonly key: string;
+  readonly items: OverlayItem[];
+}
+
+function groupByMark(items: readonly OverlayItem[]): (MarkGroup | OverlayItem)[] {
+  const groups: (MarkGroup | OverlayItem)[] = [];
+  const byKey = new Map<string, MarkGroup>();
+  for (const item of items) {
+    if (item.mark === null) {
+      groups.push(item);
+      continue;
+    }
+    const key = markKey(item.line, item.mark);
+    let group = byKey.get(key);
+    if (group === undefined) {
+      group = { key, items: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups;
+}
 
 export function AnnotatedPage({
   imageUrl,
@@ -31,16 +65,24 @@ export function AnnotatedPage({
   alt = '',
   className,
   hints,
-  onToggleHint,
+  activeMark = null,
+  onMarkHover,
+  onMarkSelect,
+  activeHint = null,
+  onHintHover,
+  onHintSelect,
 }: AnnotatedPageProps) {
   const model = useMemo(
     () => layoutOverlay(transcript, { page: size, profile, ...(locator ? { locator } : {}) }),
     [transcript, size, profile, locator],
   );
+  const groups = useMemo(() => groupByMark(model.items), [model]);
+  const interactive = onMarkHover !== undefined || onMarkSelect !== undefined;
   return (
     <div
       className={className === undefined ? 'annotated-page' : `annotated-page ${className}`}
       style={{ aspectRatio: `${size.width} / ${size.height}` }}
+      data-active={activeMark ?? undefined}
     >
       <img className="annotated-page__image" src={imageUrl} alt={alt} draggable={false} />
       <svg
@@ -58,9 +100,31 @@ export function AnnotatedPage({
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          {model.items.map((item, index) => (
-            <OverlayElement key={index} item={item} />
-          ))}
+          {groups.map((group, index) =>
+            !('items' in group) ? (
+              <OverlayElement key={index} item={group} />
+            ) : (
+              <g
+                key={group.key}
+                className={
+                  group.key === activeMark
+                    ? 'annotated-page__mark is-active'
+                    : 'annotated-page__mark'
+                }
+                data-mark-key={group.key}
+                {...(interactive && {
+                  'data-interactive': true,
+                  onPointerEnter: () => onMarkHover?.(group.key),
+                  onPointerLeave: () => onMarkHover?.(null),
+                  onClick: () => onMarkSelect?.(group.key),
+                })}
+              >
+                {group.items.map((item, position) => (
+                  <OverlayElement key={position} item={item} hitArea={interactive} />
+                ))}
+              </g>
+            ),
+          )}
         </g>
       </svg>
       {hints !== undefined && hints.length > 0 && (
@@ -68,8 +132,10 @@ export function AnnotatedPage({
           size={size}
           transcript={transcript}
           hints={hints}
+          active={activeHint}
           {...(locator && { locator })}
-          {...(onToggleHint && { onToggleHint })}
+          {...(onHintHover && { onHover: onHintHover })}
+          {...(onHintSelect && { onSelect: onHintSelect })}
         />
       )}
     </div>
@@ -81,19 +147,23 @@ function HintLayer({
   transcript,
   hints,
   locator,
-  onToggleHint,
+  active,
+  onHover,
+  onSelect,
 }: {
   readonly size: PageSize;
   readonly transcript: Transcript;
   readonly hints: readonly ReadingHint[];
   readonly locator?: TextLocator;
-  readonly onToggleHint?: (index: number) => void;
+  readonly active: number | null;
+  readonly onHover?: (index: number | null) => void;
+  readonly onSelect?: (index: number) => void;
 }) {
   const spots = useMemo(
-    () => layoutHints(transcript, hints, locator),
+    () => layoutHints(transcript, hints, locator).filter((spot) => spot.status === 'open'),
     [transcript, hints, locator],
   );
-  const [selected, setSelected] = useState<number | null>(null);
+  const [focused, setFocused] = useState<number | null>(null);
   return (
     <svg
       className="annotated-page__hints"
@@ -106,64 +176,51 @@ function HintLayer({
         <HintElement
           key={spot.index}
           spot={spot}
-          selected={selected === spot.index}
-          onSelect={(on) => setSelected(on ? spot.index : null)}
-          onToggle={() => onToggleHint?.(spot.index)}
+          selected={active === spot.index || focused === spot.index}
+          onFocus={(on) => setFocused(on ? spot.index : null)}
+          onHover={(on) => onHover?.(on ? spot.index : null)}
+          onSelect={() => onSelect?.(spot.index)}
         />
       ))}
     </svg>
   );
 }
 
-function hintLabel(spot: HintSpot): string {
-  const state = spot.status === 'open' ? 'Unsicher gelesen' : 'Als Fehler übernommen';
-  const action = spot.status === 'open' ? 'Als Fehler übernehmen' : 'Wieder als Hinweis zeigen';
-  return `${state}: ${markText(spot.mark)}. ${action}`;
-}
-
 function HintElement({
   spot,
   selected,
+  onFocus,
+  onHover,
   onSelect,
-  onToggle,
 }: {
   readonly spot: HintSpot;
   readonly selected: boolean;
-  readonly onSelect: (selected: boolean) => void;
-  readonly onToggle: () => void;
+  readonly onFocus: (focused: boolean) => void;
+  readonly onHover: (hovered: boolean) => void;
+  readonly onSelect: () => void;
 }) {
-  const pointer = useRef(false);
   const stroke = Math.max(1.5, spot.height * 0.05);
   const fontSize = Math.max(10, spot.height * 0.55);
   const onKeyDown = (event: KeyboardEvent<SVGGElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
-    onToggle();
+    onSelect();
   };
   return (
     <g
       className="hint-spot"
       role="button"
       tabIndex={0}
-      aria-label={hintLabel(spot)}
+      aria-label={`Unsicher gelesen: ${markText(spot.mark)}`}
       data-status={spot.status}
       data-hint={spot.index}
-      onPointerDown={() => {
-        pointer.current = true;
-      }}
-      onClick={() => {
-        pointer.current = false;
-        if (selected) onToggle();
-        else onSelect(true);
-      }}
+      data-selected={selected || undefined}
+      onClick={onSelect}
       onKeyDown={onKeyDown}
-      onFocus={() => {
-        if (!pointer.current) onSelect(true);
-      }}
-      onBlur={() => {
-        pointer.current = false;
-        onSelect(false);
-      }}
+      onPointerEnter={() => onHover(true)}
+      onPointerLeave={() => onHover(false)}
+      onFocus={() => onFocus(true)}
+      onBlur={() => onFocus(false)}
     >
       <rect
         className="hint-spot__area"
@@ -173,19 +230,17 @@ function HintElement({
         height={spot.height}
         fill="transparent"
       />
-      {spot.status === 'open' && (
-        <line
-          x1={spot.x}
-          x2={spot.x + spot.width}
-          y1={spot.underline}
-          y2={spot.underline}
-          stroke={HINT_COLOR}
-          strokeWidth={stroke}
-          strokeDasharray={`${stroke} ${stroke * 2}`}
-          strokeLinecap="round"
-        />
-      )}
-      {selected && spot.status === 'open' && (
+      <line
+        x1={spot.x}
+        x2={spot.x + spot.width}
+        y1={spot.underline}
+        y2={spot.underline}
+        stroke={HINT_COLOR}
+        strokeWidth={selected ? stroke * 1.6 : stroke}
+        strokeDasharray={`${stroke} ${stroke * 2}`}
+        strokeLinecap="round"
+      />
+      {selected && (
         <text
           className="hint-spot__suggestion"
           x={spot.x}
@@ -204,20 +259,37 @@ function HintElement({
   );
 }
 
-function OverlayElement({ item }: { readonly item: OverlayItem }) {
+function OverlayElement({
+  item,
+  hitArea = false,
+}: {
+  readonly item: OverlayItem;
+  readonly hitArea?: boolean;
+}) {
   if (item.kind === 'stroke') {
     return (
-      <path
-        d={item.d}
-        fill="none"
-        stroke={INK_COLOR}
-        strokeWidth={item.width}
-        data-role={item.role}
-        data-line={item.line}
-        data-mark={item.mark}
-      >
-        <title>{item.title}</title>
-      </path>
+      <>
+        {hitArea && (
+          <path
+            className="annotated-page__hit"
+            d={item.d}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={Math.max(item.width * 8, 24)}
+          />
+        )}
+        <path
+          d={item.d}
+          fill="none"
+          stroke={INK_COLOR}
+          strokeWidth={item.width}
+          data-role={item.role}
+          data-line={item.line}
+          data-mark={item.mark}
+        >
+          <title>{item.title}</title>
+        </path>
+      </>
     );
   }
   return (

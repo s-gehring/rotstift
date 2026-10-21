@@ -115,6 +115,38 @@ describe('Toast', () => {
     show('Das PDF konnte nicht gespeichert werden.', { tone: 'error' });
     expect(container.querySelector('.toast')?.classList.contains('is-error')).toBe(true);
   });
+
+  it('updates a toast with the same key in place and keeps a progress toast until it is replaced', () => {
+    const onAction = vi.fn<() => void>();
+    show('PDF wird erstellt', {
+      key: 'export',
+      progress: { value: 1, max: 4 },
+      action: { label: 'Abbrechen', onAction },
+    });
+    const cancel = button('Abbrechen');
+    cancel?.focus();
+    show('PDF wird erstellt', {
+      key: 'export',
+      progress: { value: 2, max: 4 },
+      action: { label: 'Abbrechen', onAction },
+    });
+    expect(button('Abbrechen')).toBe(cancel);
+    expect(document.activeElement).toBe(cancel);
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe(
+      '2',
+    );
+    act(() => {
+      vi.advanceTimersByTime(TOAST_ACTION_DURATION_MS * 10);
+    });
+    expect(region()?.textContent).toContain('PDF wird erstellt');
+
+    show('Gespeichert als „Ada.pdf“.');
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(TOAST_DURATION_MS);
+    });
+    expect(region()?.textContent).toBe('');
+  });
 });
 
 function click(element: Element | undefined) {

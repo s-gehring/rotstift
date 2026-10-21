@@ -1,164 +1,202 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useApp } from '../app/app-context.tsx';
 import type { Arbeit } from '../import/arbeiten.ts';
 import { CSV_FILE_NAME, formatClipboardTable, formatCsv } from '../results/export-table.ts';
 import { createPdfInput } from '../results/pdf-input.ts';
 import { saveCsv } from '../results/save-csv.ts';
 import { saveMessage } from '../results/save-message.ts';
-import { buildResults, classTotals } from '../results/summary.ts';
+import { buildResults, classTotals, type ArbeitResult } from '../results/summary.ts';
 import { createReviewExport, PDF_FOOTER } from '../review/export-input.ts';
 import { summarizeArbeit } from '../review/summary.ts';
-import type { MenuEntry } from '../ui/Menu.tsx';
-import type { SaveOutcome } from './save-file.ts';
+import type { MenuAction } from '../ui/Menu.tsx';
+import { beginExport, cancelExport, endExport, useExportBusy } from './export-job.ts';
+import { canSaveFiles, type SaveOutcome } from './save-file.ts';
 import {
   saveClassPdf,
   saveCorrectedPdf,
   saveWordCountPdf,
   type SavePdfOptions,
-  type SavePhase,
 } from './save-pdf.ts';
-
-export interface ExportJob {
-  readonly done: number;
-  readonly total: number;
-  readonly phase: SavePhase;
-}
 
 type JobOptions = Required<Pick<SavePdfOptions, 'signal' | 'onProgress' | 'onPhase'>>;
 
-const ABORTED = 'Das Speichern wurde abgebrochen.';
+export const EXPORT_HINT = {
+  busy: 'Ein Export läuft gerade',
+  running: 'Erst nach dem Lauf möglich',
+  desktop: 'Nur in der Rotstift-App',
+  notCounted: 'Noch nichts gezählt',
+  arbeitNotCounted: 'Diese Arbeit ist noch nicht gezählt',
+  incomplete: 'Noch nicht alle Seiten korrigiert',
+  noneComplete: 'Noch keine Arbeit vollständig korrigiert',
+  preview: 'Nicht mit Demo-Korrekturen',
+} as const;
 
-export function useExports(arbeitId?: string) {
+const TOAST_KEY = 'export';
+const ABORTED = 'Export abgebrochen.';
+const COPIED = 'Tabelle kopiert.';
+const COPY_FAILED = 'Kopieren war nicht möglich.';
+
+export function progressText(done: number, total: number): string {
+  return total === 0 ? 'PDF wird vorbereitet …' : `PDF wird erstellt: Seite ${done} von ${total}`;
+}
+
+function firstHint(...hints: readonly (string | false)[]): string | null {
+  return hints.find((hint): hint is string => hint !== false) ?? null;
+}
+
+function action(
+  label: string,
+  icon: MenuAction['icon'],
+  hint: string | null,
+  onSelect: () => void,
+): MenuAction {
+  return {
+    label,
+    ...(icon !== undefined && { icon }),
+    onSelect,
+    ...(hint !== null && { disabled: true, hint }),
+  };
+}
+
+export function useExports(arbeitId?: string): MenuAction[] {
   const { importState, work, toasts, run } = useApp();
   const { arbeiten } = importState;
   const entries = work.count.state.entries;
   const review = work.review.state;
-  const [job, setJob] = useState<ExportJob | null>(null);
-  const [controller, setController] = useState<AbortController | null>(null);
+  const busy = useExportBusy();
   const pdfInput = useMemo(() => createPdfInput(), []);
   const exporter = useMemo(() => createReviewExport(), []);
-  useEffect(() => (controller === null ? undefined : () => controller.abort()), [controller]);
+  const { show, dismiss } = toasts;
 
-  const { show } = toasts;
   const report = (outcome: SaveOutcome, extension: 'csv' | 'pdf') => {
     const text = saveMessage(outcome, extension);
-    if (text !== null) show(text, { tone: outcome.state === 'saved' ? 'info' : 'error' });
+    if (text === null) dismiss();
+    else show(text, { tone: outcome.state === 'saved' ? 'info' : 'error' });
   };
 
+  const progress = (done: number, total: number) =>
+    show(progressText(done, total), {
+      key: TOAST_KEY,
+      progress: { value: total === 0 ? null : done, max: Math.max(total, 1) },
+      action: { label: 'Abbrechen', onAction: cancelExport },
+    });
+
   const runPdf = (start: (options: JobOptions) => Promise<SaveOutcome>) => {
-    if (controller !== null) return;
-    const next = new AbortController();
-    setController(next);
-    setJob({ done: 0, total: 0, phase: 'building' });
+    const job = beginExport();
+    if (job === null) return;
+    progress(0, 0);
     void start({
-      signal: next.signal,
-      onProgress: (done, total) => setJob({ done, total, phase: 'building' }),
-      onPhase: (phase) => setJob((current) => (current === null ? current : { ...current, phase })),
+      signal: job.signal,
+      onProgress: progress,
+      onPhase: (phase) => {
+        if (phase === 'saving') dismiss();
+      },
     }).then((outcome) => {
-      setController(null);
-      setJob(null);
-      if (next.signal.aborted && outcome.state === 'cancelled') show(ABORTED);
+      endExport(job);
+      if (job.signal.aborted && outcome.state === 'cancelled') show(ABORTED);
       else report(outcome, 'pdf');
     });
   };
 
   const results = buildResults(arbeiten, entries);
-  const totals = classTotals(results);
-  const counted = totals.countedPages > 0;
+  const counted = classTotals(results).countedPages > 0;
   const profile = Object.keys(review.pages).length > 0 ? review.profile : null;
-  const exportable = (candidate: Arbeit) => {
-    if (profile === null) return false;
-    const summary = summarizeArbeit(candidate, review, entries);
-    return summary.complete && !summary.preview && summary.statistics !== null;
-  };
-  const blocked = run.running || job !== null;
+  const summaries = arbeiten.map((candidate) => summarizeArbeit(candidate, review, entries));
+  const exportable = summaries.filter(
+    (summary) => summary.complete && !summary.preview && summary.statistics !== null,
+  );
+  const blocked = firstHint(busy && EXPORT_HINT.busy, run.running && EXPORT_HINT.running);
+  const fileBlocked = blocked ?? (canSaveFiles() ? null : EXPORT_HINT.desktop);
 
-  const items: MenuEntry[] = [];
+  const arbeitItem = (target: Arbeit, result: ArbeitResult | undefined): MenuAction => {
+    const summary = summarizeArbeit(target, review, entries);
+    const countedArbeit = result !== undefined && result.rows.some((row) => row.words !== null);
+    const hint =
+      fileBlocked ??
+      (profile === null
+        ? firstHint(!countedArbeit && EXPORT_HINT.arbeitNotCounted)
+        : firstHint(
+            summary.preview && EXPORT_HINT.preview,
+            (!summary.complete || summary.statistics === null) && EXPORT_HINT.incomplete,
+          ));
+    return action('Diese Arbeit als PDF', 'file', hint, () => {
+      const corrected =
+        profile === null ? null : exporter.correctedArbeit(target, review, entries, profile);
+      if (corrected !== null) {
+        runPdf((options) =>
+          saveCorrectedPdf(corrected, {
+            ...options,
+            encodePage: exporter.encodePage,
+            footer: PDF_FOOTER,
+          }),
+        );
+      } else if (result !== undefined) {
+        runPdf((options) =>
+          saveWordCountPdf(pdfInput.wordCountArbeit(target, result), {
+            ...options,
+            encodePage: pdfInput.encodePage,
+          }),
+        );
+      }
+    });
+  };
+
+  const items: MenuAction[] = [];
   const arbeit = arbeiten.find((candidate) => candidate.id === arbeitId);
   if (arbeit !== undefined) {
-    const result = results.find((candidate) => candidate.id === arbeit.id);
-    const countedArbeit = result !== undefined && result.rows.some((row) => row.words !== null);
-    items.push({
-      label: 'Diese Arbeit als PDF',
-      icon: 'file',
-      disabled: blocked || (profile === null ? !countedArbeit : !exportable(arbeit)),
-      onSelect: () => {
-        const correctedArbeit =
-          profile === null ? null : exporter.correctedArbeit(arbeit, review, entries, profile);
-        if (correctedArbeit !== null) {
-          runPdf((options) =>
-            saveCorrectedPdf(correctedArbeit, {
-              ...options,
-              encodePage: exporter.encodePage,
-              footer: PDF_FOOTER,
-            }),
-          );
-        } else if (result !== undefined) {
-          runPdf((options) =>
-            saveWordCountPdf(pdfInput.wordCountArbeit(arbeit, result), {
-              ...options,
-              encodePage: pdfInput.encodePage,
-            }),
-          );
-        }
-      },
-    });
+    items.push(
+      arbeitItem(
+        arbeit,
+        results.find((candidate) => candidate.id === arbeit.id),
+      ),
+    );
+  }
+
+  const tableHint = counted ? null : EXPORT_HINT.notCounted;
+  let classHint: string | null = tableHint;
+  if (profile !== null && exportable.length === 0) {
+    classHint = summaries.some((summary) => summary.preview)
+      ? EXPORT_HINT.preview
+      : EXPORT_HINT.noneComplete;
+  } else if (profile !== null) {
+    classHint = null;
   }
 
   items.push(
-    {
-      label: 'Klassen-PDF',
-      icon: 'file',
-      disabled: blocked || (profile === null ? !counted : !arbeiten.some(exportable)),
-      onSelect: () => {
-        if (profile !== null) {
-          const included = exporter.classArbeiten(arbeiten, review, entries, profile);
-          runPdf((options) =>
-            saveClassPdf(included, {
-              ...options,
-              encodePage: exporter.encodePage,
-              footer: PDF_FOOTER,
-            }),
-          );
-          return;
-        }
+    action('Klassen-PDF', 'file', fileBlocked ?? classHint, () => {
+      if (profile !== null) {
+        const included = exporter.classArbeiten(arbeiten, review, entries, profile);
         runPdf((options) =>
-          saveClassPdf(
-            results.flatMap((entry) => {
-              const source = arbeiten.find((candidate) => candidate.id === entry.id);
-              return source === undefined || entry.rows.length === 0
-                ? []
-                : [{ kind: 'wordCount' as const, ...pdfInput.wordCountArbeit(source, entry) }];
-            }),
-            { ...options, encodePage: pdfInput.encodePage },
-          ),
+          saveClassPdf(included, {
+            ...options,
+            encodePage: exporter.encodePage,
+            footer: PDF_FOOTER,
+          }),
         );
-      },
-    },
-    {
-      label: 'Tabelle (CSV)',
-      icon: 'table',
-      disabled: blocked || !counted,
-      onSelect: () => {
-        void saveCsv(formatCsv(results), CSV_FILE_NAME).then((outcome) => report(outcome, 'csv'));
-      },
-    },
-    {
-      label: 'Tabelle kopieren',
-      icon: 'copy',
-      disabled: blocked || !counted,
-      onSelect: () => {
-        navigator.clipboard.writeText(formatClipboardTable(results)).then(
-          () => show('Tabelle kopiert.'),
-          () => show('Kopieren war nicht möglich.', { tone: 'error' }),
-        );
-      },
-    },
+        return;
+      }
+      runPdf((options) =>
+        saveClassPdf(
+          results.flatMap((entry) => {
+            const source = arbeiten.find((candidate) => candidate.id === entry.id);
+            return source === undefined || entry.rows.length === 0
+              ? []
+              : [{ kind: 'wordCount' as const, ...pdfInput.wordCountArbeit(source, entry) }];
+          }),
+          { ...options, encodePage: pdfInput.encodePage },
+        ),
+      );
+    }),
+    action('Tabelle (CSV)', 'table', fileBlocked ?? tableHint, () => {
+      void saveCsv(formatCsv(results), CSV_FILE_NAME).then((outcome) => report(outcome, 'csv'));
+    }),
+    action('Tabelle kopieren', 'copy', blocked ?? tableHint, () => {
+      navigator.clipboard.writeText(formatClipboardTable(results)).then(
+        () => show(COPIED),
+        () => show(COPY_FAILED, { tone: 'error' }),
+      );
+    }),
   );
 
-  return {
-    items,
-    job,
-    cancel: () => controller?.abort(),
-  };
+  return items;
 }

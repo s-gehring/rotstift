@@ -27,6 +27,10 @@ function isTooLarge(error: unknown): boolean {
   );
 }
 
+export function canSaveFiles(): boolean {
+  return isTauri();
+}
+
 function defaultInvoke(): Invoke | null {
   return isTauri() ? tauriInvoke : null;
 }
