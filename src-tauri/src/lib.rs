@@ -30,6 +30,7 @@ pub fn run() {
             llm::commands::llm_start_model,
             llm::commands::llm_probe_model,
             llm::commands::llm_stop,
+            llm::commands::llm_stop_if_idle,
             llm::commands::llm_status,
             llm::commands::llm_chat,
             llm::commands::llm_cancel,
