@@ -7,10 +7,12 @@ import { DEUTSCH } from '../src/annotations/profile.ts';
 import type { Bbox, Transcript } from '../src/annotations/transcript.ts';
 import { correctPage } from '../src/correction/correct-page.ts';
 import { createLlmCorrector } from '../src/correction/llm-corrector.ts';
+import { applyDewarp, planDewarp, toSourceBox, type DewarpPlan } from '../src/layout/dewarp.ts';
 import { readJpeg } from '../src/layout/image-files.ts';
 import { locateLines } from '../src/layout/locate-lines.ts';
 import { findStruckWords } from '../src/layout/strike.ts';
 import { iou } from '../src/layout/synthetic.ts';
+import type { RgbaImage } from '../src/layout/types.ts';
 import type { LlmClient } from '../src/llm/client.ts';
 import { correctorConfig } from '../src/llm/sidecar-corrector.ts';
 import { layoutOverlay } from '../src/overlay/layout.ts';
@@ -75,6 +77,8 @@ export interface PageStats {
   ruling?: string;
   expectedRuling?: string;
   locateMs?: number;
+  straightened?: boolean;
+  dewarpMs?: number;
   marks?: MarkStats;
 }
 
@@ -215,6 +219,13 @@ function markStats(
 
 function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+function straighten(image: RgbaImage): { plan: DewarpPlan | null; work: RgbaImage; ms: number } {
+  const started = performance.now();
+  const plan = planDewarp(image);
+  const work = plan === null ? image : applyDewarp(image, plan);
+  return { plan, work, ms: performance.now() - started };
 }
 
 function readMeta(dir: string | undefined, name: string): PageMeta {
@@ -420,6 +431,7 @@ async function main() {
       marks: { type: 'boolean', default: false },
       'no-wer': { type: 'boolean', default: false },
       paper: { type: 'string' },
+      dewarp: { type: 'boolean', default: false },
     },
   });
   if ((!values.ocr && !values.ideal) || !values.images || !values.truth || !values.out) {
@@ -478,11 +490,13 @@ async function main() {
       const truthText = readFileSync(truthFile, 'utf8').replaceAll(/~~\S+~~/gu, '');
       const hypothesis = lines.join('\n');
       const factor = meta.size ? image.width / meta.size[0] : 1;
+      const straight = values.dewarp ? straighten(image) : null;
+      const work = straight?.work ?? image;
       let crashed = false;
       const started = performance.now();
-      const layout: ReturnType<typeof locateLines> = (() => {
+      const located: ReturnType<typeof locateLines> = (() => {
         try {
-          return locateLines(image, lines);
+          return locateLines(work, lines);
         } catch (error) {
           crashed = true;
           console.log(`${page.name}: Zeilenzuordnung abgestürzt (${String(error)})`);
@@ -490,6 +504,16 @@ async function main() {
         }
       })();
       const locateMs = performance.now() - started;
+      const plan = straight?.plan ?? null;
+      const layout =
+        plan === null
+          ? located
+          : {
+              ...located,
+              lines: located.lines.map((line) =>
+                line == null ? line : { ...line, bbox: toSourceBox(plan, line.bbox, image) },
+              ),
+            };
       const matches = meta.lines ? matchLines(lines, meta.lines) : lines.map(() => -1);
       let matched = 0;
       let hits = 0;
@@ -514,7 +538,7 @@ async function main() {
       });
       let struck: number[][] = [];
       try {
-        struck = findStruckWords(image, lines).map((words) => [...words]);
+        struck = findStruckWords(work, lines).map((words) => [...words]);
       } catch (error) {
         crashed = true;
         console.log(`${page.name}: Strichsuche abgestürzt (${String(error)})`);
@@ -546,6 +570,7 @@ async function main() {
         ruling: layout.ruling?.kind ?? 'blank',
         expectedRuling: expectedRuling(values.paper ?? meta.paper),
         locateMs,
+        ...(straight === null ? {} : { straightened: plan !== null, dewarpMs: straight.ms }),
       };
       if (session !== null) {
         const bboxes = toBboxes(layout, lines.length);
@@ -594,6 +619,14 @@ async function main() {
       : [];
   console.log(`\n${LAYOUT_HEADER}`);
   console.log([...layoutRows, layoutRow('alle', done)].join('\n'));
+  const timed = done.flatMap((page) => (page.dewarpMs === undefined ? [] : [page.dewarpMs]));
+  if (timed.length > 0) {
+    const sorted = timed.toSorted((a, b) => a - b);
+    const straightened = done.filter((page) => page.straightened === true).length;
+    console.log(
+      `\nBegradigt: ${straightened} von ${timed.length} Seiten, Begradigen im Median ${(sorted[Math.floor(sorted.length / 2)] ?? 0).toFixed(0)} ms, höchstens ${(sorted.at(-1) ?? 0).toFixed(0)} ms`,
+    );
+  }
 }
 
 if (import.meta.main) {

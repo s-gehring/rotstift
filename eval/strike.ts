@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { applyDewarp, planDewarp } from '../src/layout/dewarp.ts';
 import { readJpeg } from '../src/layout/image-files.ts';
 import { findStruckWords, STRIKE_OPTIONS, type StrikeOptions } from '../src/layout/strike.ts';
 import { parseTranscript } from '../src/pipeline/transcript-lines.ts';
@@ -32,13 +33,19 @@ const OPTIONS: StrikeOptions = {
   ...JSON.parse(process.env['STRIKE_OPTIONS'] ?? '{}'),
 };
 
-function inkTokens(lines: readonly string[], imagePath: string) {
+function inkTokens(lines: readonly string[], imagePath: string, dewarp: boolean) {
   const plain = lines.map((line) =>
     tokens(line)
       .map((token) => token.word)
       .join(' '),
   );
-  const struckWords = findStruckWords(readJpeg(imagePath), plain, OPTIONS);
+  const image = readJpeg(imagePath);
+  const plan = dewarp ? planDewarp(image) : null;
+  const struckWords = findStruckWords(
+    plan === null ? image : applyDewarp(image, plan),
+    plain,
+    OPTIONS,
+  );
   return lines.flatMap((line, index): Token[] => {
     const struck = new Set(struckWords[index] ?? []);
     return tokens(line).map((token, at) => ({ ...token, struck: token.struck || struck.has(at) }));
@@ -64,6 +71,7 @@ function main() {
       truth: { type: 'string', multiple: true },
       method: { type: 'string', default: 'none' },
       verbose: { type: 'boolean', default: false },
+      dewarp: { type: 'boolean', default: false },
     },
   });
   if (!values.ocr || !values.truth || values.ocr.length !== values.truth.length)
@@ -92,7 +100,7 @@ function main() {
           .find(existsSync);
         if (image === undefined) throw new Error(`Kein Bild für ${page.name}`);
         const started = performance.now();
-        hypothesis = inkTokens(lines, image);
+        hypothesis = inkTokens(lines, image, values.dewarp);
         inkSeconds += (performance.now() - started) / 1000;
       }
       ocrSeconds += page.seconds;

@@ -30,13 +30,13 @@ Vor der Binarisierung sucht `findRuling` (`src/layout/ruling.ts`) die Lineatur d
 4. Liniert heißt: mindestens fünf Ketten in regelmäßigem Abstand (einfach oder doppelt, ±30 %). Kariert heißt: Auch die senkrechten Ketten sind regelmäßig, mit ähnlichem Abstand. Randlinien sind lange senkrechte Ketten im äußeren Bereich, bei Karos nur, wenn sie sich in Farbe oder Länge vom Raster abheben.
 5. Die gefundenen Linien werden aus der Tintenmaske gelöscht, entlang ihres geglätteten Verlaufs und nur so breit wie die Linie. Pixel, die deutlich dunkler sind als die Linie an dieser Stelle, gelten als Tinte und bleiben, so überlebt Bleistift auf Karos. Danach fallen weg: eine oder zwei regelmäßige Spalten kleiner Flecken am Rand der Lineatur (Ringe und Löcher einer Spiralbindung, Lochrand), schmale senkrechte Splitter jenseits der Linienenden (Blattkante), lange dünne Komponenten (Seitenkante, Tischrand) und Zeilenkandidaten, die weit außerhalb der Lineatur liegen.
 
-Fotos werden nicht begradigt. Die Zeilensuche arbeitet auf demselben Bild, nur ohne Linien.
+Die Zeilensuche arbeitet auf demselben Bild wie die Erkennung, nur ohne Linien. Verzerrte Fotos sind dann schon begradigt ([0010](0010-fotos-begradigen.md)).
 
 Nach der Zuordnung prüft `markImplausible` (`src/layout/plausible.ts`) jede sichere Zeile gegen den Rest der Seite: eine Box, die höher ist als 2,5 Zeilen je Teilzeile, eine Box mit weniger als 40 % der üblichen Tintendichte und auf linierten Seiten eine flache Box (unter 75 % der üblichen Höhe), die um mehr als ein Viertel Linienabstand anders zu den Heftlinien liegt als die übrigen Zeilen. Auf Karos fällt die letzte Prüfung weg, weil dort jede zweite Karozeile beschrieben wird und die Lage zum Raster nichts über die Zeile sagt. Solche Zeilen gelten als grob platziert (`rough`, Konfidenz 0) wie in [0003](0003-overlay.md), die Box bleibt erhalten. Unter vier sicheren Zeilen wird nichts geprüft.
 
 ## Verworfen
 
-- Fotos vor der Zeilensuche begradigen (Homographie aus Seitenkanten oder Heftlinien): Nach dem Löschen der Heftlinien treffen die Boxen auf den gerenderten Fotos auch ohne Begradigen, das Entzerren hätte Rechenzeit und Interpolationsfehler gekostet und die Boxen müssten zurückgerechnet werden.
+- Fotos vor der Zeilensuche begradigen (Homographie aus Seitenkanten oder Heftlinien): Nach dem Löschen der Heftlinien treffen die Boxen auf den gerenderten Fotos auch ohne Begradigen, das Entzerren hätte Rechenzeit und Interpolationsfehler gekostet und die Boxen müssten zurückgerechnet werden. Abgelöst durch [0010](0010-fotos-begradigen.md): Begradigt wird jetzt beim Import für die ganze Kette, nicht nur für die Zeilensuche.
 - Ein Vision-Modell nach Zeilenkoordinaten fragen: GLM-OCR liefert in unserer Nutzung nur Text, Koordinaten kämen im offiziellen Ablauf von einem separaten Layout-Modell. Qwen3-VL 4B liefert Zeilenboxen im Format `bbox_2d` mit relativen Koordinaten, driftet aber auf echter Handschrift nach unten ab, braucht rund 20 s je Seite auf einer GPU und wäre ein zweites Modell im Arbeitsspeicher.
 
 ## Folgen
