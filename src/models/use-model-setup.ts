@@ -8,6 +8,8 @@ import {
   DEFAULT_REVIEWER_ID,
   MODELS,
   REVIEWERS,
+  SECOND_READER_ID,
+  SECOND_READERS,
   customEntry,
   modelFiles,
   type AnyModelInfo,
@@ -56,6 +58,12 @@ const REVIEWER_CHOICE: Choice = {
   save: (client, modelId) => client.selectReviewer(modelId),
 };
 
+const SECOND_READER_CHOICE: Choice = {
+  defaultId: SECOND_READER_ID,
+  load: () => Promise.resolve(SECOND_READER_ID),
+  save: () => Promise.resolve(undefined),
+};
+
 interface Change {
   readonly origin: symbol;
   readonly modelId: string;
@@ -85,6 +93,7 @@ function useRoleSetup<T extends AnyModelInfo>(
   base: readonly T[],
   role: FileRole,
   choice: Choice,
+  ownModels = true,
 ) {
   const [state, dispatch] = useReducer(setupReducer, INITIAL_SETUP);
   const origin = useRef(Symbol('model-setup'));
@@ -123,7 +132,7 @@ function useRoleSetup<T extends AnyModelInfo>(
   const refresh = useCallback(async () => {
     if (client === null) return;
     try {
-      const loaded = await client.customModels().catch(() => []);
+      const loaded = ownModels ? await client.customModels().catch(() => []) : [];
       const listed = withCustoms(base, role, loaded);
       const [statuses, hardware, selectedId] = await Promise.all([
         Promise.all(listed.map((model) => client.status(model.id))),
@@ -147,7 +156,7 @@ function useRoleSetup<T extends AnyModelInfo>(
     } catch (error) {
       dispatch({ type: 'error', modelId: ANY_MODEL, error: toDownloadError(error) });
     }
-  }, [client, verify, choice, base, role]);
+  }, [client, verify, choice, base, role, ownModels]);
 
   const probe = useCallback(
     async (modelId: string) => {
@@ -394,4 +403,8 @@ export function useCorrectorModelSetup(client: ModelClient | null): ModelSetup<C
 
 export function useReviewerModelSetup(client: ModelClient | null): ModelSetup<CorrectorInfo> {
   return useRoleSetup(client, REVIEWERS, 'corrector', REVIEWER_CHOICE);
+}
+
+export function useSecondReaderSetup(client: ModelClient | null): ModelSetup {
+  return useRoleSetup(client, SECOND_READERS, 'transcriber', SECOND_READER_CHOICE, false);
 }

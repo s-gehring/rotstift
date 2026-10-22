@@ -12,10 +12,16 @@ import { createLlmEngine } from '../src/llm/engine.ts';
 import { fitWithin } from '../src/llm/image.ts';
 import { MODELS_DIR, NodeSidecar } from '../src/llm/node-sidecar.ts';
 import { createSidecarCorrector } from '../src/llm/sidecar-corrector.ts';
-import { defaultCorrector, recommendModel } from '../src/models/registry.ts';
+import {
+  CORRECTORS,
+  defaultCorrector,
+  recommendModel,
+  secondReader,
+} from '../src/models/registry.ts';
 import { noDiagnostics } from '../src/pipeline/diagnostics.ts';
 import { createLlmTranscriber } from '../src/pipeline/llm-transcriber.ts';
 import { createRunner } from '../src/pipeline/runner.ts';
+import { withSecondReading } from '../src/pipeline/second-reading.ts';
 import {
   createReviewFlow,
   reviewWorks,
@@ -32,16 +38,22 @@ const CLASS_DIR = process.env['ROTSTIFT_CLASS'] ?? '';
 const OUT = process.env['ROTSTIFT_CLASS_OUT'] ?? join(CLASS_DIR, 'results');
 const LABEL = process.env['ROTSTIFT_CLASS_LABEL'] ?? 'run';
 const CONTENT = process.env['ROTSTIFT_CLASS_CONTENT'] !== '0';
+const TEXT_MODEL = process.env['ROTSTIFT_CLASS_TEXT_MODEL'];
+const SECOND = process.env['ROTSTIFT_CLASS_SECOND'] === '1';
 
 const transcriber = recommendModel();
-const corrector = defaultCorrector();
+const corrector = CORRECTORS.find((model) => model.id === TEXT_MODEL) ?? defaultCorrector();
+const second = SECOND ? secondReader() : null;
 
 const available =
   ENABLED &&
   existsSync(CLASS_DIR) &&
-  [transcriber.files.model, transcriber.files.mmproj, corrector.files.model].every((file) =>
-    existsSync(join(MODELS_DIR, file.name)),
-  );
+  [
+    transcriber.files.model,
+    transcriber.files.mmproj,
+    corrector.files.model,
+    ...(second === null ? [] : [second.files.model, second.files.mmproj]),
+  ].every((file) => existsSync(join(MODELS_DIR, file.name)));
 
 const SCOPE: CorrectionScope = {
   spelling: true,
@@ -152,8 +164,19 @@ describe.skipIf(!available)('a whole class through the real sidecar', () => {
         render: (page) => Promise.resolve(blobOf(page.id)),
         diagnostics: noDiagnostics,
       });
+      const primary = createLlmTranscriber({
+        client: sidecar,
+        engine,
+        model: transcriber,
+        encode: modelImage,
+      });
       runner.setTranscriber(
-        createLlmTranscriber({ client: sidecar, engine, model: transcriber, encode: modelImage }),
+        second === null
+          ? primary
+          : withSecondReading(
+              primary,
+              createLlmTranscriber({ client: sidecar, engine, model: second, encode: modelImage }),
+            ),
       );
       runner.setPages(pages);
       const reviews: ContentReviewLog[] = [];
@@ -201,6 +224,8 @@ describe.skipIf(!available)('a whole class through the real sidecar', () => {
         label: LABEL,
         threads: process.env['ROTSTIFT_THREADS'] ?? null,
         noRepack: process.env['ROTSTIFT_NO_REPACK'] ?? null,
+        textModel: corrector.id,
+        secondReading: second !== null,
         content: CONTENT,
         arbeiten: works.length,
         pages: pages.length,

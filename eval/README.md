@@ -206,7 +206,7 @@ ROTSTIFT_INTEGRATION=1 ROTSTIFT_CLASS=<Ordner> ROTSTIFT_CLASS_LABEL=t4-voll ROTS
 ```
 
 - `render.py --content-form` teilt jeden Text aus `samples/content-form/` in zwei Seiten, das ergibt 10 Arbeiten zu je 2 Seiten. Eine Arbeit sind alle Bilder mit gleichem Namen vor `-1.jpg`, `-2.jpg`.
-- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
+- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. `ROTSTIFT_CLASS_TEXT_MODEL=<id>` nimmt ein anderes Textmodell aus `models.json` für Rechtschreibung und Inhalt und Form, `ROTSTIFT_CLASS_SECOND=1` schaltet die zweite Lesung ein. So misst man die Stufen der Gründlichkeit (Gründlich: `gemma-4-e4b-q4` mit zweiter Lesung, Sehr gründlich: `gemma-4-26b-a4b-q4` mit zweiter Lesung). Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
 
 ## Heftpapier (liniert und kariert)
 

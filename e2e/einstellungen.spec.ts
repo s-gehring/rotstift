@@ -30,14 +30,62 @@ test.describe('on a laptop with 8 GB', () => {
     ).not.toHaveAttribute('data-warn', 'true');
     await expect(
       modelRow(recognition, /^Qwen3-VL/u).locator('.settings-model-need'),
+    ).not.toHaveAttribute('data-warn', 'true');
+    const correction = dialog.getByRole('region', { name: 'Korrektur' });
+    await expect(
+      modelRow(correction, /^Gemma 4 E4B/u).locator('.settings-model-need'),
     ).toHaveAttribute('data-warn', 'true');
-    await expect(recognition.getByRole('radio', { name: /^Qwen3-VL/u })).toHaveAccessibleName(
+    await expect(correction.getByRole('radio', { name: /^Gemma 4 E4B/u })).toHaveAccessibleName(
       /braucht etwa .*, mehr als der verfügbare Arbeitsspeicher/u,
     );
-    await expect(recognition.getByRole('radio', { name: /^GLM-OCR/u })).not.toHaveAccessibleName(
+    await expect(correction.getByRole('radio', { name: /^Gemma 4 E2B/u })).not.toHaveAccessibleName(
       /Arbeitsspeicher/u,
     );
     await expect(dialog.getByText(`· ${LOCAL}`)).toBeVisible();
+  });
+
+  test('sets the models of every step through the thoroughness', async ({ page }) => {
+    const dialog = await openSettings(page);
+    const levels = dialog.getByRole('region', { name: 'Gründlichkeit' });
+    const second = dialog
+      .getByRole('region', { name: 'Zweite Lesung' })
+      .getByRole('checkbox', { name: /^LightOnOCR-3 0\.8B/u });
+    const correction = dialog.getByRole('region', { name: 'Korrektur' });
+    const review = dialog.getByRole('region', { name: 'Inhalt und Form' });
+    await expect(levels.getByRole('radio')).toHaveCount(3);
+    await expect(levels.getByRole('radio', { name: 'Schnell', exact: true })).toBeChecked();
+    await expect(
+      levels.getByRole('radio', { name: 'Gründlich dauert deutlich länger', exact: true }),
+    ).toBeVisible();
+    await expect(
+      levels.getByRole('radio', { name: 'Sehr gründlich dauert deutlich länger', exact: true }),
+    ).toBeVisible();
+    await expect(second).not.toBeChecked();
+
+    await levels.getByRole('radio', { name: /^Gründlich/u }).click();
+    await expect(levels.getByRole('radio', { name: /^Gründlich/u })).toBeChecked();
+    await expect(correction.getByRole('radio', { name: /^Gemma 4 E4B/u })).toBeChecked();
+    await expect(review.getByRole('radio', { name: /^Gemma 4 E4B/u })).toBeChecked();
+    await expect(second).toBeChecked();
+
+    await levels.getByRole('radio', { name: /^Sehr gründlich/u }).click();
+    await expect(correction.getByRole('radio', { name: /^Gemma 4 26B A4B/u })).toBeChecked();
+    await expect(review.getByRole('radio', { name: /^Gemma 4 26B A4B/u })).toBeChecked();
+    await expect(second).toBeChecked();
+    const chosen = await tauriCalls(page, 'model_select_reviewer');
+    expect(chosen.map((call) => call.args.modelId)).toEqual([
+      'gemma-4-e4b-q4',
+      'gemma-4-26b-a4b-q4',
+    ]);
+
+    await review.getByRole('radio', { name: /^Gemma 4 E2B/u }).click();
+    await expect(levels.getByRole('radio', { name: 'Eigene Auswahl', exact: true })).toBeChecked();
+
+    await levels.getByRole('radio', { name: 'Schnell', exact: true }).click();
+    await expect(levels.getByRole('radio', { name: 'Schnell', exact: true })).toBeChecked();
+    await expect(levels.getByRole('radio')).toHaveCount(3);
+    await expect(correction.getByRole('radio', { name: /^Gemma 4 E2B/u })).toBeChecked();
+    await expect(second).not.toBeChecked();
   });
 
   test('adds an own model from a link, uses it and deletes it again', async ({ page }) => {
@@ -173,6 +221,15 @@ test.describe('on a laptop with 8 GB', () => {
     await expect(dialog.getByText('Das Protokoll liegt in der Zwischenablage.')).toBeVisible();
     expect((await copied(page)).join('\n')).toContain('app_start');
   });
+});
+
+test('notes no slower level where the models fit into the memory', async ({ page }) => {
+  await mockTauri(page, { totalRamGiB: 48 });
+  await open(page);
+  const dialog = await openSettings(page);
+  const levels = dialog.getByRole('region', { name: 'Gründlichkeit' });
+  await expect(levels.getByRole('radio', { name: 'Sehr gründlich' })).toBeVisible();
+  await expect(levels.getByText('dauert deutlich länger')).toHaveCount(0);
 });
 
 test('switches a failing server off again', async ({ page }) => {

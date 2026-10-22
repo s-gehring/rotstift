@@ -4,10 +4,13 @@ import {
   DEFAULT_RATES,
   durationText,
   endRun,
+  learn,
+  LEGACY_RATES_STORAGE_KEY,
   loadRates,
   NO_WORK,
   observe,
   RATES_STORAGE_KEY,
+  ratesFor,
   remainingSeconds,
   remainingText,
   saveRates,
@@ -15,6 +18,7 @@ import {
   type RatesStorage,
   type Snapshot,
 } from './estimate.ts';
+import type { StepCosts } from '../models/speed.ts';
 
 const reading = (read: number): Snapshot => ({
   step: 'read',
@@ -26,15 +30,13 @@ const correcting = (correct: number): Snapshot => ({
   left: { ...NO_WORK, correct },
 });
 
-function memory(initial: string | null = null): RatesStorage & { value: string | null } {
-  const store = {
-    value: initial,
-    getItem: () => store.value,
-    setItem: (_key: string, value: string) => {
-      store.value = value;
-    },
+function keyed(initial: Record<string, string> = {}) {
+  const items = new Map(Object.entries(initial));
+  return {
+    items,
+    getItem: (key: string) => items.get(key) ?? null,
+    setItem: (key: string, value: string) => void items.set(key, value),
   };
-  return store;
 }
 
 describe('start value', () => {
@@ -161,6 +163,10 @@ describe('texts', () => {
     [89, 'noch etwa 1 min'],
     [12 * 60, 'noch etwa 12 min'],
     [75 * 60, 'noch etwa 1 h 15 min'],
+    [2 * 60 * 60, 'noch etwa 2 h'],
+    [4 * 60 * 60 + 59 * 60, 'noch etwa 4 h 59 min'],
+    [7 * 60 * 60 + 12 * 60, 'noch etwa 7 h'],
+    [7 * 60 * 60 + 40 * 60, 'noch etwa 8 h'],
   ])('remaining %i s', (seconds, expected) => {
     expect(remainingText(seconds)).toBe(expected);
   });
@@ -168,29 +174,80 @@ describe('texts', () => {
   it('names the duration before the start', () => {
     expect(durationText(20 * 60)).toBe('etwa 20 min');
     expect(durationText(40)).toBeNull();
+    expect(durationText(7 * 60 * 60)).toBe('etwa 7 h');
+  });
+});
+
+const COSTS: StepCosts = {
+  read: { key: 'glm-ocr-q8', factor: 1 },
+  correct: { key: 'gemma-4-e2b-q4', factor: 1 },
+  review: { key: 'gemma-4-e2b-q4', factor: 1 },
+};
+
+const LARGER: StepCosts = {
+  read: { key: 'glm-ocr-q8+lightonocr-3-08b-q8', factor: 1.65 },
+  correct: { key: 'gemma-4-26b-a4b-q4', factor: 25 },
+  review: { key: 'gemma-4-26b-a4b-q4', factor: 25 },
+};
+
+describe('rates per model', () => {
+  it('starts from the rule of thumb scaled by the models of each step', () => {
+    expect(ratesFor({}, COSTS)).toEqual(DEFAULT_RATES);
+    expect(ratesFor({}, LARGER)).toEqual({ read: 49.5, correct: 375, review: 500 });
+  });
+
+  it('keeps what was learned for a model apart from the other models', () => {
+    const learned = learn({}, COSTS, { read: 40, correct: 15, review: 20 });
+    expect(learned).toEqual({ 'read:glm-ocr-q8': 40 });
+    expect(ratesFor(learned, COSTS)).toEqual({ read: 40, correct: 15, review: 20 });
+    expect(ratesFor(learned, LARGER)).toEqual(ratesFor({}, LARGER));
+
+    const both = learn(learned, LARGER, { read: 70, correct: 375, review: 300 });
+    expect(both).toEqual({
+      'read:glm-ocr-q8': 40,
+      'read:glm-ocr-q8+lightonocr-3-08b-q8': 70,
+      'review:gemma-4-26b-a4b-q4': 300,
+    });
+  });
+
+  it('keeps the object while nothing new was learned', () => {
+    const learned = { 'read:glm-ocr-q8': 40 };
+    expect(learn(learned, COSTS, ratesFor(learned, COSTS))).toBe(learned);
   });
 });
 
 describe('stored rates', () => {
-  it('stores numbers only and reads them back', () => {
-    const storage = memory();
-    const rates = { read: 52.5, correct: 11, review: 33 };
-    saveRates(rates, storage);
-    expect(storage.value).toBe(JSON.stringify(rates));
-    expect(loadRates(storage)).toEqual(rates);
+  it('stores numbers per step and model and reads them back', () => {
+    const storage = keyed();
+    const learned = { 'read:glm-ocr-q8': 52.5, 'correct:gemma-4-e4b-q4': 11 };
+    saveRates(learned, storage);
+    expect(storage.items.get(RATES_STORAGE_KEY)).toBe(JSON.stringify(learned));
+    expect(loadRates(storage)).toEqual(learned);
   });
 
-  it.each([null, 'nonsense', '{"read":1}', '{"read":"a","correct":1,"review":1}', '[1,2,3]'])(
+  it('takes over the rates of the default models from the earlier format', () => {
+    const storage = keyed({
+      [LEGACY_RATES_STORAGE_KEY]: JSON.stringify({ read: 60, correct: 30, review: 40 }),
+    });
+    expect(loadRates(storage)).toEqual({
+      'read:glm-ocr-q8': 60,
+      'correct:gemma-4-e2b-q4': 30,
+      'review:gemma-4-e2b-q4': 40,
+    });
+  });
+
+  it.each([null, 'nonsense', '{"read":"a"}', '{"read":0}', '[1,2,3]'])(
     'falls back to the rule of thumb for %s',
     (value) => {
-      expect(loadRates(memory(value))).toEqual(DEFAULT_RATES);
+      const storage = keyed(value === null ? {} : { [RATES_STORAGE_KEY]: value });
+      expect(ratesFor(loadRates(storage), COSTS)).toEqual(DEFAULT_RATES);
     },
   );
 
   it('limits absurd values and survives missing or broken storage', () => {
-    const wild = memory(JSON.stringify({ read: 99_999, correct: 15, review: 20 }));
-    expect(loadRates(wild).read).toBe(600);
-    expect(loadRates(null)).toEqual(DEFAULT_RATES);
+    const wild = keyed({ [RATES_STORAGE_KEY]: JSON.stringify({ 'read:glm-ocr-q8': 1e9 }) });
+    expect(loadRates(wild)).toEqual({ 'read:glm-ocr-q8': 6 * 60 * 60 });
+    expect(loadRates(null)).toEqual({});
     const broken: RatesStorage = {
       getItem: () => {
         throw new Error('blocked');
@@ -199,14 +256,17 @@ describe('stored rates', () => {
         throw new Error('blocked');
       },
     };
-    expect(loadRates(broken)).toEqual(DEFAULT_RATES);
-    expect(() => saveRates(DEFAULT_RATES, broken)).not.toThrow();
-    expect(RATES_STORAGE_KEY).toBe('rotstift.step-rates');
+    expect(loadRates(broken)).toEqual({});
+    expect(() => saveRates({}, broken)).not.toThrow();
+    expect(RATES_STORAGE_KEY).toBe('rotstift.model-rates');
+    expect(LEGACY_RATES_STORAGE_KEY).toBe('rotstift.step-rates');
   });
 
   it('seeds the next run', () => {
-    const storage = memory(JSON.stringify({ read: 60, correct: 30, review: 40 }));
-    const estimator = createEstimator(loadRates(storage));
+    const storage = keyed({
+      [RATES_STORAGE_KEY]: JSON.stringify({ 'read:glm-ocr-q8': 60, 'correct:gemma-4-e2b-q4': 30 }),
+    });
+    const estimator = createEstimator(ratesFor(loadRates(storage), COSTS));
     expect(remainingSeconds(estimator, reading(2), 0)).toBe(2 * 60 + 2 * 30);
   });
 });

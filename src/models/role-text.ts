@@ -1,7 +1,8 @@
-import type { ModelRole } from '../app/types.ts';
+import type { SetupRole } from '../app/types.ts';
 
-export const ROLE_NAME: Readonly<Record<ModelRole, string>> = {
+export const ROLE_NAME: Readonly<Record<SetupRole, string>> = {
   transcriber: 'Texterkennung',
   corrector: 'Korrektur',
   reviewer: 'Inhalt und Form',
+  secondReader: 'Zweite Lesung',
 };

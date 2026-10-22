@@ -6,6 +6,7 @@ import { createModelClient, type ModelClient } from '../models/client.ts';
 import type { ModelInfo } from '../models/registry.ts';
 import { createLlmTranscriber } from './llm-transcriber.ts';
 import type { TranscriberEnvironment } from './provider.ts';
+import { withSecondReading } from './second-reading.ts';
 import { withStruckWords } from './struck-words.ts';
 import type { PageTranscriber } from './transcriber.ts';
 
@@ -37,15 +38,30 @@ export function browserEnvironment(): TranscriberEnvironment {
     isDev: import.meta.env.DEV,
     isTauri: isTauri(),
     loadDemo,
-    createModelTranscriber: (model: ModelInfo, onUnavailable?: () => void, remote = false) =>
-      withStruckWords(
-        createLlmTranscriber({
-          client: remote ? cloudLlmClient('transcriber') : createLlmClient(),
-          engine: remote ? remoteEngine() : sharedEngine(),
-          model,
-          ...(onUnavailable && { onUnavailable }),
-        }),
-        findStruckWords,
-      ),
+    createModelTranscriber: (
+      model: ModelInfo,
+      onUnavailable?: () => void,
+      remote = false,
+      second: ModelInfo | null = null,
+    ) => {
+      const primary = createLlmTranscriber({
+        client: remote ? cloudLlmClient('transcriber') : createLlmClient(),
+        engine: remote ? remoteEngine() : sharedEngine(),
+        model,
+        ...(onUnavailable && { onUnavailable }),
+      });
+      const reader =
+        second === null || remote
+          ? primary
+          : withSecondReading(
+              primary,
+              createLlmTranscriber({
+                client: createLlmClient(),
+                engine: sharedEngine(),
+                model: second,
+              }),
+            );
+      return withStruckWords(reader, findStruckWords);
+    },
   };
 }

@@ -11,6 +11,7 @@ export interface ModelAvailability {
   readonly model: ModelInfo;
   readonly state: ModelState;
   readonly remote?: boolean;
+  readonly second?: ModelInfo | null;
 }
 
 export interface TranscriberEnvironment {
@@ -21,6 +22,7 @@ export interface TranscriberEnvironment {
     model: ModelInfo,
     onUnavailable?: () => void,
     remote?: boolean,
+    second?: ModelInfo | null,
   ) => PageTranscriber & { readonly engine?: EngineMonitor };
 }
 
@@ -44,6 +46,7 @@ export async function resolveTranscriber(
       availability.model,
       onUnavailable,
       availability.remote === true,
+      availability.second ?? null,
     );
     return { state: 'ready', transcriber, demo: false, engine: transcriber.engine };
   }

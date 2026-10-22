@@ -6,6 +6,7 @@ import type { ImportPage } from '../import/pages.ts';
 import type { useImportPages } from '../import/use-import-pages.ts';
 import type { CorrectorInfo } from '../models/registry.ts';
 import type { ModelSetup } from '../models/use-model-setup.ts';
+import type { SecondReading } from '../models/use-second-reading.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import type { WordCount } from '../results/use-word-count.ts';
 import type { ReviewEngine } from '../review/engine-phase.ts';
@@ -17,6 +18,8 @@ import type { Toasts } from '../ui/Toast.tsx';
 export type RunKind = 'correct' | 'count';
 
 export type ModelRole = 'transcriber' | 'corrector' | 'reviewer';
+
+export type SetupRole = ModelRole | 'secondReader';
 
 export type Route =
   { readonly view: 'klasse' } | { readonly view: 'arbeit'; readonly arbeitId: string };
@@ -56,7 +59,7 @@ export interface RunController {
   readonly openPages: Readonly<Record<RunKind, number>>;
   readonly estimates: Readonly<Record<RunKind, string | null>>;
   readonly done: Readonly<Record<RunKind, boolean>>;
-  readonly missingModels: Readonly<Record<RunKind, readonly ModelRole[]>>;
+  readonly missingModels: Readonly<Record<RunKind, readonly SetupRole[]>>;
   readonly checking: boolean;
   readonly unavailable: string | null;
   readonly start: (kind?: RunKind) => void;
@@ -88,9 +91,9 @@ export interface Work {
 
 export interface SetupRequest {
   readonly open: boolean;
-  readonly roles: readonly ModelRole[];
+  readonly roles: readonly SetupRole[];
   readonly pendingRun: RunKind | null;
-  readonly show: (roles: readonly ModelRole[], pendingRun?: RunKind) => void;
+  readonly show: (roles: readonly SetupRole[], pendingRun?: RunKind) => void;
   readonly close: () => void;
 }
 
@@ -104,6 +107,8 @@ export interface Models {
   readonly transcriber: ModelSetup;
   readonly corrector: ModelSetup<CorrectorInfo>;
   readonly reviewer: ModelSetup<CorrectorInfo>;
+  readonly secondReader: ModelSetup;
+  readonly secondReading: SecondReading;
   readonly cloud: CloudModel;
   readonly switchLocked: Readonly<Record<ModelRole, boolean>>;
   readonly setup: SetupRequest;

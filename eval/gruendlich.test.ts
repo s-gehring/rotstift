@@ -3,7 +3,7 @@ import type { Mark } from '../src/annotations/transcript.ts';
 import type { Corrector } from '../src/correction/corrector.ts';
 import { DEUTSCH } from '../src/annotations/profile.ts';
 import { combineMarks } from './gruendlich-union.ts';
-import { applyRule, confirmedWords, parseRules } from './gruendlich-zweite-lesung.ts';
+import { applyRule, parseRules } from './gruendlich-zweite-lesung.ts';
 import { repeated } from './profiles.ts';
 
 const at = (line: number, offset: number, original: string): Mark & { line: number } => ({
@@ -30,17 +30,6 @@ describe('combineMarks', () => {
 
   it('does not count marks on other lines as votes', () => {
     expect(combineMarks([[at(1, 0, 'dass')], [c]], 2)).toEqual([]);
-  });
-});
-
-describe('confirmedWords', () => {
-  it('confirms words the second reading has at the aligned place', () => {
-    expect(confirmedWords(['Der', 'Hunt', 'bellt', 'laut'], ['Der', 'Hund', 'bellt'])).toEqual([
-      true,
-      false,
-      true,
-      false,
-    ]);
   });
 });
 
