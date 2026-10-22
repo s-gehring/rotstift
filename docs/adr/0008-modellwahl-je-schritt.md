@@ -226,13 +226,13 @@ Die zweite Lesung addiert ihren Faktor zur Erkennung. Ein Modell über dem Speic
 
 Gemessen mit `eval/class-run.integration.test.ts` auf dem Mac (Apple M4 Pro, 48 GB, nur CPU), eine gerenderte Seite mit Inhalt und Form (`brief-ohne-rahmen-1`), alle Modelle in den Speicher passend. Der Mac war durch drei fremde llama-server belastet, die Zeiten zeigen das Verhältnis, nicht den schwachen Laptop:
 
-| Stufe          | Erkennung | Korrektur | Inhalt und Form | Seite gesamt | Modellstarts       |
-| -------------- | --------: | --------: | --------------: | -----------: | ------------------ |
-| Schnell        |     3,9 s |     5,7 s |           4,3 s |       14,1 s | GLM, E2B           |
-| Gründlich      |     8,6 s |     8,5 s |           6,7 s |       24,0 s | GLM, LightOn, E4B  |
-| Sehr gründlich |  MESSUNG  |           |                 |              | GLM, LightOn, 26B  |
+| Stufe          | Erkennung | Korrektur | Inhalt und Form | Seite gesamt | Modellstarts      |
+| -------------- | --------: | --------: | --------------: | -----------: | ----------------- |
+| Schnell        |     3,9 s |     5,7 s |           4,3 s |       14,1 s | GLM, E2B          |
+| Gründlich      |     8,6 s |     8,5 s |           6,7 s |       24,0 s | GLM, LightOn, E4B |
+| Sehr gründlich |     7,8 s |    15,1 s |           6,1 s |       29,1 s | GLM, LightOn, 26B |
 
-Die Zeiten enthalten das Laden der Modelle (GLM 0,5 bis 1,1 s, LightOn 1,4 s, E2B 2,2 s, E4B 3,2 s).
+Die Zeiten enthalten das Laden der Modelle (GLM 0,5 bis 1,1 s, LightOn 1,0 bis 1,4 s, E2B 2,2 s, E4B 3,2 s, 26B A4B 10,2 s). Ohne Laden rechnet die Korrektur mit E2B 3,5 s, mit E4B 5,3 s und mit 26B A4B 4,9 s. Auf einer einzelnen Seite mit 48 GB ist das Mixture-of-Experts-Modell also so schnell wie E4B. Der Faktor 3,5 folgt trotzdem den zehn Arbeiten aus #68, bis simon-pc misst. Peak des 26B-Servers: 13,7 GB.
 
 ## Kandidaten
 
