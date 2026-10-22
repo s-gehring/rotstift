@@ -40,6 +40,7 @@ export interface ChatRequest {
   messages: ChatMessage[];
   temperature?: number;
   top_p?: number;
+  repeat_penalty?: number;
   max_tokens?: number;
   seed?: number;
   stop?: string[];

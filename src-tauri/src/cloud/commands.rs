@@ -56,7 +56,7 @@ fn valid_model(model: &str) -> bool {
 fn body(request: ChatRequest, model: &str, token_field: TokenField) -> Result<Value, ErrorClass> {
     let mut value = serde_json::to_value(request).map_err(|_| ErrorClass::InvalidRequest)?;
     let object = value.as_object_mut().ok_or(ErrorClass::InvalidRequest)?;
-    for field in ["seed", "top_p", "logprobs", "stream"] {
+    for field in ["seed", "top_p", "repeat_penalty", "logprobs", "stream"] {
         object.remove(field);
     }
     if let Some(tokens) = object.remove("max_tokens") {

@@ -168,6 +168,53 @@ Sortiert nach dem Schaden für den Nutzer, nicht nach dem Aufwand.
 8. **Karo-Scan wird schlechter zugeordnet als Linien-Scan.** 65 % Treffer, 30 % sicher falsch.
    Lösungsvorschlag: Bei Karos die Zeilen auf dem Raster als Vielfaches des Karoabstands suchen statt als Bänder.
 
+## Phase 2: Kleine Scans
+
+Behoben ist Fehlerursache 7. Die Erkennung bekommt Bilder, deren lange Kante unter der Zielkante des Modells liegt (bei GLM-OCR 1152 px), jetzt hochskaliert, und eine Wiederholungsschleife führt zu einem zweiten Versuch mit Wiederholungsstrafe, danach zu einer Fehlermeldung statt zu Müll.
+
+**Änderung**
+
+- `modelImageSize` ([`src/llm/image.ts`](../../src/llm/image.ts)) vergrößert Bilder unter der Zielkante auf die Zielkante, höchstens um den Faktor 4, mit `imageSmoothingQuality = 'high'` beim Zeichnen. Bilder ab der Zielkante laufen unverändert durch `fitWithin` und denselben Zeichenpfad wie vorher (Test: gleiche Größe, Glättungsstufe wird nur beim Vergrößern gesetzt). Anzeige, Vorschau und Overlay nutzen weiter das Original (`image-decode.ts` bleibt unberührt), die Koordinaten stimmen also.
+- Eine Antwort gilt als entartet, wenn sie am Tokenlimit endete (`finish_reason = length`) oder die bisherige Schleifenregel anschlägt (eine Periode von bis zu 16 Wörtern mindestens 20-mal hintereinander und zusammen mindestens 80 Wörter, `hasRepetitionLoop`). Eine Seite hat bei GLM-OCR rund 600 bis 900 Token, 2048 Token sind also kein langer Text, sondern eine Schleife oder ein Abdriften. Echte Wiederholungen in Schülertexten (Aufzählungen, gleiche Satzanfänge, Stottern, Strafzeilen bis zu 10 Wiederholungen) lösen nicht aus, getestet in `transcript-lines.test.ts`. Echte Seiten mit Strafzeilen enden mit `stop`, deshalb zählt für sie nur die strenge Regel.
+- Bei einer entarteten Antwort fragt `createLlmTranscriber` einmal mit `repeat_penalty = 1,15` nach (neues Feld in `ChatRequest` und `request.rs`, geprüft auf 1 bis 2; Cloud-Anfragen entfernen es wie `seed`). Ist die zweite Antwort wieder entartet, meldet die Seite „auch im zweiten Versuch in einer Wiederholung verfangen“ mit dem Hinweis auf einen Scan mit höherer Auflösung. Antworten, die nur aus Denktext bestehen, werden nicht erneut gefragt.
+- Abgebrochen wird nicht mitten im Strom, denn die Anfrage ist nicht gestreamt. Die Schleife läuft bis zum Tokenlimit und wird danach erkannt. Auf kleinen Bildern kostet das rund 15 s, bei hochskalierten Bildern entsteht der Fehlerfall seltener (1 von 6 statt 6 von 6 bei BRESSAY).
+
+**Messung**
+
+`eval/small-scans.py` verkleinert Seiten auf eine Breite (500, 700, 900 px, mit Lanczos) und schreibt je Breite die Eingabe „vorher“ (nur verkleinern) und „nachher“ (auf 1152 px vergrößert, bikubisch), `eval/ocr-small.ts` erkennt sie mit GLM-OCR Q8 (4 bis 6 Threads) nach der App-Regel und hält beide Versuche fest. Seiten: die ersten sechs ScaDS-Seiten und sechs Heft-Scans aus `render.py --heft` (`brief` und `ferien` auf drei Papieren), 600 bis 750 Wörter je Satz. „Vorher“ ist der erste Versuch auf dem nicht vergrößerten Bild (altes Verhalten), „nachher“ die neue Kette aus Vergrößern und gegebenenfalls zweitem Versuch. Eine Fehlerseite zählt mit leerem Text (100 % der Wörter fehlen).
+
+| Satz                       | Seiten | Breite     | WER vorher | WER nachher | Schleife im ersten Versuch (vorher / nachher) | Fehlerseiten nachher |
+| -------------------------- | ------ | ---------- | ---------- | ----------- | --------------------------------------------- | -------------------- |
+| ScaDS                      | 6      | 500 px     | 29,9 %     | 17,2 %      | 0 / 0                                         | 0                    |
+| ScaDS                      | 6      | 700 px     | 21,2 %     | 17,1 %      | 0 / 0                                         | 0                    |
+| Heft-Scans (gerendert)     | 6      | 500 px     | 6,6 %      | 4,7 %       | 0 / 0                                         | 0                    |
+| Heft-Scans (gerendert)     | 6      | 700 px     | 3,5 %      | 4,7 %       | 0 / 0                                         | 0                    |
+| BRESSAY (Original, 550 px) | 6      | 469–552 px | 233,9 %    | 46,3 %      | 6 / 1                                         | 0                    |
+
+- **900 px Breite:** Entfällt. Eine A4-Seite ist dann 1273 px hoch und wird auf 1152 px verkleinert, „vorher“ und „nachher“ sind Byte für Byte dieselbe Eingabe, ebenso die ScaDS-Seiten über 900 px und alle ScaDS-Originale ab 1152 px. Das ist die geforderte Unverändert-Eigenschaft für normale Seiten und stützt sich auf den Test von `modelImageSize` gegen `fitWithin`. Die WER normaler Seiten ist damit die aus „Vergleich mit ScaDS“ (20,9 % ScaDS, 4,5 % Heftpapier).
+- **BRESSAY in Schritten:** Original ohne zweiten Versuch 233,9 %, Original mit zweitem Versuch (Strafe 1,15) 86,6 % (4 von 6 Seiten gerettet, 2 Fehlerseiten, ohne sie 78,4 %), hochskaliert ohne zweiten Versuch 62,8 %, hochskaliert mit zweitem Versuch 46,3 %. Die Vergrößerung wirkt am stärksten, der zweite Versuch rettet die verbliebene Schleife (Seite `4454-017`).
+- **Seitenweise:** Bei ScaDS fiel die WER bei 500 px auf allen 6 Seiten und bei 700 px auf 5 von 6, am stärksten bei `026` (41,0 → 15,0 %) und `039` (41,8 → 18,4 %). Bei den Heft-Scans sank sie bei 500 px auf 4 Seiten (1 gleich, 1 schlechter), bei 700 px auf keiner (4 gleich, 2 schlechter: `ferien--liniert-scan` 9,2 → 15,1 %, `ferien--kariert-scan` 1,7 → 3,4 %). Das sind wenige Wörter je Seite. Bei einer Vergrößerung von nur 1,16-fach (990 → 1152 px) bringt das Hochskalieren also nichts, schadet aber im Mittel kaum.
+- **Zeiten:** Die Laufzeiten sind unbrauchbar, weil auf der Maschine drei weitere Erkennungsserver liefen (Last über 100).
+
+**Grenzen**
+
+- Kleine Stichprobe (6 Seiten je Zeile, rund 700 Wörter), die Unterschiede von 1 bis 2 Prozentpunkten (Heft, 700 px) liegen im Rauschen.
+- Die Verkleinerung erzeugt keine echten Scans niedriger Auflösung (keine Unschärfe, kein JPEG-Rauschen der Zielgeräte). BRESSAY ist die einzige echte Gegenprobe, portugiesisch und mit 46 % WER auch hochskaliert schlecht lesbar.
+- Die Strafe 1,15 wurde nicht abgestimmt. Für die Schleife auf Originalgröße rettete sie 4 von 6 Seiten, höhere Werte wurden nicht gemessen.
+- Cloud-Modelle fragen bei einer entarteten Antwort ebenfalls ein zweites Mal, nur ohne Strafe.
+- Die Integrationstests (`engine.integration.test.ts` und andere) bringen eigene Kodierer mit und vergrößern nicht.
+
+Nachbauen (Pfade nach Bedarf):
+
+```bash
+eval/.venv/bin/python -I eval/small-scans.py ~/.cache/rotstift/datasets/scads-fullpage/extracted/images <Ergebnisse>/scads --pages 000,013,026,039,052,065
+node --experimental-transform-types eval/ocr-small.ts --out <Ergebnisse>/res --threads 4 \
+  --set scads-w500-before=<Ergebnisse>/scads/w500/before=<Datensatz>/ground_truth \
+  --set scads-w500-after=<Ergebnisse>/scads/w500/after=<Datensatz>/ground_truth
+```
+
+`ocr-small.ts --report` wertet vorhandene Ergebnisse ohne neuen Lauf aus.
+
 ## Demo-Daten (nur Vorschlag)
 
 `src/pipeline/demo-transcriber.ts` liefert für jede Seite einen festen Platzhaltertext (`SAMPLES`, drei Varianten, Marker `Demo-Text`) und simuliert jeden vierten Fehler. Die Seitenbilder kommen aus den Dateien, die jemand in `pnpm dev:web` lädt. Damit gibt es keine Demo, in der Text, Zeilen und Marken zu einem sichtbaren Bild passen.

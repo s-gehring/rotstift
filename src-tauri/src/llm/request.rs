@@ -5,6 +5,7 @@ use super::runtime::LlmError;
 
 pub const MAX_OUTPUT_TOKENS: u32 = 4096;
 const DEFAULT_OUTPUT_TOKENS: u32 = 2048;
+const MAX_REPEAT_PENALTY: f32 = 2.0;
 pub const MAX_IMAGE_URL_BYTES: usize = 8 * 1024 * 1024;
 const MAX_IMAGES: usize = 8;
 const IMAGE_PREFIXES: [&str; 3] = [
@@ -21,6 +22,8 @@ pub struct ChatRequest {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repeat_penalty: Option<f32>,
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
@@ -150,6 +153,13 @@ impl ChatRequest {
             return Err(invalid(format!("at most {MAX_IMAGES} images per request")));
         }
         images.into_iter().try_for_each(check_image)?;
+        if let Some(penalty) = request.repeat_penalty
+            && !(1.0..=MAX_REPEAT_PENALTY).contains(&penalty)
+        {
+            return Err(invalid(format!(
+                "repeat_penalty must be between 1 and {MAX_REPEAT_PENALTY}"
+            )));
+        }
         match request.max_tokens {
             Some(0) => return Err(invalid("max_tokens must be positive")),
             Some(tokens) if tokens > MAX_OUTPUT_TOKENS => {
@@ -208,6 +218,21 @@ mod tests {
                 "stream": false,
             })
         );
+    }
+
+    #[test]
+    fn forwards_a_repeat_penalty_within_bounds() {
+        let mut request = vision(PNG);
+        request["repeat_penalty"] = json!(1.5);
+        let body = serde_json::to_value(ChatRequest::parse(request).unwrap()).unwrap();
+        assert_eq!(body["repeat_penalty"], json!(1.5));
+        let body = serde_json::to_value(ChatRequest::parse(vision(PNG)).unwrap()).unwrap();
+        assert!(body.get("repeat_penalty").is_none());
+        for penalty in [0.5, 2.5, -1.0] {
+            let mut request = vision(PNG);
+            request["repeat_penalty"] = json!(penalty);
+            assert!(rejection(request).contains("repeat_penalty"), "{penalty}");
+        }
     }
 
     #[test]
