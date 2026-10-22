@@ -74,6 +74,7 @@ function MainAction() {
       <SplitButton
         label={MAIN_LABEL[run.kind]}
         menuLabel="Weitere Möglichkeiten"
+        title={run.estimates[run.kind] ?? undefined}
         disabled={run.checking || run.unavailable !== null}
         onClick={() => run.start()}
         items={[{ label: MENU_LABEL[alternative], onSelect: () => run.start(alternative) }]}

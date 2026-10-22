@@ -380,6 +380,7 @@ export interface SplitButtonProps {
   readonly variant?: 'primary' | 'secondary';
   readonly disabled?: boolean;
   readonly className?: string;
+  readonly title?: string;
 }
 
 export function SplitButton({
@@ -390,11 +391,18 @@ export function SplitButton({
   variant = 'primary',
   disabled = false,
   className,
+  title,
 }: SplitButtonProps) {
   const popup = useMenuPopup();
   return (
     <div className={classNames('menu-anchor split-btn', className)} {...popup.anchorProps}>
-      <Button variant={variant} className="split-btn-main" disabled={disabled} onClick={onClick}>
+      <Button
+        variant={variant}
+        className="split-btn-main"
+        disabled={disabled}
+        onClick={onClick}
+        title={title}
+      >
         {label}
       </Button>
       <button

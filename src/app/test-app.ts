@@ -162,6 +162,7 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       running: false,
       stopping: false,
       progress: null,
+      estimates: { count: null, correct: null },
       openPages: { count: importState.pages.length, correct: importState.pages.length },
       done: { count: false, correct: false },
       missingModels: { count: [], correct: [] },

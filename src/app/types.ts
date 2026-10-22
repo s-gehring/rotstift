@@ -54,6 +54,7 @@ export interface RunController {
   readonly stopping: boolean;
   readonly progress: RunProgress | null;
   readonly openPages: Readonly<Record<RunKind, number>>;
+  readonly estimates: Readonly<Record<RunKind, string | null>>;
   readonly done: Readonly<Record<RunKind, boolean>>;
   readonly missingModels: Readonly<Record<RunKind, readonly ModelRole[]>>;
   readonly checking: boolean;
