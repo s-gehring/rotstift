@@ -1,3 +1,4 @@
+import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import { reviewsContent } from '../content-form/review.ts';
 import type { CorrectorStatus } from '../correction/provider.ts';
@@ -340,4 +341,28 @@ export function reviewFinishedText(
     parts.push(`Inhalt und Form bei ${arbeitenText(unchecked.length)} nicht geprüft.`);
   }
   return parts.join(' ');
+}
+
+export type PowerInvoke = (command: 'power_hold' | 'power_release') => Promise<unknown>;
+
+export interface PowerHold {
+  readonly set: (active: boolean) => void;
+}
+
+export function createPowerHold(invoke: PowerInvoke = tauriInvoke): PowerHold {
+  let wanted = false;
+  let queue: Promise<void> = Promise.resolve();
+  return {
+    set(active) {
+      if (active === wanted) return;
+      wanted = active;
+      const command = active ? 'power_hold' : 'power_release';
+      queue = queue
+        .then(() => invoke(command))
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+    },
+  };
 }

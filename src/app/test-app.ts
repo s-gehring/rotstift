@@ -7,6 +7,9 @@ import {
   defaultReviewer,
   MODELS,
   recommendModel,
+  SECOND_READER_ID,
+  SECOND_READERS,
+  secondReader,
   type AnyModelInfo,
 } from '../models/registry.ts';
 import { INITIAL_SETUP } from '../models/setup-state.ts';
@@ -43,7 +46,13 @@ export function testModelSetup<T extends AnyModelInfo>(
   },
   overrides: Partial<ModelSetup<T>> = {},
 ): ModelSetup<T> {
-  const models = (model.role === 'transcriber' ? MODELS : CORRECTORS) as readonly AnyModelInfo[];
+  const models = (
+    model.id === SECOND_READER_ID
+      ? SECOND_READERS
+      : model.role === 'transcriber'
+        ? MODELS
+        : CORRECTORS
+  ) as readonly AnyModelInfo[];
   return {
     available: true,
     state: {
@@ -189,6 +198,8 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       transcriber,
       corrector,
       reviewer,
+      secondReader: testModelSetup(secondReader()),
+      secondReading: { enabled: false, set: noop },
       cloud: testCloud(),
       switchLocked: { transcriber: false, corrector: false, reviewer: false },
       setup: { open: false, roles: [], pendingRun: null, show: noop, close: noop },

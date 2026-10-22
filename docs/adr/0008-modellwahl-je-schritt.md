@@ -144,7 +144,7 @@ Die App schätzt den Peak-Speicher jedes Eintrags, geprüft oder eigen, aus den 
 ```
 Bedarf = 1,05 × (Modell + mmproj) + Grundbedarf + Repack
 Grundbedarf = 1,4 GB für die Erkennung (Bildkodierung), 0,65 GB für die Textschritte
-Repack = 0,47 × Modell, wenn der Eintrag repackt (cpuRepack, oder ab 12 GiB Arbeitsspeicher)
+Repack = 0,47 × Modell, wenn der Eintrag repackt (cpuRepack, oder ab 12 GiB Arbeitsspeicher) und die repackte Kopie in den Speicher passt
 ```
 
 Die Faktoren sind an den gemessenen Peaks kalibriert, nicht an der Dateigröße allein:
@@ -159,7 +159,7 @@ Die Faktoren sind an den gemessenen Peaks kalibriert, nicht an der Dateigröße 
 
 Die Erkennung ohne Repack ist mit fünf Seiten je Modell gemessen. Qwen3-VL mit Repack lag in einer älteren Messung mit mehr Bild-Tokens bei 6,4 GB, die Schätzung (5,67 GB) liegt dort darunter; gewarnt wird auf 8 GB trotzdem.
 
-Neben jedem Eintrag steht „braucht etwa X GB“. Übersteigt der Bedarf den Arbeitsspeicher abzüglich 3,5 GiB für System und App (auf 8 GiB also 4,5 GiB oder 4,83 GB), ist der Text rot. Gemma 4 E4B (5,47 GB) und Qwen3-VL (5,67 GB) sind auf 8 GB markiert, GLM-OCR (3,35 GB) und Gemma 4 E2B (3,63 GB) nicht. Gesperrt wird nichts. Der Einrichtungsdialog nutzt dieselbe Schätzung und nennt das Modell mit dem größten Bedarf.
+Neben jedem Eintrag steht „braucht etwa X GB“. Übersteigt der Bedarf den Arbeitsspeicher abzüglich 3,5 GiB für System und App (auf 8 GiB also 4,5 GiB oder 4,83 GB), ist der Text rot. Gemma 4 E4B (5,47 GB) ist auf 8 GB markiert, GLM-OCR (3,35 GB), Gemma 4 E2B (3,63 GB) und Qwen3-VL (4,5 GB ohne Repack, siehe [Gründlichkeit](#modelle-größer-als-der-speicher)) nicht. Gesperrt wird nichts. Der Einrichtungsdialog nutzt dieselbe Schätzung und nennt das Modell mit dem größten Bedarf.
 
 ### Fehler am Schritt, ein Klick zurück
 
@@ -172,6 +172,67 @@ Scheitert Auflösen, Download, Prüfsumme, GGUF-Kopf oder Probestart, steht der 
 - „mmproj-F16.gguf ist eine Bilddatei (mmproj), kein Modell.“
 
 Scheitert das Laden erst während eines Laufs, meldet der Lauf das wie bei jedem anderen Modell. Ein eigenes Modell, das Unsinn ausgibt, ist kein Fehler im Sinne der App. Ungültige Antworten laufen durch die vorhandene Reparaturrunde und landen sonst als „Seite ohne Ergebnis“ bei der Arbeit.
+
+### Gründlichkeit
+
+Ergänzt am 2026-10-22 nach der Messung in [Gründlicher Modus](../evaluations/2026-10-gruendlich.md) (#68).
+
+Über den Schritten steht in ⚙ die Auswahl „Gründlichkeit“. Sie setzt die Modelle aller Schritte und die zweite Lesung auf einmal:
+
+| Stufe             | Erkennung | Zweite Lesung          | Rechtschreibung und Grammatik | Inhalt und Form      |
+| ----------------- | --------- | ---------------------- | ----------------------------- | -------------------- |
+| Schnell (Vorgabe) | GLM-OCR   | aus                    | Gemma 4 E2B Q4_0              | Gemma 4 E2B Q4_0     |
+| Gründlich         | GLM-OCR   | LightOnOCR-3 0.8B Q8_0 | Gemma 4 E4B Q4_0              | Gemma 4 E4B Q4_0     |
+| Sehr gründlich    | GLM-OCR   | LightOnOCR-3 0.8B Q8_0 | Gemma 4 26B A4B Q4_0          | Gemma 4 26B A4B Q4_0 |
+
+Begründung aus #68:
+
+- **Rechtschreibung und Grammatik** gewinnt mit dem größeren Modell: Recall 86,9 % (E2B), 91,8 % (E4B), 93,4 % (26B A4B), bei gleich wenigen Fehlalarmen. Mehr Rechenzeit mit demselben Modell (Denken, zweiter Durchgang, Stichproben) bringt nichts.
+- **Inhalt und Form** wird mit keinem Modell messbar besser (18, 17 und 16 von 24 Mängeln). Der Schritt nimmt darum das Modell der Korrektur, dann teilen sich beide den laufenden Server und es gibt keinen Wechsel.
+- **Erkennung:** Ein größeres Modell für 8 GB gibt es nicht. Die zweite Lesung mit LightOnOCR-3 0.8B halbiert die Fehlalarme aus Lesefehlern (1,4 auf 0,7 je 100 Wörter echter Handschrift) und hebt den Anteil rot markierter echter Fehler von 60 auf 63 %.
+
+Die Auswahl zeigt die Stufe, deren Modelle gerade gewählt sind. Ändert jemand darunter einen Schritt, steht dort „Eigene Auswahl“. Die Auswahl je Schritt bleibt wie oben. Eine Stufe mit einem Modell über dem Speicher ist nicht gesperrt, sie trägt den kurzen Zusatz „dauert deutlich länger“. Ein Cloud-Schritt wird beim Wählen einer Stufe ausgeschaltet. Fehlen Modelle der Stufe, fragt der Start wie bisher nach der Einrichtung.
+
+#### Zweite Lesung
+
+LightOnOCR-3 0.8B steht als eigener Eintrag in `models.json` (Rolle `transcriber`, ohne Prompt, 1536 px), taucht aber nicht in der Auswahl der Erkennung auf: Als alleiniges Modell verbessert es Schülerfehler ([Erkennung genauer](../evaluations/2026-10-erkennung-genauer.md)). In ⚙ steht unter der Erkennung ein eigener Abschnitt „Zweite Lesung“ mit Schalter, Größe, Bedarf, Zustand und Löschen. Ist sie an und das Modell fehlt, fragt der Start nach der Einrichtung. Bei einer Erkennung in der Cloud gibt es keine zweite Lesung.
+
+Die Regel aus #68 (`src/correction/second-reading.ts`): Beide Lesungen werden Wort für Wort ausgerichtet. Ein Wort bleibt sicher, wenn LightOn es gleich liest und GLM-OCR sich zu mindestens 0,8 sicher ist. Jede andere Marke auf dem Wort wird zum Hinweis „unsicher gelesen“. Scheitert die zweite Lesung einer Seite, gilt die erste wie bisher.
+
+Beide Lesungen laufen je Seite nacheinander im selben Erkennungsschritt, weil die Reihenfolge des Laufs in `run.ts` liegt. Das kostet zwei Modellwechsel je Seite, warm rund 1 s, auf 8 GB kalt (Lesen von der Platte). Die Zählung nutzt die zweite Lesung ebenfalls, wenn sie an ist.
+
+#### Modelle größer als der Speicher
+
+Nichts wird gesperrt, auch nicht auf 8 GB. Ein Modell über dem freien Speicher läuft aus der Datei:
+
+- llama.cpp lädt die Gewichte per mmap (`--load-mode auto`, Vorgabe). Die App gibt weder `--mlock` noch `--no-mmap`, `--load-mode` oder `--lazy-mode`. Das Betriebssystem kann Seiten der Datei verwerfen und neu lesen.
+- `--repack` kopiert die Gewichte in anonymen Speicher, der nicht aus der Datei nachgeladen werden kann. Die App repackt darum nur, wenn die repackte Kopie in den Speicher passt (Bedarf mit Repack unter Arbeitsspeicher minus 3,5 GiB), sonst startet sie mit `--no-repack`. Gleiche Regel in Rust (`start_options`) und TS (`repacks`). Folge: Qwen3-VL läuft auf 8 GB jetzt ohne Repack (4,5 statt 5,67 GB) und ist dort nicht mehr markiert.
+- Liegt auch der Bedarf ohne Repack über dem Speicher, wartet die App bis zu 12 h statt 15 min auf eine Antwort (`fromDisk` in den Startoptionen).
+
+#### Restdauer
+
+Die Schätzung vor dem Start und die Restdauer rechnen je Modell, nicht nur je Schritt (`src/models/speed.ts`). Startwert ist die Faustregel des Schritts (30 s je Seite Erkennung, 15 s je Seite Korrektur, 20 s je Arbeit Inhalt und Form) mal einem Faktor relativ zu GLM-OCR oder Gemma 4 E2B:
+
+| Modell               | Faktor | Quelle                                         |
+| -------------------- | -----: | ---------------------------------------------- |
+| GLM-OCR, Gemma 4 E2B |      1 | Vorgabe                                        |
+| LightOnOCR-3 0.8B    |   0,65 | ScaDS-Seiten, 9,9 statt 15,5 s (#68)           |
+| Gemma 4 E4B          |    1,8 | Rechtschreibung 7,7 statt 4,2 s (oben)         |
+| Qwen3-VL 4B          |    3,1 | Erkennung genauer                              |
+| Gemma 4 26B A4B      |    3,5 | Inhalt und Form auf dem Mac, 1,9-mal E4B (#68) |
+| eigenes Modell       |  Größe | Dateigröße relativ zur Vorgabe des Schritts    |
+
+Die zweite Lesung addiert ihren Faktor zur Erkennung. Ein Modell über dem Speicher bekommt den Faktor 10, bis simon-pc die Zeiten unter einem Deckel liefert. Gelernt wird wie bisher aus dem Lauf, aber getrennt je Schritt und Modell (`rotstift.model-rates`). Die alten Werte je Schritt (`rotstift.step-rates`) gelten beim ersten Start für die Vorgabemodelle. Ab 5 h nennt die Schätzung ganze Stunden („etwa 7 h“).
+
+Gemessen mit `eval/class-run.integration.test.ts` auf dem Mac (Apple M4 Pro, 48 GB, nur CPU), eine gerenderte Seite mit Inhalt und Form (`brief-ohne-rahmen-1`), alle Modelle in den Speicher passend. Der Mac war durch drei fremde llama-server belastet, die Zeiten zeigen das Verhältnis, nicht den schwachen Laptop:
+
+| Stufe          | Erkennung | Korrektur | Inhalt und Form | Seite gesamt | Modellstarts      |
+| -------------- | --------: | --------: | --------------: | -----------: | ----------------- |
+| Schnell        |     3,9 s |     5,7 s |           4,3 s |       14,1 s | GLM, E2B          |
+| Gründlich      |     8,6 s |     8,5 s |           6,7 s |       24,0 s | GLM, LightOn, E4B |
+| Sehr gründlich |     7,8 s |    15,1 s |           6,1 s |       29,1 s | GLM, LightOn, 26B |
+
+Die Zeiten enthalten das Laden der Modelle (GLM 0,5 bis 1,1 s, LightOn 1,0 bis 1,4 s, E2B 2,2 s, E4B 3,2 s, 26B A4B 10,2 s). Ohne Laden rechnet die Korrektur mit E2B 3,5 s, mit E4B 5,3 s und mit 26B A4B 4,9 s. Auf einer einzelnen Seite mit 48 GB ist das Mixture-of-Experts-Modell also so schnell wie E4B. Der Faktor 3,5 folgt trotzdem den zehn Arbeiten aus #68, bis simon-pc misst. Peak des 26B-Servers: 13,7 GB.
 
 ## Kandidaten
 
@@ -231,7 +292,7 @@ Warm kostet ein Wechsel also rund 1 s. Kalt bestimmt die Platte die Zeit (Dateig
 
 ### Lizenzen
 
-Alle gelisteten Kandidaten stehen unter Apache-2.0 oder MIT, Weitergabe als Download ist erlaubt. Verworfen wegen Lizenz, ohne Messung: LFM2.5-VL-3B und LFM2.5-2.6B (LFM1.0, nur unter 10 Mio. USD Umsatz frei) und Surya OCR 2 (Modified OpenRAIL-M, nur Forschung, privat und Start-ups). Gemma 4 E4B steht wie E2B unter Apache-2.0 (Modellkarte von `ggml-org/gemma-4-E4B-it-GGUF`).
+Alle gelisteten Kandidaten stehen unter Apache-2.0 oder MIT, Weitergabe als Download ist erlaubt. Für die Gründlichkeit neu: Gemma 4 26B A4B (Apache-2.0, `ggml-org/gemma-4-26B-A4B-it-GGUF`) und LightOnOCR-3 0.8B (Apache-2.0, Modell `lightonai/LightOnOCR-3-0.8B`, GGUF von `mradermacher/LightOnOCR-3-0.8B-GGUF`). Verworfen wegen Lizenz, ohne Messung: LFM2.5-VL-3B und LFM2.5-2.6B (LFM1.0, nur unter 10 Mio. USD Umsatz frei) und Surya OCR 2 (Modified OpenRAIL-M, nur Forschung, privat und Start-ups). Gemma 4 E4B steht wie E2B unter Apache-2.0 (Modellkarte von `ggml-org/gemma-4-E4B-it-GGUF`).
 
 ## Folgen
 
@@ -240,3 +301,5 @@ Alle gelisteten Kandidaten stehen unter Apache-2.0 oder MIT, Weitergabe als Down
 - Ohne Messung keine Lesesicherheit für eigene Erkennungsmodelle.
 - MiniCPM-V 4.7 lädt seit dem Update auf llama.cpp `b11551`, liest aber schlechter als GLM-OCR und verbessert Schülerfehler.
 - Offen: Eine Reihenfolge „erst alle Seiten erkennen, dann alle korrigieren“, die Wechsel je Lauf begrenzt, ist nicht Teil dieser Entscheidung.
+- Offen: Die zweite Lesung als eigener Durchgang nach allen Seiten (zwei statt zwei je Seite Wechsel) braucht eine Änderung an `run.ts`.
+- Offen: Faktoren für Modelle über dem Speicher, sobald simon-pc unter einem Deckel gemessen hat.

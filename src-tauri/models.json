@@ -77,6 +77,42 @@
       "prompt": "Transkribiere den handschriftlichen Text auf dem Bild buchstabengetreu. Korrigiere nichts: Rechtschreibung, Groß- und Kleinschreibung, Grammatik und Zeichensetzung bleiben genau so, wie sie geschrieben sind, auch wenn sie falsch sind. Behalte die Absätze bei. Gib nur den Text aus, ohne Einleitung und ohne Kommentar."
     },
     {
+      "id": "lightonocr-3-08b-q8",
+      "role": "transcriber",
+      "displayName": "LightOnOCR-3 0.8B (Q8_0)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 8,
+      "files": {
+        "model": {
+          "name": "LightOnOCR-3-0.8B.Q8_0.gguf",
+          "url": "https://huggingface.co/mradermacher/LightOnOCR-3-0.8B-GGUF/resolve/d76992384e501892b4e37bd55020d762d30b5b37/LightOnOCR-3-0.8B.Q8_0.gguf",
+          "sha256": "b2955ffcce11b0c1fce6dd38d5303a0f3284161c48ade7f62bda9804ce5ba4f7",
+          "bytes": 811844128
+        },
+        "mmproj": {
+          "name": "LightOnOCR-3-0.8B.mmproj-f16.gguf",
+          "url": "https://huggingface.co/mradermacher/LightOnOCR-3-0.8B-GGUF/resolve/d76992384e501892b4e37bd55020d762d30b5b37/LightOnOCR-3-0.8B.mmproj-f16.gguf",
+          "sha256": "c70a0eeee9bf2c2626510631a4c707321d48a91f577673304dd8771f2664f9d2",
+          "bytes": 204987200
+        }
+      },
+      "server": {
+        "contextSize": 8192,
+        "imageMaxTokens": null,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": true,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0,
+        "imageMaxEdge": 1536,
+        "uncertainBelow": null
+      },
+      "prompt": ""
+    },
+    {
       "id": "gemma-4-e2b-q4",
       "role": "corrector",
       "displayName": "Gemma 4 E2B it (Q4_0)",
@@ -117,6 +153,35 @@
           "url": "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/a69f018d7678a2b9f5e705f8903d6fb29b9b25dc/gemma-4-E4B-it-Q4_0.gguf",
           "sha256": "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2",
           "bytes": 4590807392
+        }
+      },
+      "server": {
+        "contextSize": 4096,
+        "threads": null,
+        "gpuLayers": null,
+        "cpuRepack": false,
+        "reasoning": "off"
+      },
+      "request": {
+        "maxOutputTokens": 2048,
+        "temperature": 0
+      },
+      "lineMode": "numbered",
+      "system": "Du korrigierst die Fehler in einer Schülerarbeit. Fach: {subject}. Der Text ist auf {language} geschrieben.\nDie Eingabe besteht aus nummerierten Zeilen. Gib genau dieselben Zeilen mit derselben Nummerierung aus, in denen die Fehler behoben sind: {kinds}.\nÄndere sonst nichts: keine Umformulierung, keine Stiländerung, keine neuen Sätze. Zeilen ohne Fehler bleiben unverändert. Beachte die Regeln der Sprache des Textes, auch Akzente und Satzzeichen. Fachwörter, Namen und Zitate bleiben unverändert. Gib nur die Zeilen aus, ohne Erklärung.",
+      "prompt": "{text}"
+    },
+    {
+      "id": "gemma-4-26b-a4b-q4",
+      "role": "corrector",
+      "displayName": "Gemma 4 26B A4B it (Q4_0)",
+      "license": "Apache-2.0",
+      "recommendedRamGb": 32,
+      "files": {
+        "model": {
+          "name": "gemma-4-26B-A4B-it-Q4_0.gguf",
+          "url": "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/9cf8c8db0f83fb4582f15381f8fb1a7c1b0b9ca2/gemma-4-26B-A4B-it-Q4_0.gguf",
+          "sha256": "d208665ab1cd3a69f7a9a4bc59430e8448c8093d9b06334f566ac59d6d504a03",
+          "bytes": 14618145824
         }
       },
       "server": {

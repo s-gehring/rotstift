@@ -1,3 +1,4 @@
+import { findDemoPage, type DemoPage } from './demo-class.ts';
 import type { PageTranscriber, TranscribeResult } from './transcriber.ts';
 
 export const DEMO_MARKER = 'Demo-Text';
@@ -20,6 +21,7 @@ const SAMPLES: readonly (readonly string[])[] = [
 export interface DemoOptions {
   readonly delayMs?: number;
   readonly failEvery?: number;
+  readonly recognize?: (png: Blob) => Promise<Pick<DemoPage, 'lines'> | null>;
 }
 
 function wait(ms: number, signal: AbortSignal): Promise<void> {
@@ -41,16 +43,18 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 export function createDemoTranscriber(options: DemoOptions = {}): PageTranscriber {
-  const { delayMs = 800, failEvery = 4 } = options;
+  const { delayMs = 800, failEvery = 4, recognize = findDemoPage } = options;
   let calls = 0;
   return {
-    async transcribe(_png, signal): Promise<TranscribeResult> {
-      calls += 1;
+    async transcribe(png, signal): Promise<TranscribeResult> {
       try {
         await wait(delayMs, signal);
       } catch {
         return { ok: false, error: { kind: 'cancelled' } };
       }
+      const known = await recognize(png);
+      if (known !== null) return { ok: true, lines: known.lines };
+      calls += 1;
       if (failEvery > 0 && calls % failEvery === 0) {
         return {
           ok: false,

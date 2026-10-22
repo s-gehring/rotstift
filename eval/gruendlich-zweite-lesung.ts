@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { DEUTSCH } from '../src/annotations/profile.ts';
 import type { Mark, Transcript } from '../src/annotations/transcript.ts';
 import { correctPage } from '../src/correction/correct-page.ts';
+import { confirmedWords } from '../src/correction/second-reading.ts';
 import { readWords, separateUncertain } from '../src/correction/uncertain-reading.ts';
 import type { WordReading } from '../src/correction/uncertain-reading.ts';
 import { countWords } from '../src/stats/count-words.ts';
@@ -25,43 +26,6 @@ export function parseRules(text: string): Rule[] {
     const [confirmed, unconfirmed] = pair.split('/').map(Number);
     return { confirmedBelow: confirmed ?? 0, unconfirmedBelow: unconfirmed ?? 0 };
   });
-}
-
-export function confirmedWords(first: readonly string[], second: readonly string[]): boolean[] {
-  const rows = first.length + 1;
-  const cols = second.length + 1;
-  const cost = Array.from({ length: rows }, (_row, i) =>
-    Array.from({ length: cols }, (_col, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  );
-  for (let i = 1; i < rows; i += 1) {
-    for (let j = 1; j < cols; j += 1) {
-      const same = first[i - 1] === second[j - 1] ? 0 : 1;
-      cost[i]![j] = Math.min(
-        cost[i - 1]![j]! + 1,
-        cost[i]![j - 1]! + 1,
-        cost[i - 1]![j - 1]! + same,
-      );
-    }
-  }
-  const confirmed = first.map(() => false);
-  let i = first.length;
-  let j = second.length;
-  while (i > 0 && j > 0) {
-    const same = first[i - 1] === second[j - 1];
-    if (same && cost[i]![j] === cost[i - 1]![j - 1]) {
-      confirmed[i - 1] = true;
-      i -= 1;
-      j -= 1;
-    } else if (cost[i]![j] === cost[i - 1]![j - 1]! + 1) {
-      i -= 1;
-      j -= 1;
-    } else if (cost[i]![j] === cost[i - 1]![j]! + 1) {
-      i -= 1;
-    } else {
-      j -= 1;
-    }
-  }
-  return confirmed;
 }
 
 export function applyRule(

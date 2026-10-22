@@ -4,6 +4,7 @@ import {
   type ContentInput,
   type ContentResult,
 } from '../content-form/review.ts';
+import { demoCorrection } from '../pipeline/demo-class.ts';
 import type { CorrectResult, Corrector } from './corrector.ts';
 import { createFakeCorrector } from './fake-corrector.ts';
 
@@ -73,6 +74,8 @@ export function createPreviewCorrector(options: PreviewOptions = {}): Corrector 
   return {
     async correct(lines, profile, signal, scope): Promise<CorrectResult> {
       if (!(await wait(delayMs, signal))) return { ok: false, error: { kind: 'cancelled' } };
+      const known = demoCorrection(lines);
+      if (known !== null) return { ok: true, correctedText: known };
       return fake.correct(lines, profile, signal, scope);
     },
     async review(input, signal): Promise<ContentResult> {
