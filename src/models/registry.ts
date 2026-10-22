@@ -43,7 +43,7 @@ const transcriberSchema = z.strictObject({
     imageMaxEdge: z.number().int().min(64),
     uncertainBelow: z.number().gt(0).lt(1).nullable(),
   }),
-  prompt: z.string().min(1),
+  prompt: z.string(),
 });
 
 const correctorSchema = z.strictObject({
@@ -92,6 +92,7 @@ export type AnyModelInfo = ModelInfo | CorrectorInfo;
 export const DEFAULT_MODEL_ID = 'glm-ocr-q8';
 export const DEFAULT_CORRECTOR_ID = 'gemma-4-e2b-q4';
 export const DEFAULT_REVIEWER_ID = DEFAULT_CORRECTOR_ID;
+export const SECOND_READER_ID = 'lightonocr-3-08b-q8';
 
 function parseRegistryFile(json: unknown) {
   const { models, customTemplates } = registrySchema.parse(json);
@@ -116,9 +117,24 @@ const REGISTRY = parseRegistryFile(registryJson);
 
 export const ALL_MODELS: readonly AnyModelInfo[] = REGISTRY.models;
 
-export const MODELS: readonly ModelInfo[] = ALL_MODELS.filter(
+const TRANSCRIBERS: readonly ModelInfo[] = ALL_MODELS.filter(
   (model): model is ModelInfo => model.role === 'transcriber',
 );
+
+export const MODELS: readonly ModelInfo[] = TRANSCRIBERS.filter(
+  (model) => model.id !== SECOND_READER_ID,
+);
+
+export const SECOND_READERS: readonly ModelInfo[] = TRANSCRIBERS.filter(
+  (model) => model.id === SECOND_READER_ID,
+);
+
+export function secondReader(): ModelInfo {
+  const reader = SECOND_READERS[0];
+  if (reader === undefined)
+    throw new Error('Die Modellliste enthält kein Modell für die zweite Lesung.');
+  return reader;
+}
 
 export const CORRECTORS: readonly CorrectorInfo[] = ALL_MODELS.filter(
   (model): model is CorrectorInfo => model.role === 'corrector',
@@ -193,11 +209,19 @@ const GB = 1e9;
 const REPACK_MIN_RAM = 12 * GIB;
 const RESERVED_RAM = 3.5 * GIB;
 
-export function estimateRamBytes(model: AnyModelInfo, totalRamBytes: number | null): number {
+function neededBytes(model: AnyModelInfo, repack: boolean): number {
   const overhead = model.role === 'transcriber' ? 1.4 * GB : 0.65 * GB;
-  const repacks =
-    model.server.cpuRepack || (totalRamBytes !== null && totalRamBytes >= REPACK_MIN_RAM);
-  return totalBytes(model) * 1.05 + overhead + (repacks ? 0.47 * model.files.model.bytes : 0);
+  return totalBytes(model) * 1.05 + overhead + (repack ? 0.47 * model.files.model.bytes : 0);
+}
+
+export function repacks(model: AnyModelInfo, totalRamBytes: number | null): boolean {
+  if (totalRamBytes === null) return model.server.cpuRepack;
+  const wanted = model.server.cpuRepack || totalRamBytes >= REPACK_MIN_RAM;
+  return wanted && neededBytes(model, true) <= totalRamBytes - RESERVED_RAM;
+}
+
+export function estimateRamBytes(model: AnyModelInfo, totalRamBytes: number | null): number {
+  return neededBytes(model, repacks(model, totalRamBytes));
 }
 
 export function exceedsMemory(model: AnyModelInfo, totalRamBytes: number | null): boolean {

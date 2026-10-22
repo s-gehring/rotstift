@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/app-context.tsx';
-import type { Models, ModelRole } from '../app/types.ts';
+import type { Models, SetupRole } from '../app/types.ts';
 import { formatRemaining } from '../pipeline/progress.ts';
 import { Button } from '../ui/Button.tsx';
 import { Dialog } from '../ui/Dialog.tsx';
@@ -19,12 +19,12 @@ import type { ModelState } from './types.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 
 interface RoleSetup {
-  readonly role: ModelRole;
+  readonly role: SetupRole;
   readonly name: string;
   readonly setup: ModelSetup<AnyModelInfo>;
 }
 
-function setupOf(models: Models, role: ModelRole): ModelSetup<AnyModelInfo> {
+function setupOf(models: Models, role: SetupRole): ModelSetup<AnyModelInfo> {
   switch (role) {
     case 'transcriber':
       return models.transcriber;
@@ -32,6 +32,8 @@ function setupOf(models: Models, role: ModelRole): ModelSetup<AnyModelInfo> {
       return models.corrector;
     case 'reviewer':
       return models.reviewer;
+    case 'secondReader':
+      return models.secondReader;
     default: {
       const unreachable: never = role;
       return unreachable;
@@ -39,7 +41,7 @@ function setupOf(models: Models, role: ModelRole): ModelSetup<AnyModelInfo> {
   }
 }
 
-function distinctModels(models: Models, roles: readonly ModelRole[]): RoleSetup[] {
+function distinctModels(models: Models, roles: readonly SetupRole[]): RoleSetup[] {
   const entries: RoleSetup[] = [];
   for (const role of roles) {
     const setup = setupOf(models, role);

@@ -21,6 +21,14 @@ import {
 import { ROLE_NAME } from './role-text.ts';
 import type { ModelState, ResolvedLink } from './types.ts';
 import { hasRunningJob } from './setup-state.ts';
+import {
+  LEVELS,
+  levelExceedsMemory,
+  THOROUGHNESS,
+  THOROUGHNESS_NAME,
+  thoroughnessOf,
+  type Thoroughness,
+} from './thoroughness.ts';
 import type { ModelSetup } from './use-model-setup.ts';
 import { WeightingSettings } from './WeightingSettings.tsx';
 
@@ -177,6 +185,32 @@ function CustomModelForm({
   );
 }
 
+function DeleteConfirm({
+  name,
+  onDelete,
+  onKeep,
+}: {
+  readonly name: string;
+  readonly onDelete: () => void;
+  readonly onKeep: () => void;
+}) {
+  const keep = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    keep.current?.focus();
+  }, []);
+  return (
+    <div className="confirm" role="alertdialog" aria-label={`${name} löschen`}>
+      <p>{name} wirklich löschen?</p>
+      <Button variant="quiet" className="is-danger" onClick={onDelete}>
+        Löschen
+      </Button>
+      <Button ref={keep} onClick={onKeep}>
+        Behalten
+      </Button>
+    </div>
+  );
+}
+
 function CloudRow({
   role,
   cloud,
@@ -237,10 +271,6 @@ function ModelSection({
   const [adding, setAdding] = useState(false);
   const [addingCloud, setAddingCloud] = useState(false);
   const remote = cloud.steps[role] !== undefined;
-  const keep = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (confirming !== null) keep.current?.focus();
-  }, [confirming]);
   const { model, status } = setup;
   const state = status?.state ?? null;
   const busy = state !== null && BUSY.has(state);
@@ -340,23 +370,14 @@ function ModelSection({
         </p>
       )}
       {confirming !== null ? (
-        <div className="confirm" role="alertdialog" aria-label={`${confirmName} löschen`}>
-          <p>{confirmName} wirklich löschen?</p>
-          <Button
-            variant="quiet"
-            className="is-danger"
-            onClick={() => {
-              const target = confirming;
-              setConfirming(null);
-              void setup.remove(target.id);
-            }}
-          >
-            Löschen
-          </Button>
-          <Button ref={keep} onClick={() => setConfirming(null)}>
-            Behalten
-          </Button>
-        </div>
+        <DeleteConfirm
+          name={confirmName}
+          onDelete={() => {
+            setConfirming(null);
+            void setup.remove(confirming.id);
+          }}
+          onKeep={() => setConfirming(null)}
+        />
       ) : adding ? (
         <CustomModelForm role={role} setup={setup} onDone={() => setAdding(false)} />
       ) : addingCloud ? (
@@ -392,6 +413,136 @@ function ModelSection({
   );
 }
 
+function SecondReadingSection({ locked }: { readonly locked: boolean }) {
+  const { models } = useApp();
+  const { secondReader: setup, secondReading } = models;
+  const [confirming, setConfirming] = useState(false);
+  const { model, status } = setup;
+  const state = status?.state ?? null;
+  const busy = state !== null && BUSY.has(state);
+  const ram = setup.state.hardware?.totalRamBytes ?? null;
+  const tooLarge = exceedsMemory(model, ram);
+  const hasFiles = state === 'ready' || state === 'corrupt' || (status?.downloadedBytes ?? 0) > 0;
+  const name = ROLE_NAME.secondReader;
+  return (
+    <section className="settings-section" aria-labelledby="settings-secondReader">
+      <h3 id="settings-secondReader">{name}</h3>
+      <div className="settings-model">
+        <label className="settings-model-label">
+          <input
+            type="checkbox"
+            checked={secondReading.enabled}
+            disabled={locked}
+            onChange={(event) => secondReading.set(event.target.checked)}
+          />
+          <span className="settings-model-text">
+            <span className="settings-model-line">
+              <span className="settings-model-name">{model.displayName}</span>
+              <span className="settings-model-size">{formatSize(totalBytes(model))}</span>
+              <span className="settings-model-need" data-warn={tooLarge ? 'true' : undefined}>
+                braucht etwa {formatSize(estimateRamBytes(model, ram))}
+              </span>
+              <span className="settings-model-state" data-state={state ?? 'unknown'}>
+                {state === null ? '' : STATE_TEXT[state]}
+              </span>
+            </span>
+          </span>
+        </label>
+        {hasFiles && !busy && (
+          <Button
+            variant="quiet"
+            className="is-danger"
+            disabled={locked}
+            onClick={() => setConfirming(true)}
+          >
+            Löschen
+          </Button>
+        )}
+      </div>
+      {setup.error !== null && (
+        <p className="settings-error" role="alert">
+          {describeDownloadError(setup.error)}
+        </p>
+      )}
+      {confirming ? (
+        <DeleteConfirm
+          name={name}
+          onDelete={() => {
+            setConfirming(false);
+            void setup.remove(model.id);
+          }}
+          onKeep={() => setConfirming(false)}
+        />
+      ) : (
+        secondReading.enabled &&
+        state !== null &&
+        state !== 'ready' &&
+        !busy && (
+          <div className="settings-actions">
+            <Button onClick={() => models.setup.show(['secondReader'])}>Herunterladen</Button>
+          </div>
+        )
+      )}
+    </section>
+  );
+}
+
+function ThoroughnessSection({ locked }: { readonly locked: boolean }) {
+  const { models } = useApp();
+  const { transcriber, corrector, reviewer, secondReading, cloud } = models;
+  const ram = transcriber.state.hardware?.totalRamBytes ?? null;
+  const local = (role: ModelRole, id: string) => (cloud.steps[role] === undefined ? id : null);
+  const current = thoroughnessOf({
+    transcriber: local('transcriber', transcriber.model.id),
+    corrector: local('corrector', corrector.model.id),
+    reviewer: local('reviewer', reviewer.model.id),
+    secondReading: secondReading.enabled,
+  });
+  const choose = async (level: Thoroughness) => {
+    const wanted = LEVELS[level];
+    const steps = [
+      ['transcriber', transcriber, wanted.transcriber],
+      ['corrector', corrector, wanted.corrector],
+      ['reviewer', reviewer, wanted.reviewer],
+    ] as const;
+    for (const [role, setup, id] of steps) {
+      if (cloud.steps[role] !== undefined) await cloud.clear(role);
+      await setup.select(id);
+    }
+    secondReading.set(wanted.secondReading);
+  };
+  return (
+    <section className="settings-section" aria-labelledby="settings-thoroughness">
+      <h3 id="settings-thoroughness">Gründlichkeit</h3>
+      <fieldset className="model-choice" disabled={locked}>
+        <legend className="visually-hidden">Gründlichkeit</legend>
+        {THOROUGHNESS.map((level) => (
+          <label key={level} className="settings-model-label">
+            <input
+              type="radio"
+              name="thoroughness"
+              checked={current === level}
+              onChange={() => void choose(level)}
+            />
+            <span className="settings-model-line">
+              <span className="settings-model-name">{THOROUGHNESS_NAME[level]}</span>
+              {levelExceedsMemory(level, ram) && (
+                <span className="settings-model-note">dauert deutlich länger</span>
+              )}
+            </span>
+          </label>
+        ))}
+        {current === null && (
+          <label className="settings-model-label">
+            <input type="radio" name="thoroughness" checked readOnly />
+            <span className="settings-model-name">Eigene Auswahl</span>
+          </label>
+        )}
+      </fieldset>
+    </section>
+  );
+}
+
 export function SettingsDialog() {
   const { models } = useApp();
   const { settings, transcriber, corrector, reviewer, cloud, switchLocked, setup } = models;
@@ -400,10 +551,12 @@ export function SettingsDialog() {
     cloud.steps.corrector === undefined &&
     cloud.steps.reviewer === undefined;
   const available = transcriber.available;
+  const anyLocked = switchLocked.transcriber || switchLocked.corrector || switchLocked.reviewer;
   return (
     <Dialog open={settings.open} onClose={settings.close} title="Einstellungen" size="md">
       {available ? (
         <>
+          <ThoroughnessSection locked={anyLocked} />
           <ModelSection
             role="transcriber"
             setup={transcriber}
@@ -411,6 +564,9 @@ export function SettingsDialog() {
             locked={switchLocked.transcriber}
             onSetup={() => setup.show(['transcriber'])}
           />
+          {cloud.steps.transcriber === undefined && (
+            <SecondReadingSection locked={switchLocked.transcriber} />
+          )}
           <ModelSection
             role="corrector"
             setup={corrector}

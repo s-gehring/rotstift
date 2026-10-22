@@ -9,7 +9,8 @@ import { useCorrector, useReviewer } from '../correction/use-corrector.ts';
 import { useProfileChoice } from '../correction/use-profile-choice.ts';
 import { flattenPages } from '../import/arbeiten.ts';
 import { useImportPages } from '../import/use-import-pages.ts';
-import { useModelSetup } from '../models/use-model-setup.ts';
+import { useModelSetup, useSecondReaderSetup } from '../models/use-model-setup.ts';
+import { useSecondReading } from '../models/use-second-reading.ts';
 import { browserModelClient, isTauri } from '../pipeline/environment.ts';
 import type { ModelAvailability } from '../pipeline/provider.ts';
 import { isCounting, isSwitchLocked, type Runner } from '../pipeline/runner.ts';
@@ -22,17 +23,22 @@ import { useReview } from '../review/use-review.ts';
 import { useGrading } from '../stats/use-grading.ts';
 import { useWeighting } from '../stats/use-weighting.ts';
 import { useToast } from '../ui/Toast.tsx';
+import { stepCosts, type StepCosts } from '../models/speed.ts';
 import {
   createEstimator,
   durationText,
   endRun,
   type Estimator,
+  learn,
+  type LearnedRates,
   loadRates,
   observe,
+  ratesFor,
   saveRates,
   totalSeconds,
 } from './estimate.ts';
 import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts';
+import { secondReaderReadiness, withSecondReader } from './second-reading.ts';
 import {
   countFinishedText,
   loadRunKind,
@@ -49,14 +55,22 @@ import {
   type Readiness,
   type RunStart,
 } from './run.ts';
-import type { AppModel, ModelRole, Navigation, Route, RunKind, ScopeField } from './types.ts';
+import type {
+  AppModel,
+  ModelRole,
+  Navigation,
+  Route,
+  RunKind,
+  ScopeField,
+  SetupRole,
+} from './types.ts';
 
 const modelClient = browserModelClient();
 const cloudClient = modelClient === null ? null : createCloudClient();
 
 interface SetupState {
   readonly open: boolean;
-  readonly roles: readonly ModelRole[];
+  readonly roles: readonly SetupRole[];
   readonly pendingRun: RunKind | null;
 }
 
@@ -75,17 +89,24 @@ function useNow(active: boolean): number {
 interface RunClock {
   readonly start: RunStart | null;
   readonly estimator: Estimator;
+  readonly learned: LearnedRates;
 }
 
 function useRunClock(
   flow: ReviewFlow,
   runner: Runner,
   arbeiten: AppModel['importState']['arbeiten'],
+  costs: StepCosts,
 ): RunClock {
   const [clock, setClock] = useState<RunClock>(() => ({
     start: null,
-    estimator: createEstimator(loadRates()),
+    estimator: createEstimator(),
+    learned: loadRates(),
   }));
+  const costsRef = useRef(costs);
+  useEffect(() => {
+    costsRef.current = costs;
+  });
   useEffect(() => {
     const update = () => {
       const review = flow.getState();
@@ -95,11 +116,20 @@ function useRunClock(
         const start =
           review.run === null ? null : (current.start ?? startRun(review, count, at, arbeiten));
         const snapshot = runSnapshot(review, count, start);
-        const estimator =
-          snapshot === null ? endRun(current.estimator) : observe(current.estimator, snapshot, at);
-        return start === current.start && estimator === current.estimator
+        const seeded =
+          snapshot !== null && current.estimator.mark === null
+            ? createEstimator(ratesFor(current.learned, costsRef.current))
+            : current.estimator;
+        const estimator = snapshot === null ? endRun(seeded) : observe(seeded, snapshot, at);
+        const learned =
+          snapshot === null
+            ? current.learned
+            : learn(current.learned, costsRef.current, estimator.rates);
+        return start === current.start &&
+          estimator === current.estimator &&
+          learned === current.learned
           ? current
-          : { start, estimator };
+          : { start, estimator, learned };
       });
     };
     const unsubscribe = [flow.subscribe(update), runner.subscribe(update)];
@@ -107,8 +137,8 @@ function useRunClock(
       for (const stop of unsubscribe) stop();
     };
   }, [flow, runner, arbeiten]);
-  const { rates } = clock.estimator;
-  useEffect(() => saveRates(rates), [rates]);
+  const { learned } = clock;
+  useEffect(() => saveRates(learned), [learned]);
   return clock;
 }
 
@@ -141,16 +171,22 @@ export function useAppModel(): AppModel {
   const cloud = useCloud(cloudClient);
   const transcriberCloud = cloud.steps.transcriber ?? null;
   const transcriberSetup = useModelSetup(modelClient);
+  const secondReaderSetup = useSecondReaderSetup(modelClient);
+  const secondReading = useSecondReading();
   const { model } = transcriberSetup;
   const modelState = transcriberSetup.status?.state;
+  const secondModel =
+    secondReading.enabled && secondReaderSetup.status?.state === 'ready'
+      ? secondReaderSetup.model
+      : null;
   const availability = useMemo<ModelAvailability | null>(() => {
     if (transcriberCloud !== null) {
       return cloudUsable(transcriberCloud)
         ? { model: remoteTranscriber(transcriberCloud), state: 'ready', remote: true }
         : null;
     }
-    return modelState === undefined ? null : { model, state: modelState };
-  }, [model, modelState, transcriberCloud]);
+    return modelState === undefined ? null : { model, state: modelState, second: secondModel };
+  }, [model, modelState, transcriberCloud, secondModel]);
   const resolvedTranscriber = useTranscriber(availability, () => {
     void transcriberSetup.refresh();
   });
@@ -190,12 +226,21 @@ export function useAppModel(): AppModel {
   const reviewing = review.state.run !== null;
   const running = reviewing || isCounting(count.state);
   const now = useNow(running);
-  const { start: runStart, estimator } = useRunClock(
-    review.flow,
-    count.runner,
-    importState.arbeiten,
+  const costs = stepCosts(
+    {
+      transcriber: transcriberCloud === null ? model : null,
+      second: transcriberCloud === null && secondReading.enabled ? secondReaderSetup.model : null,
+      corrector: cloud.steps.corrector === undefined ? correctorSetup.model : null,
+      reviewer: cloud.steps.reviewer === undefined ? reviewerSetup.model : null,
+    },
+    transcriberSetup.state.hardware?.totalRamBytes ?? null,
   );
-  const { rates } = estimator;
+  const {
+    start: runStart,
+    estimator,
+    learned,
+  } = useRunClock(review.flow, count.runner, importState.arbeiten, costs);
+  const rates = ratesFor(learned, costs);
 
   const [kind, setStoredKind] = useState<RunKind>(() => loadRunKind());
   const setKind = useCallback((next: RunKind) => {
@@ -212,11 +257,20 @@ export function useAppModel(): AppModel {
     corrector: readiness(corrector, correctorSetup.loadError),
     reviewer: readiness(reviewer, reviewerSetup.loadError),
   };
+  const secondReadiness = secondReaderReadiness(
+    secondReaderSetup,
+    secondReading.enabled && transcriberCloud === null,
+  );
   const rolesWith = (wanted: RunKind, state: Readiness) =>
     neededRoles(wanted, scope).filter((role) => roleReadiness[role] === state);
-  const missingModels = {
+  const secondFor = (wanted: RunKind): Readiness =>
+    wanted === 'correct' ? secondReadiness : 'ready';
+  const missingModels: Readonly<Record<RunKind, readonly SetupRole[]>> = {
     count: rolesWith('count', 'missing'),
-    correct: rolesWith('correct', 'missing'),
+    correct: [
+      ...rolesWith('correct', 'missing'),
+      ...(secondReadiness === 'missing' ? (['secondReader'] as const) : []),
+    ],
   };
   const unavailableText = (wanted: RunKind) => {
     if (rolesWith(wanted, 'unavailable').length === 0) return null;
@@ -265,7 +319,10 @@ export function useAppModel(): AppModel {
       setMissing(needsFormName(scope) ? 'formName' : 'assignment');
       return;
     }
-    const decision = startDecision(wanted, roleReadiness, scope);
+    const decision = withSecondReader(
+      startDecision(wanted, roleReadiness, scope),
+      secondFor(wanted),
+    );
     if (decision.action === 'unavailable') {
       const message = unavailableText(wanted);
       if (message !== null) toasts.show(message, { tone: 'error' });
@@ -284,11 +341,13 @@ export function useAppModel(): AppModel {
 
   const { show } = toasts;
   const pendingRun = setupState.open ? setupState.pendingRun : null;
+  const setupReady = (role: SetupRole) =>
+    (role === 'secondReader' ? secondReadiness : roleReadiness[role]) === 'ready';
   const setupDone =
     setupState.open &&
-    setupState.roles.every((role) => roleReadiness[role] === 'ready') &&
+    setupState.roles.every(setupReady) &&
     (pendingRun === null ||
-      neededRoles(pendingRun, scope).every((role) => roleReadiness[role] === 'ready'));
+      (neededRoles(pendingRun, scope).every(setupReady) && secondFor(pendingRun) === 'ready'));
   const launchRef = useRef(launch);
   useEffect(() => {
     launchRef.current = launch;
@@ -301,7 +360,7 @@ export function useAppModel(): AppModel {
     if (afterSetup === null) return;
     if (afterSetup.run === null) show('Eingerichtet.');
     else launchRef.current(afterSetup.run);
-  }, [afterSetup, show]);
+  }, [afterSetup, show, launchRef]);
 
   const wasRunning = useRef<'count' | 'correct' | null>(null);
   const finishedRef = useRef({
@@ -358,7 +417,7 @@ export function useAppModel(): AppModel {
         correct: pages.length > 0 && openPages.correct === 0,
       },
       missingModels,
-      checking: rolesWith(kind, 'checking').length > 0,
+      checking: rolesWith(kind, 'checking').length > 0 || secondFor(kind) === 'checking',
       unavailable: unavailableText(kind),
       start,
       cancel,
@@ -390,6 +449,8 @@ export function useAppModel(): AppModel {
       transcriber: transcriberSetup,
       corrector: correctorSetup,
       reviewer: reviewerSetup,
+      secondReader: secondReaderSetup,
+      secondReading,
       cloud,
       switchLocked: {
         transcriber: isSwitchLocked(count.state, transcriberPhase) || reviewing,

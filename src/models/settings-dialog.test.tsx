@@ -4,12 +4,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppProvider } from '../app/app-context.tsx';
 import { testAppModel, testCloud, testModelSetup } from '../app/test-app.ts';
-import type { Models, ModelRole } from '../app/types.ts';
+import type { Models, ModelRole, SetupRole } from '../app/types.ts';
 import { ModelCallError, type ModelClient } from './client.ts';
 import {
+  CORRECTORS,
   defaultCorrector,
   defaultReviewer,
   recommendModel,
+  SECOND_READER_ID,
+  secondReader,
   totalBytes,
   type AnyModelInfo,
   type CustomModel,
@@ -32,7 +35,8 @@ const reviewer = defaultReviewer();
 const GIB = 1024 ** 3;
 const QWEN_ID = 'qwen3-vl-4b-q4';
 const E4B_ID = 'gemma-4-e4b-q4';
-const BIG = { totalRamBytes: 16 * GIB, freeDiskBytes: 100e9 };
+const BIG = { totalRamBytes: 32 * GIB, freeDiskBytes: 100e9 };
+const LARGEST_ID = 'gemma-4-26b-a4b-q4';
 
 const noop = () => undefined;
 
@@ -80,7 +84,7 @@ function renderModels(models: Partial<Models>, close: () => void = noop, open = 
 interface LiveProps {
   readonly client: ModelClient | null;
   readonly switchLocked?: Readonly<Record<ModelRole, boolean>>;
-  readonly show?: (roles: readonly ModelRole[]) => void;
+  readonly show?: (roles: readonly SetupRole[]) => void;
   readonly cloud?: Models['cloud'];
 }
 
@@ -133,8 +137,18 @@ const activeRow = (parent: ParentNode) =>
     (row) => row.querySelector<HTMLInputElement>('input[type="radio"]')?.checked ?? true,
   );
 
+const STEPS: readonly ModelRole[] = ['transcriber', 'corrector', 'reviewer'];
+
+const stepSections = () =>
+  STEPS.flatMap((role) => {
+    const found = container.querySelector<HTMLElement>(
+      `section[aria-labelledby="settings-${role}"]`,
+    );
+    return found === null ? [] : [found];
+  });
+
 const stateTexts = () =>
-  [...container.querySelectorAll('section')].map(
+  stepSections().map(
     (found) => activeRow(found)?.querySelector('.settings-model-state')?.textContent,
   );
 
@@ -247,7 +261,7 @@ describe('SettingsDialog static content', () => {
 
 describe('SettingsDialog static actions', () => {
   it('requests the setup for exactly the role whose Herunterladen was clicked', () => {
-    const show = vi.fn<(roles: readonly ModelRole[]) => void>();
+    const show = vi.fn<(roles: readonly SetupRole[]) => void>();
     renderModels({
       transcriber: testModelSetup(transcriber, statusOf(transcriber, 'missing')),
       corrector: testModelSetup(corrector, statusOf(corrector, 'missing')),
@@ -367,8 +381,9 @@ describe('SettingsDialog static actions', () => {
 describe('SettingsDialog with live model state', () => {
   it('offers every model of each step with its memory need and switches', async () => {
     const fake = await mountLive({}, { hardware: BIG, states: { [transcriber.id]: 'ready' } });
-    for (const role of ['transcriber', 'corrector', 'reviewer'] as const) {
-      await vi.waitFor(() => expect(radios(section(role))).toHaveLength(2));
+    await vi.waitFor(() => expect(radios(section('transcriber'))).toHaveLength(2));
+    for (const role of ['corrector', 'reviewer'] as const) {
+      await vi.waitFor(() => expect(radios(section(role))).toHaveLength(3));
     }
     expect(radios(section('transcriber')).map((radio) => radio.checked)).toEqual([true, false]);
     const text = section('transcriber').querySelector('.model-choice')?.textContent ?? '';
@@ -376,6 +391,7 @@ describe('SettingsDialog with live model state', () => {
     expect(text).toContain('Qwen3-VL 4B Instruct (Q4_K_M)');
     expect(text).toContain('3,0 GB');
     expect(text).toContain('braucht etwa 5,7 GB');
+    expect(text).not.toContain('LightOnOCR');
     expect(section('corrector').textContent).toContain('Gemma 4 E4B it (Q4_0)');
     expect(section('corrector').textContent).toContain('braucht etwa 7,6 GB');
     expect(container.querySelectorAll('.settings-model-note')).toHaveLength(0);
@@ -416,9 +432,10 @@ describe('SettingsDialog with live model state', () => {
       },
     });
     const fake = await mountLive({ cloud }, { hardware: BIG });
-    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(3));
+    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(4));
     expect(radios(section('corrector')).map((radio) => radio.checked)).toEqual([
       true,
+      false,
       false,
       false,
     ]);
@@ -506,30 +523,28 @@ describe('SettingsDialog with live model state', () => {
         states: { [transcriber.id]: 'ready' },
       },
     );
-    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(2));
-    expect(warned()).toEqual([
-      'Qwen3-VL 4B Instruct (Q4_K_M)',
-      'Gemma 4 E4B it (Q4_0)',
-      'Gemma 4 E4B it (Q4_0)',
-    ]);
+    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(3));
+    const larger = ['Gemma 4 E4B it (Q4_0)', 'Gemma 4 26B A4B it (Q4_0)'];
+    expect(warned()).toEqual([...larger, ...larger]);
     expect(section('corrector').textContent).toContain('braucht etwa 5,5 GB');
+    expect(section('transcriber').textContent).toContain('braucht etwa 4,5 GB');
     const hidden = [...container.querySelectorAll('.settings-model-need .visually-hidden')];
     expect(hidden.map((note) => note.textContent)).toEqual(
-      Array(3).fill(', mehr als der verfügbare Arbeitsspeicher'),
+      Array(4).fill(', mehr als der verfügbare Arbeitsspeicher'),
     );
-    expect(hidden.map((note) => note.parentElement?.dataset.warn)).toEqual(Array(3).fill('true'));
+    expect(hidden.map((note) => note.parentElement?.dataset.warn)).toEqual(Array(4).fill('true'));
   });
 
   it('marks nothing with unknown memory', async () => {
     await mountLive({}, { hardware: null, states: { [transcriber.id]: 'ready' } });
-    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(2));
+    await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(3));
     expect(warned()).toEqual([]);
   });
 
   it('blocks switching while another model is being handled', async () => {
     await mountLive({}, { hardware: BIG, states: { [QWEN_ID]: 'downloading' } });
     await vi.waitFor(() => expect(radios(section('transcriber'))).toHaveLength(2));
-    expect(container.querySelector('fieldset')?.disabled).toBe(true);
+    expect(section('transcriber').querySelector('fieldset')?.disabled).toBe(true);
   });
 
   it('blocks switching and deleting for a locked role', async () => {
@@ -544,7 +559,7 @@ describe('SettingsDialog with live model state', () => {
   });
 
   it('deletes a model only after confirmation and then offers to set it up again', async () => {
-    const show = vi.fn<(roles: readonly ModelRole[]) => void>();
+    const show = vi.fn<(roles: readonly SetupRole[]) => void>();
     const fake = await mountLive(
       { show },
       { states: { [transcriber.id]: 'ready', [corrector.id]: 'ready' } },
@@ -577,7 +592,7 @@ describe('SettingsDialog with live model state', () => {
   });
 
   it('deleting the shared model from the reviewer section removes it for the corrector too', async () => {
-    const show = vi.fn<(roles: readonly ModelRole[]) => void>();
+    const show = vi.fn<(roles: readonly SetupRole[]) => void>();
     const fake = await mountLive({ show }, { states: { [corrector.id]: 'ready' } });
     await vi.waitFor(() =>
       expect(stateTexts()).toEqual(['Nicht eingerichtet', 'Bereit', 'Bereit']),
@@ -726,7 +741,7 @@ describe('SettingsDialog with a custom model', () => {
     await vi.waitFor(() => expect(fake.startDownload).toHaveBeenCalledWith(linked.id));
     expect(fake.selectCorrector).toHaveBeenLastCalledWith(linked.id);
     expect(fake.selectReviewer).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(radios(section('reviewer'))).toHaveLength(3));
+    await vi.waitFor(() => expect(radios(section('reviewer'))).toHaveLength(4));
     expect(
       activeRow(section('corrector'))?.querySelector('.settings-model-name')?.textContent,
     ).toBe('small-Q4_K_M.gguf');
@@ -791,5 +806,217 @@ describe('SettingsDialog with a custom model', () => {
       ).toBe('Gemma 4 E2B it (Q4_0)'),
     );
     expect(alert()).toBeNull();
+  });
+});
+
+const thoroughness = () => {
+  const found = container.querySelector<HTMLElement>(
+    'section[aria-labelledby="settings-thoroughness"]',
+  );
+  if (found === null) throw new Error('no section for the thoroughness');
+  return found;
+};
+
+const secondSection = () =>
+  container.querySelector<HTMLElement>('section[aria-labelledby="settings-secondReader"]');
+
+const levelNames = () =>
+  [...thoroughness().querySelectorAll('label')].map(
+    (label) => label.querySelector('.settings-model-name')?.textContent,
+  );
+
+const checkedLevel = () =>
+  [...thoroughness().querySelectorAll('label')]
+    .find((label) => label.querySelector('input')?.checked)
+    ?.querySelector('.settings-model-name')?.textContent;
+
+const withRam = (gib: number) => ({
+  ...testModelSetup(transcriber).state,
+  hardware: { totalRamBytes: gib * GIB, freeDiskBytes: 100e9 },
+});
+
+describe('SettingsDialog thoroughness', () => {
+  it('starts on Schnell and selects the models of a level step by step', async () => {
+    const calls: string[] = [];
+    const selectFor = (role: ModelRole) =>
+      vi.fn<(id: string) => Promise<void>>((id) => {
+        calls.push(`${role}:${id}`);
+        return Promise.resolve();
+      });
+    const set = vi.fn<(enabled: boolean) => void>();
+    renderModels({
+      transcriber: testModelSetup(transcriber, undefined, { select: selectFor('transcriber') }),
+      corrector: testModelSetup(corrector, undefined, { select: selectFor('corrector') }),
+      reviewer: testModelSetup(reviewer, undefined, { select: selectFor('reviewer') }),
+      secondReading: { enabled: false, set },
+    });
+    expect(thoroughness().querySelector('h3')?.textContent).toBe('Gründlichkeit');
+    expect(levelNames()).toEqual(['Schnell', 'Gründlich', 'Sehr gründlich']);
+    expect(checkedLevel()).toBe('Schnell');
+
+    await click(radios(thoroughness())[2]);
+    await vi.waitFor(() => expect(set).toHaveBeenCalledExactlyOnceWith(true));
+    expect(calls).toEqual([
+      `transcriber:${transcriber.id}`,
+      `corrector:${LARGEST_ID}`,
+      `reviewer:${LARGEST_ID}`,
+    ]);
+  });
+
+  it('names the level of the chosen models and shows Eigene Auswahl for any other mix', () => {
+    const e4b = CORRECTORS.find((model) => model.id === E4B_ID) ?? corrector;
+    renderModels({
+      corrector: testModelSetup(e4b),
+      reviewer: testModelSetup(e4b),
+      secondReading: { enabled: true, set: noop },
+    });
+    expect(checkedLevel()).toBe('Gründlich');
+
+    renderModels({
+      corrector: testModelSetup(e4b),
+      secondReading: { enabled: true, set: noop },
+    });
+    expect(levelNames()).toEqual(['Schnell', 'Gründlich', 'Sehr gründlich', 'Eigene Auswahl']);
+    expect(checkedLevel()).toBe('Eigene Auswahl');
+
+    renderModels({ secondReading: { enabled: true, set: noop } });
+    expect(checkedLevel()).toBe('Eigene Auswahl');
+  });
+
+  it('clears a cloud step before it selects the local model of a level', async () => {
+    const calls: string[] = [];
+    const clear = vi.fn<Models['cloud']['clear']>((role) => {
+      calls.push(`clear:${role}`);
+      return Promise.resolve();
+    });
+    const select = vi.fn<(id: string) => Promise<void>>((id) => {
+      calls.push(`select:${id}`);
+      return Promise.resolve();
+    });
+    renderModels({
+      corrector: testModelSetup(corrector, undefined, { select }),
+      cloud: testCloud({
+        available: true,
+        clear,
+        steps: {
+          corrector: {
+            template: 'server',
+            label: '127.0.0.1',
+            baseUrl: 'http://127.0.0.1:8080/v1',
+            host: '127.0.0.1',
+            model: 'gemma',
+            loopback: true,
+            confirmed: true,
+            key: null,
+          },
+        },
+      }),
+    });
+    expect(checkedLevel()).toBe('Eigene Auswahl');
+
+    await click(radios(thoroughness())[0]);
+    await vi.waitFor(() => expect(select).toHaveBeenCalledOnce());
+    expect(calls).toEqual(['clear:corrector', `select:${corrector.id}`]);
+  });
+
+  it('notes the levels whose models exceed the memory as taking much longer', () => {
+    const notes = () =>
+      [...thoroughness().querySelectorAll('label')].map(
+        (label) => label.querySelector('.settings-model-note')?.textContent ?? null,
+      );
+    renderModels({ transcriber: testModelSetup(transcriber, undefined, { state: withRam(8) }) });
+    expect(notes()).toEqual([null, 'dauert deutlich länger', 'dauert deutlich länger']);
+    expect(radios(thoroughness()).every((radio) => !radio.disabled)).toBe(true);
+
+    renderModels({ transcriber: testModelSetup(transcriber, undefined, { state: withRam(16) }) });
+    expect(notes()).toEqual([null, null, 'dauert deutlich länger']);
+  });
+
+  it('blocks the levels while a step cannot switch', () => {
+    renderModels({ switchLocked: { transcriber: false, corrector: true, reviewer: false } });
+    expect(thoroughness().querySelector('fieldset')?.disabled).toBe(true);
+  });
+});
+
+describe('SettingsDialog second reading', () => {
+  const second = secondReader();
+
+  it('switches the second reading with its model, size and memory need', async () => {
+    const set = vi.fn<(enabled: boolean) => void>();
+    renderModels({
+      secondReader: testModelSetup(second, statusOf(second, 'missing')),
+      secondReading: { enabled: false, set },
+    });
+    const found = secondSection();
+    expect(found?.querySelector('h3')?.textContent).toBe('Zweite Lesung');
+    expect(found?.textContent).toContain('LightOnOCR-3 0.8B (Q8_0)');
+    expect(found?.textContent).toContain('braucht etwa');
+    expect(found?.textContent).toContain('Nicht eingerichtet');
+    const box = found?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(box?.checked).toBe(false);
+    expect(buttonLabels(found ?? container)).toEqual([]);
+
+    await click(box ?? undefined);
+    expect(set).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it('offers the download once the second reading is on and its model is missing', async () => {
+    const show = vi.fn<(roles: readonly SetupRole[]) => void>();
+    renderModels({
+      secondReader: testModelSetup(second, statusOf(second, 'missing')),
+      secondReading: { enabled: true, set: noop },
+      setup: { open: false, roles: [], pendingRun: null, show, close: noop },
+    });
+    await click(buttonIn(secondSection() ?? container, 'Herunterladen'));
+    expect(show).toHaveBeenCalledExactlyOnceWith(['secondReader']);
+  });
+
+  it('deletes the downloaded model only after the confirmation', async () => {
+    const { remove } = spies();
+    renderModels({
+      secondReader: testModelSetup(second, statusOf(second, 'ready'), { remove }),
+      secondReading: { enabled: true, set: noop },
+    });
+    const found = secondSection() ?? container;
+    expect(found.textContent).toContain('Bereit');
+    expect(buttonLabels(found)).toEqual(['Löschen']);
+
+    await click(buttonIn(found, 'Löschen'));
+    expect(remove).not.toHaveBeenCalled();
+    await click(buttonIn(found, 'Behalten'));
+    expect(remove).not.toHaveBeenCalled();
+
+    await click(buttonIn(found, 'Löschen'));
+    const confirm = [...found.querySelectorAll('button')].filter(
+      (candidate) => candidate.textContent === 'Löschen',
+    );
+    await click(confirm.at(-1));
+    expect(remove).toHaveBeenCalledExactlyOnceWith(SECOND_READER_ID);
+  });
+
+  it('disables the switch while the recognition runs and hides it for a cloud recognition', () => {
+    renderModels({ switchLocked: { transcriber: true, corrector: false, reviewer: false } });
+    expect(
+      secondSection()?.querySelector<HTMLInputElement>('input[type="checkbox"]')?.disabled,
+    ).toBe(true);
+
+    renderModels({
+      cloud: testCloud({
+        available: true,
+        steps: {
+          transcriber: {
+            template: 'server',
+            label: '127.0.0.1',
+            baseUrl: 'http://127.0.0.1:8080/v1',
+            host: '127.0.0.1',
+            model: 'vision',
+            loopback: true,
+            confirmed: true,
+            key: null,
+          },
+        },
+      }),
+    });
+    expect(secondSection()).toBeNull();
   });
 });
