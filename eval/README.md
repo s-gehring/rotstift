@@ -258,4 +258,6 @@ node --experimental-transform-types eval/gruendlich-zweite-lesung.ts --ocr <GLM-
 
   `memory.peak`, `memory.events` und `workingset_refault_file` im Scope zeigen, ob der Deckel griff und wie oft Seiten der Modelldatei neu gelesen wurden. Die Gemma-Modelle laufen in der Eval mit `--no-repack` (`cpuRepack: false`), ihre Gewichte bleiben dadurch Seiten der Datei, die der Kernel unter dem Deckel verwerfen und neu lesen kann.
 
+  Für eine andere Platte die Modelldatei dorthin kopieren und `ROTSTIFT_MODELS_DIR` auf den Ordner setzen. `read_bytes` und `write_bytes` in `/proc/<pid>/io` des llama-server zeigen, was der Lauf selbst liest und schreibt, `pswpout` in `/proc/vmstat`, ob der Rechner auslagert.
+
 - `EVAL_MAX_TOKENS` setzt in `content-form.ts` die Ausgabegrenze je Merkmalsfrage der Variante `features` (Standard 96). Mit `--reasoning on` braucht das Modell dafür mehrere Tausend Token.
