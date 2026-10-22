@@ -31,6 +31,13 @@ export function unstrokeStruck(text: string): string {
   });
 }
 
+const CARET = '\uE000';
+
+export function restrokedCaret(value: string, caret: number): number {
+  const marked = `${value.slice(0, caret)}${CARET}${value.slice(caret)}`;
+  return strokeStruck(unstrokeStruck(marked)).indexOf(CARET);
+}
+
 export function splitStruck(text: string): { readonly text: string; readonly struck: boolean }[] {
   const parts: { text: string; struck: boolean }[] = [];
   let cursor = 0;

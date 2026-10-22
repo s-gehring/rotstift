@@ -110,6 +110,7 @@ export function SubjectSelect() {
           id={id}
           role="dialog"
           aria-label="Korrektur"
+          tabIndex={-1}
           className="scope-popover"
           onKeyDown={onKeyDown}
         >
