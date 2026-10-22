@@ -1,3 +1,4 @@
+import { confirmReading } from '../correction/second-reading.ts';
 import { editReading, type PageReading } from '../correction/uncertain-reading.ts';
 import type { ImportPage, Rotation } from '../import/pages.ts';
 import { browserDiagnostics, createHeartbeat, type PipelineDiagnostics } from './diagnostics.ts';
@@ -20,6 +21,7 @@ export interface PageEntry {
   readonly rotation: Rotation;
   readonly error: TranscribeError | null;
   readonly reading: PageReading | null;
+  readonly awaitingSecond?: boolean;
 }
 
 export interface Batch {
@@ -32,7 +34,10 @@ export interface RunState {
   readonly batch: Batch | null;
   readonly durationsMs: readonly number[];
   readonly runningSince: number | null;
+  readonly secondReading?: boolean;
 }
+
+export type ReadPass = 'first' | 'second';
 
 export interface RunnerDeps {
   readonly render: (page: ImportPage) => Promise<Blob>;
@@ -43,6 +48,7 @@ export interface RunnerDeps {
 interface Current {
   readonly id: string;
   readonly rotation: Rotation;
+  readonly pass: ReadPass;
   abort: AbortController;
   reason: 'cancel' | 'removed' | 'rotated' | undefined;
 }
@@ -216,6 +222,8 @@ export function createRunner(deps: RunnerDeps) {
     run: Current,
     attemptNo: number,
   ): Promise<Attempt> => {
+    const read =
+      run.pass === 'second' ? active.secondRead?.bind(active) : active.transcribe.bind(active);
     const { signal } = run.abort;
     let stall: Stall | undefined;
     const watch = createPhaseWatch({
@@ -225,6 +233,7 @@ export function createRunner(deps: RunnerDeps) {
         diagnostics.log('page_phase', {
           pageId: page.id,
           attempt: attemptNo,
+          pass: run.pass,
           phase,
           ...(previous !== null && { previousMs: Math.round(previousMs) }),
         });
@@ -235,6 +244,7 @@ export function createRunner(deps: RunnerDeps) {
         diagnostics.log('page_stalled', {
           pageId: page.id,
           attempt: attemptNo,
+          pass: run.pass,
           phase: found.phase,
           limitMs: Math.round(found.limitMs),
           elapsedMs: Math.round(found.elapsedMs),
@@ -247,7 +257,8 @@ export function createRunner(deps: RunnerDeps) {
         watch.enter('rendering');
         const png = await deps.render(page);
         signal.throwIfAborted();
-        return await active.transcribe(png, signal, (phase) => {
+        if (read === undefined) return CANCELLED;
+        return await read(png, signal, (phase) => {
           watch.enter(phase);
         });
       } catch (error) {
@@ -259,7 +270,12 @@ export function createRunner(deps: RunnerDeps) {
     return { result, stall, timings: watch.stop() };
   };
 
-  const settle = (entry: PageEntry, run: Current, result: TranscribeResult): PageEntry => {
+  const settle = (
+    entry: PageEntry,
+    run: Current,
+    result: TranscribeResult,
+    secondReading: boolean,
+  ): PageEntry => {
     if (result.ok) {
       return {
         status: 'done',
@@ -269,6 +285,7 @@ export function createRunner(deps: RunnerDeps) {
         rotation: run.rotation,
         error: null,
         reading: result.reading ?? null,
+        ...(secondReading && result.reading !== undefined && { awaitingSecond: true }),
       };
     }
     return entry.hasTranscript
@@ -284,7 +301,7 @@ export function createRunner(deps: RunnerDeps) {
     let stalledBefore = false;
     for (let attemptNo = 1; ; attemptNo += 1) {
       const attemptStart = now();
-      diagnostics.log('page_start', { pageId: page.id, attempt: attemptNo });
+      diagnostics.log('page_start', { pageId: page.id, attempt: attemptNo, pass: run.pass });
       const outcome = await attempt(active, page, run, attemptNo);
       if (wasInterrupted(run)) return { result: undefined, attemptStart };
       const lostRequest =
@@ -296,6 +313,7 @@ export function createRunner(deps: RunnerDeps) {
         diagnostics.log('page_done', {
           pageId: page.id,
           attempt: attemptNo,
+          pass: run.pass,
           ok: outcome.result.ok,
           totalMs: Math.round(now() - attemptStart),
           ...rounded(outcome.timings),
@@ -320,20 +338,47 @@ export function createRunner(deps: RunnerDeps) {
     }
   };
 
+  const settleSecond = (id: string, result: TranscribeResult) => {
+    const entry = state.entries[id];
+    if (entry === undefined) return;
+    const confirmable = result.ok && entry.reading !== null && !entry.edited;
+    patchEntry(id, {
+      awaitingSecond: false,
+      ...(confirmable && { reading: confirmReading(entry.reading, result.lines) }),
+    });
+  };
+
+  const skipSecond = () => {
+    if (!Object.values(state.entries).some((entry) => entry.awaitingSecond === true)) return;
+    const entries: Record<string, PageEntry> = {};
+    for (const [id, entry] of Object.entries(state.entries)) {
+      entries[id] = entry.awaitingSecond === true ? { ...entry, awaitingSecond: false } : entry;
+    }
+    commit({ ...state, entries });
+  };
+
   const runPage = async (
     active: PageTranscriber,
     page: ImportPage,
+    pass: ReadPass,
   ): Promise<TranscribeResult | undefined> => {
     const run: Current = {
       id: page.id,
       rotation: page.rotation,
+      pass,
       abort: new AbortController(),
       reason: undefined,
     };
     current = run;
-    patchEntry(page.id, { status: 'running', error: null }, { runningSince: now() });
+    if (pass === 'first') {
+      patchEntry(page.id, { status: 'running', error: null }, { runningSince: now() });
+    }
     const { result, attemptStart } = await runAttempts(active, page, run);
     if (current === run) current = null;
+    if (pass === 'second') {
+      if (result !== undefined && run.reason === undefined) settleSecond(page.id, result);
+      return result;
+    }
     if (result === undefined || run.reason !== undefined) return undefined;
     const entry = state.entries[page.id];
     if (entry === undefined) return undefined;
@@ -344,7 +389,10 @@ export function createRunner(deps: RunnerDeps) {
     if (duration !== undefined) limitSamples.push(duration);
     commit({
       ...state,
-      entries: { ...state.entries, [page.id]: settle(entry, run, result) },
+      entries: {
+        ...state.entries,
+        [page.id]: settle(entry, run, result, active.secondRead !== undefined),
+      },
       batch: batch && { ...batch, finished: batch.finished + 1 },
       durationsMs: duration === undefined ? state.durationsMs : [...state.durationsMs, duration],
       runningSince: null,
@@ -380,9 +428,14 @@ export function createRunner(deps: RunnerDeps) {
     diagnostics.log('batch_start', { pages: state.batch?.total ?? 0 });
     try {
       for (;;) {
-        const next = pages.find((page) => state.entries[page.id]?.status === 'waiting');
+        const first = pages.find((page) => state.entries[page.id]?.status === 'waiting');
+        const next = first ?? pages.find((page) => state.entries[page.id]?.awaitingSecond === true);
         if (isDisposed() || next === undefined) break;
-        const result = await runPage(active, next);
+        const pass: ReadPass = first === undefined ? 'second' : 'first';
+        const result = await runPage(active, next, pass);
+        if (pass === 'second' && state.entries[next.id]?.awaitingSecond === true) {
+          patchEntry(next.id, { awaitingSecond: false });
+        }
         if (result && !result.ok && result.error.kind === 'failed') {
           const { crashed, stalled } = result.error;
           if (crashed || stalled) {
@@ -397,6 +450,7 @@ export function createRunner(deps: RunnerDeps) {
       }
     } finally {
       looping = false;
+      skipSecond();
       diagnostics.log('batch_end', { pages: state.batch?.finished ?? 0 });
       heartbeat.stop();
       commit({ ...state, batch: null, runningSince: null });
@@ -433,6 +487,8 @@ export function createRunner(deps: RunnerDeps) {
         if (state.durationsMs.length > 0) commit({ ...state, durationsMs: [] });
       }
       transcriber = next;
+      const secondReading = next?.secondRead !== undefined;
+      if ((state.secondReading ?? false) !== secondReading) commit({ ...state, secondReading });
     },
 
     setPages: (next: readonly ImportPage[]) => {
@@ -450,7 +506,7 @@ export function createRunner(deps: RunnerDeps) {
       if (running && page && running.reason === undefined && page.rotation !== running.rotation) {
         running.reason = 'rotated';
         running.abort.abort();
-        patchEntry(page.id, { status: 'waiting' });
+        patchEntry(page.id, { status: 'waiting', awaitingSecond: false });
       }
     },
 
@@ -485,7 +541,8 @@ export function createRunner(deps: RunnerDeps) {
       }
       const entries: Record<string, PageEntry> = {};
       for (const [id, entry] of Object.entries(state.entries)) {
-        if (!isQueued(entry)) entries[id] = entry;
+        if (!isQueued(entry))
+          entries[id] = entry.awaitingSecond ? { ...entry, awaitingSecond: false } : entry;
         else if (entry.hasTranscript) entries[id] = { ...entry, status: 'done' };
       }
       commit({ ...state, entries, batch: null, runningSince: null });

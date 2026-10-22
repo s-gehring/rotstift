@@ -39,13 +39,13 @@ export const LEVELS: Readonly<Record<Thoroughness, Level>> = {
   thorough: {
     transcriber: DEFAULT_MODEL_ID,
     corrector: STRONGER_CORRECTOR_ID,
-    reviewer: STRONGER_CORRECTOR_ID,
+    reviewer: DEFAULT_REVIEWER_ID,
     secondReading: true,
   },
   veryThorough: {
     transcriber: DEFAULT_MODEL_ID,
     corrector: LARGEST_CORRECTOR_ID,
-    reviewer: LARGEST_CORRECTOR_ID,
+    reviewer: DEFAULT_REVIEWER_ID,
     secondReading: true,
   },
 };

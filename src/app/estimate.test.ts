@@ -22,7 +22,7 @@ import type { StepCosts } from '../models/speed.ts';
 
 const reading = (read: number): Snapshot => ({
   step: 'read',
-  left: { read, correct: read, review: 0 },
+  left: { ...NO_WORK, read, correct: read },
 });
 
 const correcting = (correct: number): Snapshot => ({
@@ -42,7 +42,10 @@ function keyed(initial: Record<string, string> = {}) {
 describe('start value', () => {
   it('uses 30 s per page for reading, 15 s per page for correcting and 20 s per work', () => {
     const estimator = createEstimator();
-    const snapshot: Snapshot = { step: 'read', left: { read: 20, correct: 20, review: 10 } };
+    const snapshot: Snapshot = {
+      step: 'read',
+      left: { read: 20, confirm: 0, correct: 20, review: 10 },
+    };
     expect(totalSeconds(estimator.rates, snapshot.left)).toBe(1100);
     expect(remainingSeconds(estimator, snapshot, 0)).toBe(1100);
     expect(remainingText(1100)).toBe('noch etwa 18 min');
@@ -180,12 +183,14 @@ describe('texts', () => {
 
 const COSTS: StepCosts = {
   read: { key: 'glm-ocr-q8', factor: 1 },
+  confirm: { key: 'none', factor: 1 },
   correct: { key: 'gemma-4-e2b-q4', factor: 1 },
   review: { key: 'gemma-4-e2b-q4', factor: 1 },
 };
 
 const LARGER: StepCosts = {
-  read: { key: 'glm-ocr-q8+lightonocr-3-08b-q8', factor: 1.65 },
+  read: { key: 'qwen3-vl-4b-q4', factor: 3.1 },
+  confirm: { key: 'lightonocr-3-08b-q8', factor: 0.65 },
   correct: { key: 'gemma-4-26b-a4b-q4', factor: 25 },
   review: { key: 'gemma-4-26b-a4b-q4', factor: 25 },
 };
@@ -193,19 +198,20 @@ const LARGER: StepCosts = {
 describe('rates per model', () => {
   it('starts from the rule of thumb scaled by the models of each step', () => {
     expect(ratesFor({}, COSTS)).toEqual(DEFAULT_RATES);
-    expect(ratesFor({}, LARGER)).toEqual({ read: 49.5, correct: 375, review: 500 });
+    expect(ratesFor({}, LARGER)).toEqual({ read: 93, confirm: 19.5, correct: 375, review: 500 });
   });
 
   it('keeps what was learned for a model apart from the other models', () => {
-    const learned = learn({}, COSTS, { read: 40, correct: 15, review: 20 });
+    const learned = learn({}, COSTS, { read: 40, confirm: 30, correct: 15, review: 20 });
     expect(learned).toEqual({ 'read:glm-ocr-q8': 40 });
-    expect(ratesFor(learned, COSTS)).toEqual({ read: 40, correct: 15, review: 20 });
+    expect(ratesFor(learned, COSTS)).toEqual({ read: 40, confirm: 30, correct: 15, review: 20 });
     expect(ratesFor(learned, LARGER)).toEqual(ratesFor({}, LARGER));
 
-    const both = learn(learned, LARGER, { read: 70, correct: 375, review: 300 });
+    const both = learn(learned, LARGER, { read: 70, confirm: 25, correct: 375, review: 300 });
     expect(both).toEqual({
       'read:glm-ocr-q8': 40,
-      'read:glm-ocr-q8+lightonocr-3-08b-q8': 70,
+      'read:qwen3-vl-4b-q4': 70,
+      'confirm:lightonocr-3-08b-q8': 25,
       'review:gemma-4-26b-a4b-q4': 300,
     });
   });

@@ -65,20 +65,20 @@ test.describe('on a laptop with 8 GB', () => {
     await levels.getByRole('radio', { name: /^Gründlich/u }).click();
     await expect(levels.getByRole('radio', { name: /^Gründlich/u })).toBeChecked();
     await expect(correction.getByRole('radio', { name: /^Gemma 4 E4B/u })).toBeChecked();
-    await expect(review.getByRole('radio', { name: /^Gemma 4 E4B/u })).toBeChecked();
+    await expect(review.getByRole('radio', { name: /^Gemma 4 E2B/u })).toBeChecked();
     await expect(second).toBeChecked();
 
     await levels.getByRole('radio', { name: /^Sehr gründlich/u }).click();
     await expect(correction.getByRole('radio', { name: /^Gemma 4 26B A4B/u })).toBeChecked();
-    await expect(review.getByRole('radio', { name: /^Gemma 4 26B A4B/u })).toBeChecked();
+    await expect(review.getByRole('radio', { name: /^Gemma 4 E2B/u })).toBeChecked();
     await expect(second).toBeChecked();
-    const chosen = await tauriCalls(page, 'model_select_reviewer');
+    const chosen = await tauriCalls(page, 'model_select_corrector');
     expect(chosen.map((call) => call.args.modelId)).toEqual([
       'gemma-4-e4b-q4',
       'gemma-4-26b-a4b-q4',
     ]);
 
-    await review.getByRole('radio', { name: /^Gemma 4 E2B/u }).click();
+    await correction.getByRole('radio', { name: /^Gemma 4 E2B/u }).click();
     await expect(levels.getByRole('radio', { name: 'Eigene Auswahl', exact: true })).toBeChecked();
 
     await levels.getByRole('radio', { name: 'Schnell', exact: true }).click();

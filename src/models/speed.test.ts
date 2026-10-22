@@ -55,10 +55,11 @@ describe('relativeTime', () => {
 });
 
 describe('stepCosts', () => {
-  it('names each step by its model and adds the second reading to the recognition', () => {
+  it('names each step by its model and prices the second reading as its own step', () => {
     const fast = stepCosts({ transcriber: GLM, second: null, corrector: E2B, reviewer: E2B }, null);
     expect(fast).toEqual({
       read: { key: 'glm-ocr-q8', factor: 1 },
+      confirm: { key: 'none', factor: 1 },
       correct: { key: 'gemma-4-e2b-q4', factor: 1 },
       review: { key: 'gemma-4-e2b-q4', factor: 1 },
     });
@@ -66,8 +67,11 @@ describe('stepCosts', () => {
       { transcriber: GLM, second: secondReader(), corrector: E4B, reviewer: E4B },
       null,
     );
-    expect(thorough.read.key).toBe('glm-ocr-q8+lightonocr-3-08b-q8');
-    expect(thorough.read.factor).toBeCloseTo(1 + relativeTime(secondReader(), null));
+    expect(thorough.read).toEqual({ key: 'glm-ocr-q8', factor: 1 });
+    expect(thorough.confirm).toEqual({
+      key: 'lightonocr-3-08b-q8',
+      factor: relativeTime(secondReader(), null),
+    });
     expect(thorough.correct).toEqual({ key: 'gemma-4-e4b-q4', factor: relativeTime(E4B, null) });
   });
 
@@ -77,6 +81,7 @@ describe('stepCosts', () => {
       8 * GIB,
     );
     expect(costs.read).toEqual(CLOUD_COST);
+    expect(costs.confirm).toEqual({ key: 'none', factor: 1 });
     expect(costs.correct).toEqual(CLOUD_COST);
     expect(costs.review.key).toBe('gemma-4-e2b-q4');
   });
