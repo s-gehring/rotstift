@@ -25,7 +25,8 @@ test('adds the demo class again from the menu', async ({ page }) => {
 });
 
 test('puts every mark on the line of the page it belongs to', async ({ page }) => {
-  await correct(page);
+  test.slow();
+  await correct(page, pages.length);
   await expect(summary(page)).toHaveText(/^4 Arbeiten · 5 Seiten · \d+ Wörter · \d+ Fehler$/u);
 
   const names = [...new Set(pages.map((entry) => entry.arbeit))];

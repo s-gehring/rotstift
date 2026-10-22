@@ -42,6 +42,8 @@ export async function open(page: Page): Promise<void> {
 
 export async function load(page: Page, files: readonly UploadFile[]): Promise<void> {
   await page.locator('input[type=file]').setInputFiles([...files]);
+  await expect(summary(page)).toBeVisible();
+  await expect(summary(page)).not.toContainText('Wird geladen');
 }
 
 export function summary(page: Page): Locator {
@@ -77,10 +79,10 @@ export function copied(page: Page): Promise<string[]> {
   return page.evaluate(() => window.copiedTexts);
 }
 
-export async function correct(page: Page): Promise<void> {
+export async function correct(page: Page, pages = 1): Promise<void> {
   await page.getByRole('button', { name: 'Korrigieren', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Fertig: / })).toBeVisible({
-    timeout: 20_000,
+    timeout: Math.max(20_000, pages * 8_000),
   });
 }
 
