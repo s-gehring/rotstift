@@ -186,7 +186,7 @@ Phase 2 setzt die Punkte 1, 2, 3 und 8 der [Fehlerursachen](#fehlerursachen-nach
 
 **Bei abweichendem Transkript halbiert die Plausibilitätsprüfung die sicher falschen Boxen fast.** Über 108 Seiten und 9 Varianten des Transkripts (unverändert sowie fehlende, eingefügte, geteilte und verschmolzene Zeilen, siehe `src/layout/perturb.ts`) gibt die Zuordnung 11 719 sichere Boxen aus. Davon liegen 43 mit IoU < 0,2 daneben (0,37 %), nach der Prüfung noch 23 (0,20 %). Dafür werden 13 richtige Boxen grob (0,11 %).
 
-**Die Lineatur kostet wenig Zeit.** `findRuling` braucht je Seite im Median 18 ms (blankes Papier) bis 25 ms (Heftseiten) CPU-Zeit, höchstens 41 ms. `locateLines` braucht insgesamt im Median rund 25 bis 40 ms mehr als vorher (ScaDS 96 → 124 ms, Heftseiten 134 → 171 ms), weil zusätzlich Linien gelöscht und Zeilen geprüft werden. Die Maschine war voll ausgelastet, gemessen ist deshalb CPU-Zeit statt Wanduhrzeit, je Seite das Minimum aus drei Läufen.
+**Die Lineatur kostet wenig Zeit.** `findRuling` braucht je Seite im Median 18 ms (blankes Papier) bis 25 ms (Heftseiten), auf der A4-Testseite 31 ms, höchstens 41 ms. `locateLines` wird insgesamt um 10 bis 50 ms langsamer, weil zusätzlich Linien gelöscht und Zeilen geprüft werden. Gemessen auf demselben Mac bei ruhiger Maschine, Wanduhrzeit, Median aus fünf abwechselnden Läufen je Seite: Heftseiten 115 → 125 ms, ScaDS 82 → 101 ms, die A4-Seite aus `locate-lines.test.ts` 150 → 200 ms.
 
 ### Zählweise
 

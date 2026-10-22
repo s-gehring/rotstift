@@ -42,7 +42,7 @@ Nach der Zuordnung prüft `markImplausible` (`src/layout/plausible.ts`) jede sic
 ## Folgen
 
 - Mehrspaltige Seiten, Tabellen und stark verwinkelte Fotos werden nicht unterstützt. Dort liefert die Zuordnung `null`.
-- Die Lineatur kostet je Seite im Median rund 25 bis 40 ms CPU-Zeit zusätzlich, `findRuling` allein höchstens 41 ms (Messung in [Heftpapier, Phase 2](../evaluations/2026-10-heftpapier.md#phase-2-heftlinien)). Auf blankem Papier ändert sich an den Boxen nichts.
+- Die Lineatur kostet je Seite rund 10 bis 50 ms zusätzlich, `findRuling` allein höchstens 41 ms (Messung in [Heftpapier, Phase 2](../evaluations/2026-10-heftpapier.md#phase-2-heftlinien)). Auf blankem Papier ändert sich an den Boxen nichts.
 - Weicht das Transkript von der Seite ab (Zeile fehlt, eingefügt, verschmolzen, geteilt), sinkt die Trefferquote deutlich, weil mehrdeutige Zeilen `null` bekommen. Auf den gerenderten Testseiten gibt es keine sicher falschen Boxen, in der Simulation (20 Zeilen, 15 % Breitenstreuung) liegt der Anteil bei einer fehlenden Zeile unter 0,5 %, bei einer eingefügten Zeile um 1,3 %.
 - Auf echten Datensätzen ohne Zeilenkoordinaten (ScaDS) lässt sich nur die Abdeckung messen, nicht die Lage der Boxen.
 - Die Eingabe ist das Bild, das auch der Transkription dient (bereits gedreht). Der Aufrufer ist dafür zuständig, die Boxen in dasselbe Koordinatensystem zu bringen wie die Seite im Overlay.
