@@ -9,6 +9,8 @@ import {
   DEFAULT_MODEL_ID,
   DEFAULT_REVIEWER_ID,
   REVIEWERS,
+  SECOND_READERS,
+  SECOND_READER_ID,
   defaultCorrector,
   defaultReviewer,
   findCorrector,
@@ -21,6 +23,8 @@ import {
   findModel,
   modelSource,
   recommendModel,
+  repacks,
+  secondReader,
   totalBytes,
   type CustomModel,
   type ModelInfo,
@@ -50,14 +54,14 @@ function variant(id: string, recommendedRamGb: number): ModelInfo {
 describe('registry', () => {
   it('lists pinned Hugging Face downloads with hashes and sizes', () => {
     expect(MODELS.length).toBeGreaterThan(0);
-    for (const entry of MODELS) {
+    for (const entry of [...MODELS, ...SECOND_READERS]) {
       for (const file of [entry.files.model, entry.files.mmproj]) {
         expect(file.url).toMatch(/^https:\/\/huggingface\.co\/.+\/resolve\/[0-9a-f]{40}\//u);
         expect(file.sha256).toMatch(/^[0-9a-f]{64}$/u);
         expect(file.bytes).toBeGreaterThan(0);
       }
-      expect(entry.prompt.length).toBeGreaterThan(0);
     }
+    for (const entry of MODELS) expect(entry.prompt.length).toBeGreaterThan(0);
     expect(totalBytes(model)).toBe(model.files.model.bytes + model.files.mmproj.bytes);
   });
 
@@ -114,6 +118,22 @@ describe('registry', () => {
     expect(exceedsMemory(defaultCorrector(), 8 * GIB)).toBe(false);
     expect(exceedsMemory(recommendModel(), 8 * GIB)).toBe(false);
     expect(exceedsMemory(recommendModel(), 6 * GIB)).toBe(true);
+  });
+
+  it('repacks only where the repacked copy fits, so larger models run from the file', () => {
+    const large = findCorrector('gemma-4-26b-a4b-q4');
+    const qwen = findModel('qwen3-vl-4b-q4');
+    if (large === undefined || qwen === undefined) throw new Error('missing model');
+    expect(repacks(large, 16 * GIB)).toBe(false);
+    expect(repacks(large, 48 * GIB)).toBe(true);
+    expect(estimateRamBytes(large, 16 * GIB) / 1e9).toBeCloseTo(15.97, 1);
+    expect(exceedsMemory(large, 16 * GIB)).toBe(true);
+    expect(exceedsMemory(large, 32 * GIB)).toBe(false);
+    expect(repacks(qwen, 8 * GIB)).toBe(false);
+    expect(exceedsMemory(qwen, 8 * GIB)).toBe(false);
+    expect(repacks(recommendModel(), 8 * GIB)).toBe(true);
+    expect(repacks(defaultCorrector(), 8 * GIB)).toBe(false);
+    expect(repacks(defaultCorrector(), 16 * GIB)).toBe(true);
   });
 
   it('builds a custom text model from the template with its own files', () => {
@@ -191,8 +211,12 @@ describe('registry', () => {
   });
 
   it('lists Gemma 4 E2B as the corrector exactly as the evaluation recommends', () => {
-    expect(CORRECTORS.map((entry) => entry.id)).toEqual([DEFAULT_CORRECTOR_ID, 'gemma-4-e4b-q4']);
-    expect(ALL_MODELS).toHaveLength(MODELS.length + CORRECTORS.length);
+    expect(CORRECTORS.map((entry) => entry.id)).toEqual([
+      DEFAULT_CORRECTOR_ID,
+      'gemma-4-e4b-q4',
+      'gemma-4-26b-a4b-q4',
+    ]);
+    expect(ALL_MODELS).toHaveLength(MODELS.length + SECOND_READERS.length + CORRECTORS.length);
     expect(findModel(DEFAULT_CORRECTOR_ID)).toBeUndefined();
     expect(findCorrector(DEFAULT_MODEL_ID)).toBeUndefined();
     const corrector = defaultCorrector();
@@ -234,6 +258,42 @@ describe('registry', () => {
 
   it('keeps weight repacking for transcribers', () => {
     expect(MODELS.every((entry) => entry.server.cpuRepack)).toBe(true);
+    expect(secondReader().server.cpuRepack).toBe(true);
+  });
+
+  it('keeps the second reader out of the choice for the recognition', () => {
+    const reader = secondReader();
+    expect(reader).toMatchObject({
+      id: SECOND_READER_ID,
+      role: 'transcriber',
+      license: 'Apache-2.0',
+      prompt: '',
+      request: { imageMaxEdge: 1536, uncertainBelow: null, temperature: 0 },
+      server: { reasoning: 'off' },
+    });
+    expect(totalBytes(reader)).toBe(811_844_128 + 204_987_200);
+    expect(findModel(SECOND_READER_ID)).toBeUndefined();
+    expect(MODELS.map((entry) => entry.id)).not.toContain(SECOND_READER_ID);
+  });
+
+  it('lists Gemma 4 26B A4B as a pinned text model with the prompt of the default', () => {
+    const large = findCorrector('gemma-4-26b-a4b-q4');
+    expect(large).toMatchObject({
+      license: 'Apache-2.0',
+      files: {
+        model: {
+          name: 'gemma-4-26B-A4B-it-Q4_0.gguf',
+          url: expect.stringMatching(
+            /^https:\/\/huggingface\.co\/ggml-org\/gemma-4-26B-A4B-it-GGUF\/resolve\/[0-9a-f]{40}\//u,
+          ),
+          sha256: 'd208665ab1cd3a69f7a9a4bc59430e8448c8093d9b06334f566ac59d6d504a03',
+          bytes: 14_618_145_824,
+        },
+      },
+      server: { cpuRepack: false, reasoning: 'off' },
+      system: defaultCorrector().system,
+      prompt: defaultCorrector().prompt,
+    });
   });
 
   it('rejects entries that mix up the two roles', () => {

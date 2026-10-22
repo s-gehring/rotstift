@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { DEFAULT_CORRECTOR_ID, DEFAULT_MODEL_ID, DEFAULT_REVIEWER_ID } from '../models/registry.ts';
+import type { StepCosts } from '../models/speed.ts';
 
 export type Step = 'read' | 'correct' | 'review';
 
@@ -14,9 +16,13 @@ const SMOOTHING = 0.3;
 
 const MIN_RATE = 1;
 
-const MAX_RATE = 600;
+const MAX_RATE = 6 * 60 * 60;
 
-export const RATES_STORAGE_KEY = 'rotstift.step-rates';
+export const RATES_STORAGE_KEY = 'rotstift.model-rates';
+
+export const LEGACY_RATES_STORAGE_KEY = 'rotstift.step-rates';
+
+export type LearnedRates = Readonly<Record<string, number>>;
 
 export interface Snapshot {
   readonly step: Step;
@@ -81,7 +87,10 @@ function formatDuration(seconds: number): string | null {
   if (seconds < 60) return null;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+  if (minutes >= 5 * 60) return `${Math.round(minutes / 60)} h`;
+  const rest = minutes % 60;
+  const hours = `${Math.floor(minutes / 60)} h`;
+  return rest === 0 ? hours : `${hours} ${rest} min`;
 }
 
 export function remainingText(seconds: number): string | null {
@@ -106,24 +115,61 @@ function defaultStorage(): RatesStorage | null {
 
 const rate = z.number().finite().min(MIN_RATE);
 
-const STORED_RATES = z.object({ read: rate, correct: rate, review: rate });
+const STORED_RATES = z.record(z.string(), rate);
 
-export function loadRates(storage: RatesStorage | null = defaultStorage()): Rates {
+const LEGACY_RATES = z.object({ read: rate, correct: rate, review: rate });
+
+const STEPS: readonly Step[] = ['read', 'correct', 'review'];
+
+const rateKey = (step: Step, key: string) => `${step}:${key}`;
+
+export function ratesFor(learned: LearnedRates, costs: StepCosts): Rates {
+  const rateOf = (step: Step) =>
+    learned[rateKey(step, costs[step].key)] ?? clampRate(DEFAULT_RATES[step] * costs[step].factor);
+  return { read: rateOf('read'), correct: rateOf('correct'), review: rateOf('review') };
+}
+
+export function learn(learned: LearnedRates, costs: StepCosts, rates: Rates): LearnedRates {
+  const known = ratesFor(learned, costs);
+  const changed = STEPS.filter((step) => rates[step] !== known[step]);
+  if (changed.length === 0) return learned;
+  return Object.fromEntries([
+    ...Object.entries(learned),
+    ...changed.map((step) => [rateKey(step, costs[step].key), rates[step]] as const),
+  ]);
+}
+
+function parse(storage: RatesStorage | null, key: string): unknown {
+  return JSON.parse(storage?.getItem(key) ?? 'null');
+}
+
+function clampAll(learned: LearnedRates): LearnedRates {
+  return Object.fromEntries(Object.entries(learned).map(([key, value]) => [key, clampRate(value)]));
+}
+
+export function loadRates(storage: RatesStorage | null = defaultStorage()): LearnedRates {
   try {
-    const stored = STORED_RATES.safeParse(
-      JSON.parse(storage?.getItem(RATES_STORAGE_KEY) ?? 'null'),
-    );
-    if (!stored.success) return DEFAULT_RATES;
-    const { read, correct, review } = stored.data;
-    return { read: clampRate(read), correct: clampRate(correct), review: clampRate(review) };
+    const stored = STORED_RATES.safeParse(parse(storage, RATES_STORAGE_KEY));
+    if (stored.success) return clampAll(stored.data);
+    const legacy = LEGACY_RATES.safeParse(parse(storage, LEGACY_RATES_STORAGE_KEY));
+    if (!legacy.success) return {};
+    const { read, correct, review } = legacy.data;
+    return clampAll({
+      [rateKey('read', DEFAULT_MODEL_ID)]: read,
+      [rateKey('correct', DEFAULT_CORRECTOR_ID)]: correct,
+      [rateKey('review', DEFAULT_REVIEWER_ID)]: review,
+    });
   } catch {
-    return DEFAULT_RATES;
+    return {};
   }
 }
 
-export function saveRates(rates: Rates, storage: RatesStorage | null = defaultStorage()): void {
+export function saveRates(
+  learned: LearnedRates,
+  storage: RatesStorage | null = defaultStorage(),
+): void {
   try {
-    storage?.setItem(RATES_STORAGE_KEY, JSON.stringify(rates));
+    storage?.setItem(RATES_STORAGE_KEY, JSON.stringify(learned));
   } catch {
     return;
   }

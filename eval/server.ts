@@ -121,6 +121,7 @@ export async function launchServer(options: ServerOptions): Promise<Server> {
       options.batchSize ? ['--batch-size', String(options.batchSize)] : [],
       options.ubatchSize ? ['--ubatch-size', String(options.ubatchSize)] : [],
       options.extraArgs ?? [],
+      process.env['EVAL_SERVER_ARGS']?.split(' ').filter(Boolean) ?? [],
     ].flat(),
     {
       cwd: libraryDir,

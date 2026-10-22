@@ -9,11 +9,13 @@ use super::runtime::{
 };
 use crate::models::{
     self, ModelManager,
-    registry::{ModelEntry, Reasoning},
+    registry::{ModelEntry, Reasoning, Role},
     system,
 };
 
-const REPACK_MIN_RAM_BYTES: u64 = 12 * 1024 * 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
+const REPACK_MIN_RAM_BYTES: u64 = 12 * GIB;
+const RESERVED_RAM_BYTES: u64 = 7 * GIB / 2;
 
 fn environment_error(error: impl ToString) -> LlmError {
     LlmError::Environment(error.to_string())
@@ -42,7 +44,23 @@ pub fn stop_orphaned_sidecars<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+fn needed_bytes(entry: &ModelEntry, repack: bool) -> f64 {
+    let overhead = match entry.role {
+        Role::Transcriber => 1.4e9,
+        Role::Corrector => 0.65e9,
+    };
+    let repacked = if repack {
+        0.47 * entry.files.model.bytes as f64
+    } else {
+        0.0
+    };
+    1.05 * entry.total_bytes() as f64 + overhead + repacked
+}
+
 pub fn start_options(entry: &ModelEntry, total_ram_bytes: u64) -> StartOptions {
+    let budget = total_ram_bytes.saturating_sub(RESERVED_RAM_BYTES) as f64;
+    let wants_repack = entry.server.cpu_repack || total_ram_bytes >= REPACK_MIN_RAM_BYTES;
+    let repack = wants_repack && needed_bytes(entry, true) <= budget;
     StartOptions {
         model: entry.files.model.name.clone(),
         mmproj: entry.files.mmproj.as_ref().map(|file| file.name.clone()),
@@ -50,7 +68,8 @@ pub fn start_options(entry: &ModelEntry, total_ram_bytes: u64) -> StartOptions {
         threads: entry.server.threads,
         gpu_layers: entry.server.gpu_layers,
         image_max_tokens: entry.server.image_max_tokens,
-        no_repack: !entry.server.cpu_repack && total_ram_bytes < REPACK_MIN_RAM_BYTES,
+        no_repack: !repack,
+        from_disk: needed_bytes(entry, repack) > budget,
         reasoning_off: entry.server.reasoning == Reasoning::Off,
     }
 }
@@ -120,8 +139,6 @@ mod tests {
     use super::*;
     use crate::models::registry::{DEFAULT_CORRECTOR_ID, DEFAULT_MODEL_ID, registry};
 
-    const GIB: u64 = 1024 * 1024 * 1024;
-
     #[test]
     fn the_corrector_starts_without_projector_and_skips_repacking_on_small_machines() {
         let corrector = registry().unwrap().find(DEFAULT_CORRECTOR_ID).unwrap();
@@ -130,12 +147,40 @@ mod tests {
         assert_eq!(small.mmproj, None);
         assert_eq!(small.image_max_tokens, None);
         assert!(small.no_repack);
+        assert!(!small.from_disk);
         assert!(!start_options(corrector, 16 * GIB).no_repack);
         assert!(small.reasoning_off);
     }
 
     #[test]
-    fn the_transcriber_keeps_its_projector_and_always_repacks() {
+    fn serves_a_model_larger_than_the_memory_from_the_file_without_repacking() {
+        let registry = registry().unwrap();
+        let large = registry.find("gemma-4-26b-a4b-q4").unwrap();
+        for ram in [8 * GIB, 16 * GIB] {
+            let options = start_options(large, ram);
+            assert!(options.no_repack, "{ram}");
+            assert!(options.from_disk, "{ram}");
+        }
+        let roomy = start_options(large, 48 * GIB);
+        assert!(!roomy.no_repack);
+        assert!(!roomy.from_disk);
+        let medium = registry.find("gemma-4-e4b-q4").unwrap();
+        assert!(start_options(medium, 8 * GIB).from_disk);
+        assert!(!start_options(medium, 16 * GIB).no_repack);
+    }
+
+    #[test]
+    fn repacks_the_vision_model_only_where_the_copy_fits() {
+        let registry = registry().unwrap();
+        let qwen = registry.find("qwen3-vl-4b-q4").unwrap();
+        let tight = start_options(qwen, 8 * GIB);
+        assert!(tight.no_repack);
+        assert!(!tight.from_disk);
+        assert!(!start_options(qwen, 16 * GIB).no_repack);
+    }
+
+    #[test]
+    fn the_transcriber_keeps_its_projector_and_repacks_on_small_machines() {
         let transcriber = registry().unwrap().find(DEFAULT_MODEL_ID).unwrap();
         let options = start_options(transcriber, 8 * GIB);
         assert_eq!(

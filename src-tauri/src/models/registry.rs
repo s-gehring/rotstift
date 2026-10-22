@@ -326,8 +326,8 @@ impl Registry {
                     return Err(format!("file name {} is used twice", file.name));
                 }
             }
-            if entry.display_name.trim().is_empty() || entry.prompt.trim().is_empty() {
-                return Err(format!("model {id}: display name and prompt are required"));
+            if entry.display_name.trim().is_empty() {
+                return Err(format!("model {id}: display name is required"));
             }
             if entry.recommended_ram_gb == 0 {
                 return Err(format!("model {id}: recommendedRamGb must be positive"));
@@ -441,8 +441,10 @@ mod tests {
             [
                 "glm-ocr-q8",
                 "qwen3-vl-4b-q4",
+                "lightonocr-3-08b-q8",
                 "gemma-4-e2b-q4",
-                "gemma-4-e4b-q4"
+                "gemma-4-e4b-q4",
+                "gemma-4-26b-a4b-q4"
             ]
         );
         let stronger = registry.find("qwen3-vl-4b-q4").unwrap();
@@ -657,7 +659,6 @@ mod tests {
             rejection(|m| m["request"]["maxOutputTokens"] = json!(8192))
                 .contains("maxOutputTokens")
         );
-        assert!(rejection(|m| m["prompt"] = json!("  ")).contains("prompt"));
         for threshold in [json!(0.0), json!(1.0), json!(1.5), json!(-0.1)] {
             assert!(
                 rejection(|m| m["request"]["uncertainBelow"] = threshold.clone())
@@ -666,6 +667,13 @@ mod tests {
             );
         }
         assert!(Registry::parse("{\"models\": []}").is_err());
+    }
+
+    #[test]
+    fn a_transcriber_may_send_the_image_without_a_prompt() {
+        let registry = Registry::parse(&json_with(0, |m| m["prompt"] = json!(""))).unwrap();
+        assert_eq!(registry.models[0].prompt, "");
+        assert!(corrector_rejection(|m| m["prompt"] = json!("")).contains("prompt"));
     }
 
     #[test]

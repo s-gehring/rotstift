@@ -9,6 +9,7 @@ import type { Mark } from '../src/annotations/transcript.ts';
 import { parseGold } from '../src/correction/gold.ts';
 import { correctPage } from '../src/correction/correct-page.ts';
 import { createLlmCorrector } from '../src/correction/llm-corrector.ts';
+import type { Corrector } from '../src/correction/corrector.ts';
 import type { LlmClient } from '../src/llm/client.ts';
 import { correctorConfig } from '../src/llm/sidecar-corrector.ts';
 import { installDom } from './dom.ts';
@@ -62,12 +63,30 @@ export interface ProfileRun {
   profile: string;
   model: string;
   variant: SystemVariant;
+  passes?: number;
+  temperature?: number;
   scope?: string;
   assignment?: boolean;
   machine: string;
   threads: number;
   peakRssBytes: number;
   docs: DocRun[];
+}
+
+export function repeated(inner: Corrector, passes: number): Corrector {
+  return {
+    async correct(lines, profile, signal, scope) {
+      let result = await inner.correct(lines, profile, signal, scope);
+      for (let pass = 1; pass < passes && result.ok; pass += 1) {
+        const again = result.correctedText.split('\n');
+        if (again.length !== lines.length) break;
+        const next = await inner.correct(again, profile, signal, scope);
+        if (!next.ok) break;
+        result = next;
+      }
+      return result;
+    },
+  };
 }
 
 const stringOf = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -84,6 +103,8 @@ async function main() {
       out: { type: 'string' },
       scope: { type: 'string', default: 'all' },
       assignment: { type: 'string', default: '' },
+      passes: { type: 'string', default: '1' },
+      temperature: { type: 'string' },
     },
   });
   const scope = scopeFromArgs(values.scope, values.assignment);
@@ -128,7 +149,11 @@ async function main() {
     };
     const base = correctorConfig(model);
     const system = withVariant(base.system, variant);
-    const config = { ...base, ...(system !== undefined && { system }) };
+    const config = {
+      ...base,
+      ...(system !== undefined && { system }),
+      ...(values.temperature !== undefined && { temperature: Number(values.temperature) }),
+    };
     for (const name of names) {
       const markup = readFileSync(join(dir, name), 'utf8').trim();
       const marked = goldFromMarkup(markup);
@@ -145,7 +170,7 @@ async function main() {
           lines,
           profile: entry.profile,
           scope,
-          corrector: createLlmCorrector({ client, config }),
+          corrector: repeated(createLlmCorrector({ client, config }), Number(values.passes)),
         });
         const seconds = (performance.now() - started) / 1000;
         const marks = result.ok
@@ -180,6 +205,8 @@ async function main() {
     profile: entry.profile.id,
     model: model.id,
     variant,
+    passes: Number(values.passes),
+    ...(values.temperature !== undefined && { temperature: Number(values.temperature) }),
     scope: values.scope,
     assignment: scope.assignment !== '',
     machine: `${hostname()} (${cpus()[0]?.model.trim() ?? 'CPU'})`,

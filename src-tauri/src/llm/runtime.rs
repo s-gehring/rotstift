@@ -20,6 +20,7 @@ const HOST: Ipv4Addr = Ipv4Addr::LOCALHOST;
 const DEFAULT_CONTEXT_SIZE: u32 = 8192;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(300);
 const CHAT_TIMEOUT: Duration = Duration::from_secs(900);
+const DISK_CHAT_TIMEOUT: Duration = Duration::from_secs(12 * 60 * 60);
 const HEALTH_INTERVAL: Duration = Duration::from_millis(250);
 const CRASH_GRACE: Duration = Duration::from_secs(1);
 const LOG_TAIL_LINES: usize = 40;
@@ -38,7 +39,19 @@ pub struct StartOptions {
     pub image_max_tokens: Option<u32>,
     #[serde(default)]
     pub no_repack: bool,
+    #[serde(default)]
+    pub from_disk: bool,
     pub reasoning_off: bool,
+}
+
+impl StartOptions {
+    fn chat_timeout(&self) -> Duration {
+        if self.from_disk {
+            DISK_CHAT_TIMEOUT
+        } else {
+            CHAT_TIMEOUT
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -99,6 +112,7 @@ fn lock_log(log: &SharedLog) -> MutexGuard<'_, Log> {
 struct Server {
     child: Child,
     api_key: String,
+    chat_timeout: Duration,
     log: SharedLog,
     _record: RecordGuard,
 }
@@ -379,6 +393,7 @@ impl LlmRuntime {
                 "threads": options.threads,
                 "imageMaxTokens": options.image_max_tokens,
                 "noRepack": options.no_repack,
+                "fromDisk": options.from_disk,
                 "reasoningOff": options.reasoning_off,
             }),
         );
@@ -402,6 +417,7 @@ impl LlmRuntime {
         let server = Server {
             child,
             api_key,
+            chat_timeout: options.chat_timeout(),
             log,
             _record: record,
         };
@@ -486,14 +502,14 @@ impl LlmRuntime {
         state.status.clone()
     }
 
-    async fn ready_server(&self) -> Result<(u16, String), LlmError> {
+    async fn ready_server(&self) -> Result<(u16, String, Duration), LlmError> {
         if let Some(error) = self.check_exit().await {
             return Err(error);
         }
         let state = self.lock();
         match (&state.status, &state.server) {
             (RuntimeStatus::Ready { port, .. }, Some(server)) => {
-                Ok((*port, server.api_key.clone()))
+                Ok((*port, server.api_key.clone(), server.chat_timeout))
             }
             (RuntimeStatus::Failed { error }, _) => Err(error.clone()),
             _ => Err(LlmError::NotReady),
@@ -552,8 +568,8 @@ impl LlmRuntime {
 
     async fn send_chat(&self, request_id: Option<String>, body: Value) -> Result<Value, LlmError> {
         let guard = diagnostics::ChatGuard::begin(request_id.as_deref());
-        let (port, api_key) = self.ready_server().await?;
-        let send = self.post_chat(port, api_key, &body);
+        let (port, api_key, timeout) = self.ready_server().await?;
+        let send = self.post_chat(port, api_key, timeout, &body);
         let result = match request_id {
             None => send.await,
             Some(id) => {
@@ -575,12 +591,18 @@ impl LlmRuntime {
         result
     }
 
-    async fn post_chat(&self, port: u16, api_key: String, body: &Value) -> Result<Value, LlmError> {
+    async fn post_chat(
+        &self,
+        port: u16,
+        api_key: String,
+        timeout: Duration,
+        body: &Value,
+    ) -> Result<Value, LlmError> {
         let response = self
             .http
             .post(format!("http://{HOST}:{port}/v1/chat/completions"))
             .bearer_auth(api_key)
-            .timeout(CHAT_TIMEOUT)
+            .timeout(timeout)
             .json(body)
             .send()
             .await
@@ -781,6 +803,7 @@ mod tests {
             gpu_layers: None,
             image_max_tokens: None,
             no_repack: false,
+            from_disk: false,
             reasoning_off: false,
         }
     }
@@ -865,6 +888,25 @@ mod tests {
         options.no_repack = true;
         let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
         assert!(args.contains(&"--no-repack".into()));
+    }
+
+    #[test]
+    fn leaves_the_weights_memory_mapped_and_unlocked() {
+        let mut options = options("m.gguf");
+        options.no_repack = true;
+        options.from_disk = true;
+        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
+        for flag in ["--mlock", "--no-mmap", "--load-mode", "-lm", "--lazy-mode"] {
+            assert!(!args.contains(&flag.into()), "{flag}");
+        }
+    }
+
+    #[test]
+    fn waits_longer_for_answers_from_a_model_read_from_disk() {
+        let mut options = options("m.gguf");
+        assert_eq!(options.chat_timeout(), CHAT_TIMEOUT);
+        options.from_disk = true;
+        assert!(options.chat_timeout() >= Duration::from_secs(8 * 60 * 60));
     }
 
     #[test]

@@ -206,7 +206,7 @@ ROTSTIFT_INTEGRATION=1 ROTSTIFT_CLASS=<Ordner> ROTSTIFT_CLASS_LABEL=t4-voll ROTS
 ```
 
 - `render.py --content-form` teilt jeden Text aus `samples/content-form/` in zwei Seiten, das ergibt 10 Arbeiten zu je 2 Seiten. Eine Arbeit sind alle Bilder mit gleichem Namen vor `-1.jpg`, `-2.jpg`.
-- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
+- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. `ROTSTIFT_CLASS_TEXT_MODEL=<id>` nimmt ein anderes Textmodell aus `models.json` für Rechtschreibung und Inhalt und Form, `ROTSTIFT_CLASS_SECOND=1` schaltet die zweite Lesung ein. So misst man die Stufen der Gründlichkeit (Gründlich: `gemma-4-e4b-q4` mit zweiter Lesung, Sehr gründlich: `gemma-4-26b-a4b-q4` mit zweiter Lesung). Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
 
 ## Heftpapier (liniert und kariert)
 
@@ -214,6 +214,7 @@ Misst, wo die Kette auf Seiten aus Schulheften scheitert: Texterkennung, Zeilenz
 
 ```bash
 eval/.venv/bin/python -I eval/datasets.py                  # holt und bereitet auf: ru-schulaufsaetze, gnhk, bressay
+eval/.venv/bin/python -I eval/datasets.py fhswf-zeilen commons-heft   # deutsche Zeilen und echte Heftpapiere (nur auf Zuruf)
 eval/.venv/bin/python -I eval/samples/render.py --heft --out ~/.cache/rotstift/datasets/heft-gerendert
 eval/.venv/bin/python -I eval/samples/render.py --heft --strike 4 --seed 1 --out ~/.cache/rotstift/datasets/heft-gerendert-strich
 eval/.venv/bin/python -I eval/resize-pages.py <Ordner mit Bildern> <Ordner-1152> --max-edge 1152
@@ -222,8 +223,38 @@ node --experimental-transform-types eval/heft-measure.ts --ocr <Ergebnisse>/ocr.
   --truth <Datensatz>/ground_truth --lines <Datensatz>/lines --out <Ergebnisse>/heft.json --marks
 ```
 
-- **Quellen (`datasets.py`):** Jede Quelle landet in einem eigenen Ordner `_raw/<name>`, entpackt wird nur mit Pfadprüfung, nichts daraus wird ausgeführt. `ru-schulaufsaetze` (Mendeley, 19 einseitige Aufsätze, Scans auf Linienpapier), `bressay` (Zenodo, 1000 Aufsatzseiten aus Brasilien mit durchgestrichenen Wörtern, Transkript mit `~~Wort~~`), `gnhk` (Handyfotos, Zeilen aus den Wortboxen, dazu `gnhk-liniert` mit den 61 Seiten, auf denen die Heuristik Heftlinien findet). Jede Quelle hat `images/` und `ground_truth/` im `--dataset`-Format. Die Größe einer Seite ist auf 2400 px begrenzt.
+- **Quellen (`datasets.py`):** Jede Quelle landet in einem eigenen Ordner `_raw/<name>`, entpackt wird nur mit Pfadprüfung, nichts daraus wird ausgeführt. `ru-schulaufsaetze` (Mendeley, 19 einseitige Aufsätze, Scans auf Linienpapier), `bressay` (Zenodo, 1000 Aufsatzseiten aus Brasilien mit durchgestrichenen Wörtern, Transkript mit `~~Wort~~`), `gnhk` (Handyfotos, Zeilen aus den Wortboxen, dazu `gnhk-liniert` mit den 61 Seiten, auf denen die Heuristik Heftlinien findet). Jede Quelle hat `images/` und `ground_truth/` im `--dataset`-Format. Die Größe einer Seite ist auf 2400 px begrenzt. Nur auf Zuruf (`datasets.py fhswf-zeilen commons-heft`) kommen dazu: `fhswf-zeilen` (300 gleichmäßig gezogene Zeilen aus `fhswf/german_handwriting`, Handyfotos von Erwachsenenschrift, über die Zeilen-API von Hugging Face geladen) und `commons-heft` (Wikimedia Commons: `papers/` mit vier Fotos leerer Blätter für `render.py --paper-image`, `pages/` mit zwei beschriebenen historischen Heftseiten ohne Transkript; Commons drosselt, der Lauf wartet und wiederholt).
 - **`render.py --heft`:** Rendert die Texte aus `samples/texts/` auf drei Papieren (`liniert` 8 mm mit Rand beidseitig und Linien nur im Schreibfeld, `liniert-eng` 7 mm mit Linien bis zum Blattrand, `kariert` 5 mm mit Rand, geschrieben wird auf jeder zweiten Karozeile), je als `scan` (leichte Drehung, Randschatten) und `photo` (Wölbung, Perspektive, Licht und Schatten, Unschärfe, Rauschen, JPEG 55–80, Tisch um die Seite, Spiralbindung oder Lochrand). Schrift, Stift (blau, schwarz, Bleistift) und Linienfarbe wechseln je Seite. Optionen: `--strike N`, `--seed K`, ein Filter (`liniert`, `photo`, …), `--effects rotation,keystone,…` (nur diese Fotoeffekte, Liste in `EFFECTS`), `--lines` (ohne `--heft`: schreibt für die früheren weißen Seiten auch `lines/` und `ground_truth/`), `--paper-image <Bild>` mit `--paper-geometry TOP PITCH LEFT` legt die Zeilen auf eine echte leere Heftseite statt auf gezeichnetes Papier.
+- **`demo-class.py`:** Rendert die Demo-Klasse für `pnpm dev:web` mit festem Seed nach `src/pipeline/demo-class/` (vier Arbeiten, fünf Seiten als Scan auf liniertem und kariertem Papier, je mit gestrichenen Wörtern, JPEG 72, rund 1 MB). Dazu schreibt es `pages.json` mit dem Transkript je Seite (gestrichene Wörter als `~~Wort~~`), dem korrigierten Text je Zeile und den Zeilenboxen (Anteile der Seite). `eval/.venv/bin/python -I eval/samples/demo-class.py` baut sie reproduzierbar nach. Der Demo-Transkribierer erkennt die Seiten an einem groben Helligkeitsmuster, die Demo-Korrektur liefert den hinterlegten Text. Beides gibt es nur im Entwicklungsmodus.
 - **Ausgabe von `--heft`:** `images/`, `ground_truth/` (Klartext, bei `--strike` mit `~~Wort~~`), `markup/` (mit Fehlermarken) und `lines/<name>.json` mit der Wahrheit je Zeile (Text und Box in Bildpixeln), den Randlinien und den Einstellungen. Die Boxen laufen durch dieselben Verzerrungen wie das Bild.
 - **`heft-measure.ts`:** Liest die Erkennung aus `ocr-run.ts` und wertet je Seite aus: WER und CER (gestrichene Wörter der Wahrheit zählen nicht mit), `locateLines` wie in der App (Anteil der Zeilen mit Box, Treffer mit IoU ≥ 0,5 gegen die Wahrheit, „sicher falsch“ unter 0,2, Absturz), Alarme der Strichsuche je 100 Wörter. Mit `--marks` korrigiert es mit Gemma (`--model`, Standard `gemma-4-e2b-q4`), legt die Marken mit `layoutOverlay` auf die Seite und prüft, ob Striche auf der richtigen Zeile liegen und ob Randzeichen im Heftrand oder über dem Text stehen. Ein abgebrochener Lauf setzt fort. Mit `--ideal` ersetzt die Wahrheit die Erkennung (ideales Transkript), damit Zeilenzuordnung und Strichsuche ohne Lesefehler gemessen werden; gibt es `--lines`, kommen die Zeilen von dort, sonst aus `ground_truth/`. Eine zweite Tabelle zeigt je Gruppe die Zeilenzuordnung: Anteil grob platzierter Zeilen, Treffer, sicher falsch (nur Boxen, die nicht grob sind), ob `locateLines` das Papier richtig erkannt hat (`blank`, `lined`, `grid`) und die Zeit je Seite. Das erwartete Papier kommt aus `paper` in `lines/`, `--paper liniert` oder `--paper kariert` setzt es für Sätze ohne diese Angabe. Die Ergebnisse stehen im Bericht.
 - Die Lesesicherheit je Datensatz misst `ocr-calibration.ts --dataset <Datensatz> --ocr <ocr.json>`, die Strichsuche mit bekannten Strichen `strike.ts` (siehe oben).
+
+## Gründlicher Modus
+
+Misst, was mehr Rechenzeit oder größere Modelle je Schritt an Qualität bringen und ob es auf 8 GB ohne GPU in etwa 3 min je Seite passt. Der Bericht steht in [docs/evaluations/2026-10-gruendlich.md](../docs/evaluations/2026-10-gruendlich.md).
+
+```bash
+node --experimental-transform-types eval/download-models.ts --models gemma-4-26b-a4b-q4,gemma-4-e4b-q8,mtp-gemma-4-e4b
+node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-26b-a4b-q4 --threads 8 --out <Ergebnisse>/profiles-de-26b.json
+node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --passes 2 --out <Ergebnisse>/profiles-de-e4b-2x.json
+EVAL_SERVER_ARGS="--spec-type ngram-simple" node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --out <Ergebnisse>/profiles-de-e4b-ngram.json
+node --experimental-transform-types eval/gruendlich-union.ts --votes 1 <Ergebnisse>/profiles-de-e2b.json <Ergebnisse>/profiles-de-e4b.json
+node --experimental-transform-types eval/gruendlich-zweite-lesung.ts --ocr <GLM-OCR.json> --second <LightOnOCR.json> --corrections <Korrekturlauf.json> --rules 0.95/0.95,0.8/1.01
+```
+
+- `model-candidates.ts` enthält zusätzlich Gemma 4 E2B und E4B in Q8_0, Gemma 4 26B A4B, Qwen3.6 35B A3B und Qwen3.5 9B sowie `gemma-4-e4b-q4-denken` (dieselbe Datei mit 12288 Kontext und 8192 Ausgabe-Token, gedacht für `EVAL_SERVER_ARGS="--reasoning on"`). `download-models.ts` lädt sie und die MTP-Köpfe für spekulatives Dekodieren (`mtp-gemma-4-e2b`, `mtp-gemma-4-e4b`, `mtp-gemma-4-26b-a4b`).
+- `EVAL_SERVER_ARGS` hängt Argumente an jeden llama-server der Eval an, nach denen des Skripts, sodass sie gewinnen. Beispiele: `--reasoning on`, `--spec-type ngram-simple`, `--spec-type draft-mtp --model-draft <Pfad zum MTP-Kopf>`, `-ctk q8_0 -ctv q8_0`.
+- `profiles.ts --passes N` lässt das Modell seine eigene Korrektur N-mal überarbeiten. Die Marken entstehen wie in der App aus dem Vergleich von Original und letzter Fassung.
+- `gruendlich-union.ts` vereinigt die Marken mehrerer `profiles.ts`-Läufe (`--votes 1`) oder behält nur Marken, die mindestens `--votes` Läufe an derselben Stelle setzen, und wertet neu aus.
+- `gruendlich-zweite-lesung.ts` nimmt eine zweite Erkennung derselben Seiten (`--second`, aus `ocr-run.ts`) und richtet sie Wort für Wort am Transkript aus (Levenshtein über Wörter). Eine Regel `a/b` macht eine Marke zum Hinweis „unsicher gelesen“, wenn ein berührtes Wort von der zweiten Lesung bestätigt ist und seine Lesesicherheit unter `a` liegt oder unbestätigt ist und unter `b` liegt. `0.95/0.95` ist die App heute, `b` über 1 heißt „unbestätigt ist immer ein Hinweis“. Kennzahlen wie bei `hints.ts`.
+- **Speicherdeckel** (Linux mit systemd und cgroup v2, ohne Root): Modelldatei vorher aus dem Seitencache werfen, sonst zählen ihre Seiten nicht zum Deckel, dann den Lauf in einem eigenen Scope starten:
+
+  ```bash
+  python3 -I -c 'import os,sys; [os.posix_fadvise(os.open(p, os.O_RDONLY), 0, 0, os.POSIX_FADV_DONTNEED) for p in sys.argv[1:]]' ~/.cache/rotstift/models/*.gguf
+  systemd-run --user --scope -p MemoryMax=4608M -p MemorySwapMax=0 -- node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --threads 4 --out <Ergebnis.json>
+  ```
+
+  `memory.peak`, `memory.events` und `workingset_refault_file` im Scope zeigen, ob der Deckel griff und wie oft Seiten der Modelldatei neu gelesen wurden. Die Gemma-Modelle laufen in der Eval mit `--no-repack` (`cpuRepack: false`), ihre Gewichte bleiben dadurch Seiten der Datei, die der Kernel unter dem Deckel verwerfen und neu lesen kann.
+
+- `EVAL_MAX_TOKENS` setzt in `content-form.ts` die Ausgabegrenze je Merkmalsfrage der Variante `features` (Standard 96). Mit `--reasoning on` braucht das Modell dafür mehrere Tausend Token.
