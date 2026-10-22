@@ -1,75 +1,25 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { analyzeDewarp, applyDewarp, outputSize, planDewarp, toSource } from './dewarp.ts';
+import {
+  analyzeDewarp,
+  applyDewarp,
+  outputSize,
+  planDewarp,
+  toSource,
+  toSourceBox,
+} from './dewarp.ts';
 import type { DewarpPlan } from './dewarp.ts';
-import { homographyFrom, project } from './homography.ts';
-import { renderPage, sampleLines } from './synthetic.ts';
-import type { Point, RgbaImage } from './types.ts';
-
-const TABLE = [70, 56, 44] as const;
-
-function page(skewDegrees = 0): RgbaImage {
-  return renderPage({
-    width: 620,
-    height: 877,
-    pitch: 30,
-    lines: sampleLines(7, 20),
-    ruled: true,
-    margin: true,
-    skewDegrees,
-  }).image;
-}
-
-function photograph(sheet: RgbaImage, corners: readonly Point[], width: number, height: number) {
-  const toSheet = homographyFrom(corners, [
-    { x: 0, y: 0 },
-    { x: sheet.width, y: 0 },
-    { x: sheet.width, y: sheet.height },
-    { x: 0, y: sheet.height },
-  ]);
-  if (toSheet === null) throw new Error('corners are degenerate');
-  const data = new Uint8ClampedArray(width * height * 4);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const at = (y * width + x) * 4;
-      const { x: sx, y: sy } = project(toSheet, { x: x + 0.5, y: y + 0.5 });
-      const inside = sx >= 0 && sy >= 0 && sx < sheet.width && sy < sheet.height;
-      const from = (Math.floor(sy) * sheet.width + Math.floor(sx)) * 4;
-      for (let channel = 0; channel < 3; channel += 1) {
-        data[at + channel] = inside ? (sheet.data[from + channel] ?? 0) : (TABLE[channel] ?? 0);
-      }
-      data[at + 3] = 255;
-    }
-  }
-  return { width, height, data };
-}
-
-function cameraCorners(width: number, height: number): Point[] {
-  const tilt = (18 * Math.PI) / 180;
-  const pan = (-9 * Math.PI) / 180;
-  const roll = (4 * Math.PI) / 180;
-  const focal = 1000;
-  const corners = [
-    [-width / 2, -height / 2],
-    [width / 2, -height / 2],
-    [width / 2, height / 2],
-    [-width / 2, height / 2],
-  ] as const;
-  return corners.map(([x0, y0]) => {
-    const x1 = x0 * Math.cos(roll) - y0 * Math.sin(roll);
-    const y1 = x0 * Math.sin(roll) + y0 * Math.cos(roll);
-    const y2 = y1 * Math.cos(tilt);
-    const z2 = y1 * Math.sin(tilt);
-    const x3 = x1 * Math.cos(pan) + z2 * Math.sin(pan);
-    const z3 = -x1 * Math.sin(pan) + z2 * Math.cos(pan) + 1150;
-    return { x: 400 + (focal * x3) / z3, y: 500 + (focal * y2) / z3 };
-  });
-}
+import grid from './fixtures/heft-kariert-foto.json';
+import { readJpeg } from './image-files.ts';
+import { locateLines } from './locate-lines.ts';
+import { cameraCorners, photograph, ruledSheet } from './synthetic-photo.ts';
+import { iou } from './synthetic.ts';
 
 const CORNERS = cameraCorners(620, 877);
 
 describe('planDewarp', () => {
   it('finds a photographed sheet on a table and maps the output corners onto it', () => {
-    const photo = photograph(page(), CORNERS, 800, 1000);
+    const photo = photograph(ruledSheet(), CORNERS, 800, 1000);
     const plan = planDewarp(photo);
     expect(plan).not.toBeNull();
     if (plan === null) return;
@@ -89,13 +39,13 @@ describe('planDewarp', () => {
   });
 
   it('leaves flat and slightly crooked scans unchanged', () => {
-    expect(planDewarp(page())).toBeNull();
-    expect(planDewarp(page(0.9))).toBeNull();
-    expect(planDewarp(page(-2.5))).toBeNull();
+    expect(planDewarp(ruledSheet())).toBeNull();
+    expect(planDewarp(ruledSheet(0.9))).toBeNull();
+    expect(planDewarp(ruledSheet(-2.5))).toBeNull();
   });
 
   it('keeps the original when the found edge would cut off writing', () => {
-    const shaded = page();
+    const shaded = ruledSheet();
     const data = new Uint8ClampedArray(shaded.data);
     for (let y = 0; y < 330; y += 1) {
       for (let x = 0; x < shaded.width; x += 1) {
@@ -111,6 +61,36 @@ describe('planDewarp', () => {
   });
 });
 
+describe('planDewarp on a rendered photo of grid paper', () => {
+  it('straightens the sheet so that it needs no second pass and every line still hits', () => {
+    const photo = readJpeg(
+      fileURLToPath(new URL('./fixtures/heft-kariert-foto.jpg', import.meta.url)),
+    );
+    const report = analyzeDewarp(photo);
+    expect(report.sheet).not.toBeNull();
+    const plan = report.plan;
+    expect(plan).not.toBeNull();
+    if (plan === null) return;
+    const straight = applyDewarp(photo, plan);
+    const again = analyzeDewarp(straight);
+    expect(again.plan).toBeNull();
+    expect(Math.abs(again.rotationDegrees)).toBeLessThan(0.5);
+    const result = locateLines(
+      straight,
+      grid.lines.map((line) => line.text),
+    );
+    expect(result.ruling?.kind).toBe('grid');
+    const boxes = grid.lines.flatMap((line, index) =>
+      line.bbox === null ? [] : [{ truth: line.bbox, found: result.lines[index] }],
+    );
+    const hits = boxes.filter(({ truth: [x = 0, y = 0, width = 0, height = 0], found }) => {
+      if (found == null) return false;
+      return iou({ x, y, width, height }, toSourceBox(plan, found.bbox, photo)) >= 0.5;
+    });
+    expect(hits).toHaveLength(boxes.length);
+  });
+});
+
 describe('applyDewarp', () => {
   const identity: DewarpPlan = {
     width: 1,
@@ -121,7 +101,7 @@ describe('applyDewarp', () => {
   };
 
   it('reproduces the source pixel for pixel under an identity plan', () => {
-    const source = page();
+    const source = ruledSheet();
     const out = applyDewarp(source, identity);
     expect(out.width).toBe(source.width);
     expect(out.height).toBe(source.height);

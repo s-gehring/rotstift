@@ -6,9 +6,10 @@ import {
   rotationAbout,
   type Homography,
 } from './homography.ts';
+import { findRuling } from './ruling.ts';
 import { findSheet, type Sheet } from './sheet.ts';
 import { fitSlopes, slopesFromLines, weightedMedianSlope, type SlopeModel } from './slope-field.ts';
-import type { GrayImage, Point, RgbaImage } from './types.ts';
+import type { BBox, GrayImage, Point, RgbaImage } from './types.ts';
 
 export interface DewarpPlan {
   readonly width: number;
@@ -242,7 +243,7 @@ export function analyzeDewarp(image: RgbaImage, options: DewarpOptions = {}): De
     toGray: (point) => point,
   };
   let plane = fromSheet === null ? gray : warpPlane(gray, frame);
-  const findRules = options.rules ?? (() => []);
+  const findRules = options.rules ?? ((plain: GrayImage) => findRuling(plain).horizontal);
   let lines = findRules(plainGray(plane));
   let rotationDegrees = 0;
   if (fromSheet === null && lines.length > 0) {
@@ -336,6 +337,26 @@ export function toSource(
   const x = (a.x * (1 - fx) + b.x * fx) * (1 - fy) + (c.x * (1 - fx) + d.x * fx) * fy;
   const y = (a.y * (1 - fx) + b.y * fx) * (1 - fy) + (c.y * (1 - fx) + d.y * fx) * fy;
   return { x: x * source.width, y: y * source.height };
+}
+
+export function toSourceBox(
+  plan: DewarpPlan,
+  box: BBox,
+  source: { width: number; height: number },
+): BBox {
+  const steps = 8;
+  const points = Array.from({ length: steps + 1 }, (_, i) => i / steps).flatMap((t) => [
+    { x: box.x + t * box.width, y: box.y },
+    { x: box.x + t * box.width, y: box.y + box.height },
+    { x: box.x, y: box.y + t * box.height },
+    { x: box.x + box.width, y: box.y + t * box.height },
+  ]);
+  const mapped = points.map((point) => toSource(plan, point, source));
+  const xs = mapped.map((point) => point.x);
+  const ys = mapped.map((point) => point.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
 export function applyDewarp(

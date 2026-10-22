@@ -1,6 +1,6 @@
 # Evaluation: Heftpapier und Handyfotos (Oktober 2026)
 
-Frage: Wie gut kommt Rotstift mit echten Schulheften zurecht, also mit linierten und karierten Seiten, Rand, Spiralbindung und Fotos vom Handy? Bisher wurden Erkennung, Zeilenzuordnung ([ADR 0004](../adr/0004-zeilenpositionen.md)) und Strichsuche ([Durchgestrichenes](2026-10-durchgestrichen.md)) auf weißem Papier und auf ScaDS-Scans gemessen. Dieser Bericht beschafft Testdaten, baut einen Renderer für Heftpapier und misst, was an der Pipeline bricht. Phase 1 ändert an der App nichts. Was Phase 2 an der Zeilenzuordnung geändert hat, steht unter [Phase 2: Heftlinien](#phase-2-heftlinien).
+Frage: Wie gut kommt Rotstift mit echten Schulheften zurecht, also mit linierten und karierten Seiten, Rand, Spiralbindung und Fotos vom Handy? Bisher wurden Erkennung, Zeilenzuordnung ([ADR 0004](../adr/0004-zeilenpositionen.md)) und Strichsuche ([Durchgestrichenes](2026-10-durchgestrichen.md)) auf weißem Papier und auf ScaDS-Scans gemessen. Dieser Bericht beschafft Testdaten, baut einen Renderer für Heftpapier und misst, was an der Pipeline bricht. Phase 1 ändert an der App nichts. Was Phase 2 an der Zeilenzuordnung geändert hat, steht unter [Phase 2: Heftlinien](#phase-2-heftlinien), das Begradigen von Handyfotos unter [Phase 2: Fotos begradigen](#phase-2-fotos-begradigen).
 
 ## Ergebnis
 
@@ -327,6 +327,128 @@ node --experimental-transform-types eval/ocr-small.ts --out <Ergebnisse>/res --t
 ```
 
 `ocr-small.ts --report` wertet vorhandene Ergebnisse ohne neuen Lauf aus.
+
+## Phase 2: Fotos begradigen
+
+Handyfotos werden beim Import begradigt, wenn sie sicher als verzerrtes Foto erkannt sind. Die begradigte Seite gilt dann für Erkennung, Zeilen, Strichsuche, Overlay und Export, Scans bleiben unverändert. Die Entscheidung steht in [ADR 0010](../adr/0010-fotos-begradigen.md), der Code in `src/layout/dewarp.ts` (Blatt in `sheet.ts`, Homographie in `homography.ts`, Steigungsfeld aus den Heftlinien in `slope-field.ts`). Gemessen ist der Stand mit den Heftlinien aus Phase 2, „vorher“ ist derselbe Stand ohne Begradigen.
+
+### Ergebnis
+
+**Fotos treffen fast jede Zeile, auch wo die Heftlinien allein scheitern.** Mit idealen Transkripten steigt die Trefferquote auf 48 gerenderten Fotoseiten von 93,2 % auf 99,7 %, grob platziert sind noch 0,1 % statt 6,3 % der Zeilen, sicher falsch keine Box mehr (vorher 0,6 %). Das gilt für die Bilder in voller Größe, wie die App sie den Zeilen gibt. Auf 1152 px treffen die Fotos auch ohne Begradigen fast alles (99,6 % vorher, 99,0 % nachher). Der Gewinn liegt fast ganz bei `liniert-eng`, Linien bis zum Blattrand: 76,4 % → 99,1 %. Dort waren ohne Begradigen auf 4 von 16 Seiten fast alle Zeilen grob.
+
+**Scans bleiben unverändert.** Keine gerenderte Scanseite und keine Seite aus ScaDS, den russischen Aufsätzen und den früher gerenderten Seiten wird begradigt, von 1000 BRESSAY-Seiten eine (siehe unten). Ohne Plan läuft eine Seite durch denselben Code wie vorher, ein Test prüft das Pixel für Pixel (`src/import/straighten.test.ts`).
+
+**Die Erkennung bleibt gleich gut.** Mit GLM-OCR auf 12 Fotoseiten liegt die WER bei 2,9 % vorher und 3,3 % nachher. Der Unterschied kommt von einer Seite, deren Schrift ein t hat, das einem s ähnelt; GLM liest es auf der begradigten Seite öfter als s (7 → 21 Fehler). Ohne diese Seite sinkt die WER von 2,7 % auf 2,1 %.
+
+**Die Strichsuche auf Fotos wird genauer.** Auf den 12 Fotoseiten mit Streichungen sinken die Fehlalarme von 55 auf 34, der Recall steigt leicht von 16,7 % auf 18,8 %. Fotos liegen damit auf dem Niveau der Scans.
+
+**Begradigen kostet unter 0,2 s je Seite.** Planen auf 1200 px braucht im Median 65 bis 77 ms (höchstens 132 ms), Anwenden beim Zeichnen auf 2048 px 41 bis 61 ms. Ein Scan kostet nur die Prüfung (41 ms).
+
+### Ideale Transkripte
+
+Gerenderte Heftseiten aus `render.py --heft` mit Seed 0 (12 Scans, 12 Fotos) und dazu je 12 Fotoseiten mit Seed 1, 2 und 3, alle Fotoeffekte an. Gemessen mit `eval/heft-measure.ts --ideal`, „nachher“ mit `--dewarp`: Die Zeilenzuordnung läuft auf der begradigten Seite, die Boxen werden für den Vergleich mit der Wahrheit ins Foto zurückgerechnet (Hülle der zurückgerechneten Boxkante).
+
+| Papier und Aufnahme | Seiten | Zeilen | begradigt | Treffer vorher | Treffer nachher | sicher falsch vorher | sicher falsch nachher | grob vorher | grob nachher |
+| ------------------- | ------ | ------ | --------- | -------------- | --------------- | -------------------- | --------------------- | ----------- | ------------ |
+| liniert, Foto       | 16     | 260    | 16        | 99,6 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        |
+| liniert-eng, Foto   | 16     | 220    | 16        | 76,4 %         | 99,1 %          | 2,3 %                | 0,0 %                 | 21,8 %      | 0,5 %        |
+| kariert, Foto       | 16     | 300    | 16        | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,3 %       | 0,0 %        |
+| alle Fotos          | 48     | 780    | 48        | 93,2 %         | 99,7 %          | 0,6 %                | 0,0 %                 | 6,3 %       | 0,1 %        |
+| liniert, Scan       | 4      | 65     | 0         | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        |
+| liniert-eng, Scan   | 4      | 55     | 0         | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        |
+| kariert, Scan       | 4      | 77     | 0         | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        |
+| alle Scans          | 12     | 197    | 0         | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        |
+
+Die Bilder sind in voller Größe gemessen (1440 px breit). So bekommt `locateLines` sie auch in der App: Die Seite wird für die Zeilen auf höchstens 2048 px gezeichnet und intern auf 1200 px verkleinert. Die Tabelle der Heftlinien oben ist auf 1152 px gemessen. Dort treffen die Fotos auch ohne Begradigen fast alles, auf denselben 48 Fotoseiten 99,6 % vorher und 99,0 % nachher (grob 0,5 % → 1,4 %). In voller Größe bleibt dagegen auf Seed 0 `inhaltsangabe--liniert-eng-photo` ganz grob, die Zuordnung auf `liniert-eng` hängt also an der Auflösung. Auf 1152 px verliert eine begradigte Seite (`ferien--liniert-eng-photo`, Seed 2) 6 von 13 Treffern: Die erste Textzeile liegt auf einer Heftlinie, die Zuordnung verrutscht um eine Zeile und markiert die Boxen als grob. Das ist dieselbe Schwäche der Zuordnung, nur auf der anderen Seite.
+
+### Ablation der Fotoeffekte
+
+12 Fotoseiten je Zeile mit nur den genannten Effekten, Seed 0, ideale Transkripte.
+
+| Aktive Effekte                | begradigt | Treffer vorher | Treffer nachher | grob vorher | grob nachher |
+| ----------------------------- | --------- | -------------- | --------------- | ----------- | ------------ |
+| keine                         | 0         | 100,0 %        | 100,0 %         | 0,0 %       | 0,0 %        |
+| nur Drehung                   | 0         | 100,0 %        | 100,0 %         | 0,0 %       | 0,0 %        |
+| nur Keystone                  | 10        | 99,5 %         | 100,0 %         | 0,0 %       | 0,0 %        |
+| Drehung und Keystone          | 6         | 97,9 %         | 97,9 %          | 2,1 %       | 2,1 %        |
+| nur Wölbung                   | 0         | 100,0 %        | 100,0 %         | 0,0 %       | 0,0 %        |
+| nur Bindung                   | 0         | 99,5 %         | 99,5 %          | 0,0 %       | 0,0 %        |
+| nur Tisch um die Seite        | 0         | 100,0 %        | 100,0 %         | 0,0 %       | 0,0 %        |
+| Drehung, Keystone und Wölbung | 8         | 99,5 %         | 99,5 %          | 0,0 %       | 0,0 %        |
+
+Einzelne Effekte schafft die Zeilenzuordnung mit den Heftlinien schon allein. Begradigt wird erst, wenn die Verzerrung messbar ist: Drehung ohne sichtbaren Tisch löst nie aus, die gerenderte Wölbung (5 bis 22 px Absenkung zum Rand) bleibt mit höchstens 1,7 ‰ der Seitenhöhe unter der Schwelle von 3 ‰. Die groben Zeilen bei „Drehung und Keystone“ stehen auf `brief--liniert-eng-photo`, die mit 5,1° Drehung und 0,8° Keystone nicht begradigt wird. Der Gewinn entsteht, wenn mehrere Effekte zusammenkommen und der Tisch sichtbar ist (Tabelle oben, alle Effekte).
+
+### Scans
+
+`analyzeDewarp` auf allen Scansätzen, Bilder wie in der App auf höchstens 2048 px verkleinert.
+
+| Satz                              | Seiten | begradigt | größte Drehung | größte Wölbung | größtes Keystone |
+| --------------------------------- | ------ | --------- | -------------- | -------------- | ---------------- |
+| ScaDS (blankes Papier)            | 77     | 0         | –              | –              | –                |
+| Russische Schulaufsätze           | 19     | 0         | 0,34°          | 1,0 ‰          | 0,24°            |
+| Früher gerenderte Seiten          | 16     | 0         | 0,80°          | 0,2 ‰          | 0,08°            |
+| Heftseiten, Scan                  | 12     | 0         | 0,80°          | 0,4 ‰          | 0,07°            |
+| Heftseiten mit Streichungen, Scan | 12     | 0         | 0,80°          | 0,1 ‰          | 0,03°            |
+| BRESSAY                           | 1000   | 1         | 1,39°          | 2,2 ‰          | 1,09°            |
+
+Auf blankem Papier ohne Blattkante gibt es kein Maß, ScaDS bleibt deshalb immer unverändert. Die eine BRESSAY-Seite (`bressay-4291-004`, 503 × 642 px) ist kein Rauschen: Ihre Heftlinien laufen gleichmäßig von −0,9° oben bis +0,2° unten auseinander, das Blatt lag also schief oder gewölbt auf. Die nächste BRESSAY-Seite liegt bei 0,43°.
+
+### Strichsuche
+
+`heft-gerendert-strich` (`--strike 4 --seed 1`), ideale Transkripte, `eval/strike.ts --method ink`, „nachher“ mit `--dewarp`.
+
+| Satz     | Gestrichen | erkannt vorher | erkannt nachher | Fehlalarme vorher | Fehlalarme nachher | Precision vorher | Precision nachher |
+| -------- | ---------- | -------------- | --------------- | ----------------- | ------------------ | ---------------- | ----------------- |
+| 12 Fotos | 48         | 8 (16,7 %)     | 9 (18,8 %)      | 55 (3,6 %)        | 34 (2,2 %)         | 12,7 %           | 20,9 %            |
+| 12 Scans | 48         | 11 (22,9 %)    | 11 (22,9 %)     | 42 (2,7 %)        | 42 (2,7 %)         | 20,8 %           | 20,8 %            |
+
+Die Strichsuche selbst ist nicht angefasst. Dass sie auf Heftpapier schwach bleibt und auch auf Scans viele Fehlalarme hat, ist Fehlerursache 4 und offen.
+
+### Echte Erkennung
+
+12 Fotoseiten aus Seed 0, GLM-OCR Q8 wie in der App auf 1152 px, 4 Threads. „Nachher“ erkennt die begradigten Seiten (`eval/dewarp-pages.ts`, dann `resize-pages.py`), die Zeilen werden mit `heft-measure.ts --dewarp` auf der begradigten Seite gesucht.
+
+| Papier      | Seiten | Wörter | WER vorher | WER nachher | CER vorher | CER nachher | Treffer vorher | Treffer nachher |
+| ----------- | ------ | ------ | ---------- | ----------- | ---------- | ----------- | -------------- | --------------- |
+| liniert     | 4      | 511    | 3,7 %      | 5,3 %       | 0,7 %      | 1,1 %       | 100,0 %        | 100,0 %         |
+| liniert-eng | 4      | 511    | 3,1 %      | 2,2 %       | 0,6 %      | 0,4 %       | 100,0 %        | 100,0 %         |
+| kariert     | 4      | 511    | 2,0 %      | 2,3 %       | 0,4 %      | 0,5 %       | 100,0 %        | 100,0 %         |
+| alle        | 12     | 1533   | 2,9 %      | 3,3 %       | 0,6 %      | 0,7 %       | 100,0 %        | 100,0 %         |
+
+Die Fehler je Seite verschieben sich in beide Richtungen (etwa `brief--liniert-photo` 8 → 3, `brief--kariert-photo` 5 → 8). Bis auf `handy--liniert-photo` (t als s) sind es Einzelfälle. Auf 1152 px treffen die Zeilen hier schon ohne Begradigen alles, siehe oben.
+
+### GNHK
+
+Die GNHK-Fotos (687 Seiten, Englisch, keine Wahrheitsboxen) laufen wie in der App: Planen auf 1200 px, Anwenden auf 2048 px. 383 Seiten werden begradigt, 138 davon über die Blattkante, 245 nur über die Heftlinien. Im Teil `gnhk-liniert` sind es 46 von 61. Eine Sichtprüfung von je neun zufällig gezogenen Seiten beider Arten zeigt saubere Blattkanten und geradere Zeilen, nirgends ist Text abgeschnitten. Vor der Tintenprüfung außerhalb des Blatts (siehe ADR) schnitt die Blattsuche auf mehreren GNHK-Seiten an einem Schatten, einer zweiten Seite oder einem Planer ab; auf diesen Seiten lag außerhalb 0,64- bis 1,72-mal so viel Tinte wie innen, auf richtig gefundenen Blättern höchstens das 0,2-Fache.
+
+### Laufzeit
+
+Apple M4 Pro, CPU-Zeit je Seite, Median aus drei Läufen, Maschine mit anderen Sitzungen belastet (Last um 8). Planen auf 1200 px wie beim Import, Anwenden auf 2048 px wie beim Zeichnen für Erkennung und Overlay.
+
+| Satz                     | Seiten | Planen, Median | Planen, höchstens | Anwenden, Median | Anwenden, höchstens |
+| ------------------------ | ------ | -------------- | ----------------- | ---------------- | ------------------- |
+| Gerenderte Fotos         | 48     | 65 ms          | 100 ms            | 41 ms            | 50 ms               |
+| GNHK liniert             | 61     | 77 ms          | 132 ms            | 61 ms            | 86 ms               |
+| ScaDS (Scans, kein Plan) | 77     | 41 ms          | 62 ms             | –                | –                   |
+
+Geplant wird einmal je Seite beim Import im Worker. Angewandt wird bei jedem Zeichnen der Seite (Vorschau, Erkennung, Zeilen, Export), dazu kommt das Dekodieren des Bildes wie bisher.
+
+### Grenzen
+
+- **Simulierte Fotos:** Die Wölbung im Renderer ist mild und gleichmäßig. Echte Seiten nahe der Bindung wölben sich stärker und ungleichmäßig.
+- **Blankes Papier:** Ohne Blattkante und ohne Heftlinien gibt es kein Maß für die Verzerrung, solche Fotos bleiben, wie sie sind.
+- **Nur gedreht:** Ein Foto ohne sichtbaren Tisch, das nur gedreht ist, wird nicht begradigt, sonst würden schief eingelegte Scans gedreht.
+- **Rückrechnung in der Messung:** Für den Vergleich mit den Wahrheitsboxen wird die Hülle der zurückgerechneten Box genommen. Bei starker Perspektive ist sie etwas größer als die Box im Foto, das kostet eher Treffer, als dass es welche schenkt.
+
+Nachbauen (Pfade nach Bedarf):
+
+```bash
+eval/.venv/bin/python -I eval/samples/render.py --heft photo --seed 1 --out <Ordner>
+node --experimental-transform-types eval/heft-measure.ts --ideal --dewarp --images <Ordner>/images \
+  --truth <Ordner>/ground_truth --lines <Ordner>/lines --out <Ergebnisse>/nachher.json --no-wer
+node --experimental-transform-types eval/strike.ts --ocr <ideal.json> --images <Ordner>/images --truth <Ordner>/ground_truth --method ink --dewarp
+node --experimental-transform-types eval/dewarp-pages.ts <Ordner>/images <Ordner-begradigt>
+```
 
 ## Demo-Daten (nur Vorschlag)
 
