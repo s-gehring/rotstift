@@ -35,7 +35,7 @@ describe('thoroughness levels', () => {
     expect(ids.has(SECOND_READER_ID)).toBe(true);
   });
 
-  it('keeps the recognition and uses one text model for both text steps', () => {
+  it('keeps the recognition and the content and form step on Gemma 4 E2B in every level', () => {
     expect(LEVELS.fast).toEqual({
       transcriber: 'glm-ocr-q8',
       corrector: 'gemma-4-e2b-q4',
@@ -45,13 +45,13 @@ describe('thoroughness levels', () => {
     expect(LEVELS.thorough).toEqual({
       transcriber: 'glm-ocr-q8',
       corrector: 'gemma-4-e4b-q4',
-      reviewer: 'gemma-4-e4b-q4',
+      reviewer: 'gemma-4-e2b-q4',
       secondReading: true,
     });
     expect(LEVELS.veryThorough).toEqual({
       transcriber: 'glm-ocr-q8',
       corrector: 'gemma-4-26b-a4b-q4',
-      reviewer: 'gemma-4-26b-a4b-q4',
+      reviewer: 'gemma-4-e2b-q4',
       secondReading: true,
     });
   });
@@ -68,6 +68,7 @@ describe('thoroughness levels', () => {
     expect(levelModels('thorough').map((model) => model.id)).toEqual([
       'glm-ocr-q8',
       'lightonocr-3-08b-q8',
+      'gemma-4-e2b-q4',
       'gemma-4-e4b-q4',
     ]);
   });

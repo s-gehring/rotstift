@@ -179,16 +179,16 @@ Ergänzt am 2026-10-22 nach der Messung in [Gründlicher Modus](../evaluations/2
 
 Über den Schritten steht in ⚙ die Auswahl „Gründlichkeit“. Sie setzt die Modelle aller Schritte und die zweite Lesung auf einmal:
 
-| Stufe             | Erkennung | Zweite Lesung          | Rechtschreibung und Grammatik | Inhalt und Form      |
-| ----------------- | --------- | ---------------------- | ----------------------------- | -------------------- |
-| Schnell (Vorgabe) | GLM-OCR   | aus                    | Gemma 4 E2B Q4_0              | Gemma 4 E2B Q4_0     |
-| Gründlich         | GLM-OCR   | LightOnOCR-3 0.8B Q8_0 | Gemma 4 E4B Q4_0              | Gemma 4 E4B Q4_0     |
-| Sehr gründlich    | GLM-OCR   | LightOnOCR-3 0.8B Q8_0 | Gemma 4 26B A4B Q4_0          | Gemma 4 26B A4B Q4_0 |
+| Stufe             | Erkennung | Zweite Lesung          | Rechtschreibung und Grammatik | Inhalt und Form  |
+| ----------------- | --------- | ---------------------- | ----------------------------- | ---------------- |
+| Schnell (Vorgabe) | GLM-OCR   | aus                    | Gemma 4 E2B Q4_0              | Gemma 4 E2B Q4_0 |
+| Gründlich         | GLM-OCR   | LightOnOCR-3 0.8B Q8_0 | Gemma 4 E4B Q4_0              | Gemma 4 E2B Q4_0 |
+| Sehr gründlich    | GLM-OCR   | LightOnOCR-3 0.8B Q8_0 | Gemma 4 26B A4B Q4_0          | Gemma 4 E2B Q4_0 |
 
 Begründung aus #68:
 
 - **Rechtschreibung und Grammatik** gewinnt mit dem größeren Modell: Recall 86,9 % (E2B), 91,8 % (E4B), 93,4 % (26B A4B), bei gleich wenigen Fehlalarmen. Mehr Rechenzeit mit demselben Modell (Denken, zweiter Durchgang, Stichproben) bringt nichts.
-- **Inhalt und Form** wird mit keinem Modell messbar besser (18, 17 und 16 von 24 Mängeln). Der Schritt nimmt darum das Modell der Korrektur, dann teilen sich beide den laufenden Server und es gibt keinen Wechsel.
+- **Inhalt und Form** wird mit keinem Modell messbar besser (18, 17 und 16 von 24 Mängeln mit E2B, E4B und 26B A4B). Auf simon-pc braucht E4B 53 statt 28 s je Arbeit bei einem Treffer weniger, 26B A4B trifft 16 von 24. Der Schritt bleibt darum in jeder Stufe bei Gemma 4 E2B. Die Schritte eines Laufs laufen nacheinander, ein eigenes Modell kostet also nur einen zusätzlichen Wechsel je Lauf (Korrektur, dann Inhalt und Form), warm rund 1 s. Der Preis der größeren Modelle fällt so nur bei der Rechtschreibung und Grammatik an, wo sie Recall bringen.
 - **Erkennung:** Ein größeres Modell für 8 GB gibt es nicht. Die zweite Lesung mit LightOnOCR-3 0.8B halbiert die Fehlalarme aus Lesefehlern (1,4 auf 0,7 je 100 Wörter echter Handschrift) und hebt den Anteil rot markierter echter Fehler von 60 auf 63 %.
 
 Die Auswahl zeigt die Stufe, deren Modelle gerade gewählt sind. Ändert jemand darunter einen Schritt, steht dort „Eigene Auswahl“. Die Auswahl je Schritt bleibt wie oben. Eine Stufe mit einem Modell über dem Speicher ist nicht gesperrt, sie trägt den kurzen Zusatz „dauert deutlich länger“. Ein Cloud-Schritt wird beim Wählen einer Stufe ausgeschaltet. Fehlen Modelle der Stufe, fragt der Start wie bisher nach der Einrichtung.
@@ -199,7 +199,13 @@ LightOnOCR-3 0.8B steht als eigener Eintrag in `models.json` (Rolle `transcriber
 
 Die Regel aus #68 (`src/correction/second-reading.ts`): Beide Lesungen werden Wort für Wort ausgerichtet. Ein Wort bleibt sicher, wenn LightOn es gleich liest und GLM-OCR sich zu mindestens 0,8 sicher ist. Jede andere Marke auf dem Wort wird zum Hinweis „unsicher gelesen“. Scheitert die zweite Lesung einer Seite, gilt die erste wie bisher.
 
-Beide Lesungen laufen je Seite nacheinander im selben Erkennungsschritt, weil die Reihenfolge des Laufs in `run.ts` liegt. Das kostet zwei Modellwechsel je Seite, warm rund 1 s, auf 8 GB kalt (Lesen von der Platte). Die Zählung nutzt die zweite Lesung ebenfalls, wenn sie an ist.
+Die zweite Lesung ist ein eigener Durchgang des Erkennungsschritts: Der Runner liest zuerst alle Seiten mit GLM-OCR und danach alle Seiten mit LightOnOCR-3, erst dann wird bestätigt (`PageTranscriber.secondRead`, `awaitingSecond` am Eintrag der Seite). Das kostet einen Modellwechsel je Lauf statt zwei je Seite. Ein Lauf mit 100 Seiten startet die beiden Erkennungsmodelle so je einmal statt je 100-mal, auf 8 GB, wo jeder Wechsel kalt ist (Lesen von der Platte), ein deutlicher Unterschied.
+
+- Der Seitenzähler (`batch`) zählt nur erste Lesungen. Fortschritt und Restdauer zählen die zweite Lesung als eigene Einheit (siehe Restdauer).
+- Abbruch mitten in der zweiten Lesung lässt alle Seiten mit ihrer ersten Lesung stehen, ohne Bestätigung.
+- Scheitert die zweite Lesung einer Seite, auch durch Hänger oder Absturz, gilt ihre erste Lesung wie bisher. Sie ist kein Fehler der Seite. Mehrere Hänger oder Abstürze in einem Lauf beenden den Durchgang (wie beim Lesen), die übrigen Seiten behalten die erste Lesung.
+- Hat der Nutzer den Text einer Seite inzwischen bearbeitet, wird ihre Lesesicherheit nicht mehr verändert.
+- „Erneut versuchen“ für eine Seite liest sie beide Male und wechselt dafür zweimal. Die Zählung nutzt die zweite Lesung ebenfalls, wenn sie an ist.
 
 #### Modelle größer als der Speicher
 
@@ -222,7 +228,7 @@ Die Schätzung vor dem Start und die Restdauer rechnen je Modell, nicht nur je S
 | Gemma 4 26B A4B      |    3,5 | Inhalt und Form auf dem Mac, 1,9-mal E4B (#68) |
 | eigenes Modell       |  Größe | Dateigröße relativ zur Vorgabe des Schritts    |
 
-Die zweite Lesung addiert ihren Faktor zur Erkennung. Ein Modell über dem Speicher bekommt den Faktor 10, bis simon-pc die Zeiten unter einem Deckel liefert. Gelernt wird wie bisher aus dem Lauf, aber getrennt je Schritt und Modell (`rotstift.model-rates`). Die alten Werte je Schritt (`rotstift.step-rates`) gelten beim ersten Start für die Vorgabemodelle. Ab 5 h nennt die Schätzung ganze Stunden („etwa 7 h“).
+Die zweite Lesung ist ein eigener Schritt mit eigenem Wert (`confirm`, Startwert 30 s mal Faktor des Zweitlesers), damit der Wert der Erkennung nicht zwischen zwei Modellen pendelt. Ein Modell über dem Speicher bekommt den Faktor 10, bis simon-pc die Zeiten unter einem Deckel liefert. Gelernt wird wie bisher aus dem Lauf, aber getrennt je Schritt und Modell (`rotstift.model-rates`). Die alten Werte je Schritt (`rotstift.step-rates`) gelten beim ersten Start für die Vorgabemodelle. Ab 5 h nennt die Schätzung ganze Stunden („etwa 7 h“).
 
 Gemessen mit `eval/class-run.integration.test.ts` auf dem Mac (Apple M4 Pro, 48 GB, nur CPU), eine gerenderte Seite mit Inhalt und Form (`brief-ohne-rahmen-1`), alle Modelle in den Speicher passend. Der Mac war durch drei fremde llama-server belastet, die Zeiten zeigen das Verhältnis, nicht den schwachen Laptop:
 
@@ -233,6 +239,16 @@ Gemessen mit `eval/class-run.integration.test.ts` auf dem Mac (Apple M4 Pro, 48 
 | Sehr gründlich |     7,8 s |    15,1 s |           6,1 s |       29,1 s | GLM, LightOn, 26B |
 
 Die Zeiten enthalten das Laden der Modelle (GLM 0,5 bis 1,1 s, LightOn 1,0 bis 1,4 s, E2B 2,2 s, E4B 3,2 s, 26B A4B 10,2 s). Ohne Laden rechnet die Korrektur mit E2B 3,5 s, mit E4B 5,3 s und mit 26B A4B 4,9 s. Auf einer einzelnen Seite mit 48 GB ist das Mixture-of-Experts-Modell also so schnell wie E4B. Der Faktor 3,5 folgt trotzdem den zehn Arbeiten aus #68, bis simon-pc misst. Peak des 26B-Servers: 13,7 GB.
+
+Dieselbe Messung mit der Gesamtzeit einer Klasse (`eval/class-run.integration.test.ts`, 3 Arbeiten zu je 2 Seiten, Brief mit Inhalt und Form, gleicher Mac, Modelle im Speicher). „Vorher“ liest jede Seite beide Male nacheinander (`ROTSTIFT_CLASS_PAGEWISE=1`) und nutzt für Inhalt und Form das Modell der Korrektur, „nachher“ ist der eigene Durchgang mit Gemma 4 E2B für Inhalt und Form. Modellwechsel sind die Modellstarts des Servers im Protokoll des Laufs. Der Mac war durch fremde llama-server belastet (Last 6 bis 23), die Zeiten schwanken darum um 10 bis 20 %, die Wechsel nicht.
+
+| Stufe          | Gesamtzeit vorher | Gesamtzeit nachher | Modellwechsel vorher | Modellwechsel nachher |
+| -------------- | ----------------: | -----------------: | -------------------: | --------------------: |
+| Schnell        |            61,1 s |             61,1 s |                    2 |                     2 |
+| Gründlich      |      96,8, 90,5 s |       78,1, 86,8 s |                   13 |                     4 |
+| Sehr gründlich |           111,4 s |             85,6 s |                   13 |                     4 |
+
+Gründlich wurde zweimal in vertauschter Reihenfolge gemessen. Schnell läuft unverändert (keine zweite Lesung, ein Modell für beide Textschritte) und wurde einmal gemessen. Nachher sind es vier Starts: GLM-OCR, LightOnOCR-3, das größere Textmodell und Gemma 4 E2B für Inhalt und Form. Vorher sind es zwölf Starts der beiden Erkennungsmodelle (je Seite zwei) und einer für das Textmodell. Die Zeiten der Erkennung allein fallen bei Gründlich von 48,6 und 45,1 auf 36,7 und 40,0 s, bei Sehr gründlich von 45,6 auf 38,9 s. Inhalt und Form mit E2B braucht bei Sehr gründlich 13,3 statt 26,0 s. Auf einem 8-GB-Rechner, wo jeder Wechsel kalt von der Platte liest, spart der Durchgang entsprechend mehr.
 
 ## Kandidaten
 
@@ -301,5 +317,4 @@ Alle gelisteten Kandidaten stehen unter Apache-2.0 oder MIT, Weitergabe als Down
 - Ohne Messung keine Lesesicherheit für eigene Erkennungsmodelle.
 - MiniCPM-V 4.7 lädt seit dem Update auf llama.cpp `b11551`, liest aber schlechter als GLM-OCR und verbessert Schülerfehler.
 - Offen: Eine Reihenfolge „erst alle Seiten erkennen, dann alle korrigieren“, die Wechsel je Lauf begrenzt, ist nicht Teil dieser Entscheidung.
-- Offen: Die zweite Lesung als eigener Durchgang nach allen Seiten (zwei statt zwei je Seite Wechsel) braucht eine Änderung an `run.ts`.
 - Offen: Faktoren für Modelle über dem Speicher, sobald simon-pc unter einem Deckel gemessen hat.

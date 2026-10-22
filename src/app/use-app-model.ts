@@ -297,6 +297,7 @@ export function useAppModel(): AppModel {
       review.state,
       profile,
       scope,
+      costs.confirm.key !== 'none',
     );
     return durationText(totalSeconds(rates, work));
   };

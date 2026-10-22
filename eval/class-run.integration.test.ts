@@ -4,6 +4,7 @@ import process from 'node:process';
 import { Window } from 'happy-dom';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { DEUTSCH } from '../src/annotations/profile.ts';
+import { confirmReading } from '../src/correction/second-reading.ts';
 import type { CorrectionScope } from '../src/correction/scope.ts';
 import { installCanvas, napi } from '../src/export/test-support.ts';
 import type { ImportPage } from '../src/import/pages.ts';
@@ -22,6 +23,7 @@ import { noDiagnostics } from '../src/pipeline/diagnostics.ts';
 import { createLlmTranscriber } from '../src/pipeline/llm-transcriber.ts';
 import { createRunner } from '../src/pipeline/runner.ts';
 import { withSecondReading } from '../src/pipeline/second-reading.ts';
+import type { PageTranscriber } from '../src/pipeline/transcriber.ts';
 import {
   createReviewFlow,
   reviewWorks,
@@ -39,10 +41,13 @@ const OUT = process.env['ROTSTIFT_CLASS_OUT'] ?? join(CLASS_DIR, 'results');
 const LABEL = process.env['ROTSTIFT_CLASS_LABEL'] ?? 'run';
 const CONTENT = process.env['ROTSTIFT_CLASS_CONTENT'] !== '0';
 const TEXT_MODEL = process.env['ROTSTIFT_CLASS_TEXT_MODEL'];
+const REVIEW_MODEL = process.env['ROTSTIFT_CLASS_REVIEW_MODEL'];
 const SECOND = process.env['ROTSTIFT_CLASS_SECOND'] === '1';
+const PAGEWISE = process.env['ROTSTIFT_CLASS_PAGEWISE'] === '1';
 
 const transcriber = recommendModel();
 const corrector = CORRECTORS.find((model) => model.id === TEXT_MODEL) ?? defaultCorrector();
+const reviewer = CORRECTORS.find((model) => model.id === REVIEW_MODEL) ?? corrector;
 const second = SECOND ? secondReader() : null;
 
 const available =
@@ -52,6 +57,7 @@ const available =
     transcriber.files.model,
     transcriber.files.mmproj,
     corrector.files.model,
+    reviewer.files.model,
     ...(second === null ? [] : [second.files.model, second.files.mmproj]),
   ].every((file) => existsSync(join(MODELS_DIR, file.name)));
 
@@ -93,6 +99,19 @@ function tally(values: readonly string[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const value of values) counts[value] = (counts[value] ?? 0) + 1;
   return counts;
+}
+
+function pagewise(primary: PageTranscriber, other: PageTranscriber): PageTranscriber {
+  return {
+    ...primary,
+    async transcribe(png, signal, onPhase) {
+      const first = await primary.transcribe(png, signal, onPhase);
+      if (!first.ok || first.reading === undefined) return first;
+      const again = await other.transcribe(png, signal, onPhase);
+      if (!again.ok) return again.error.kind === 'cancelled' ? again : first;
+      return { ...first, reading: confirmReading(first.reading, again.lines) };
+    },
+  };
 }
 
 const sidecar = new NodeSidecar();
@@ -170,13 +189,16 @@ describe.skipIf(!available)('a whole class through the real sidecar', () => {
         model: transcriber,
         encode: modelImage,
       });
-      runner.setTranscriber(
+      const other =
         second === null
+          ? null
+          : createLlmTranscriber({ client: sidecar, engine, model: second, encode: modelImage });
+      runner.setTranscriber(
+        other === null
           ? primary
-          : withSecondReading(
-              primary,
-              createLlmTranscriber({ client: sidecar, engine, model: second, encode: modelImage }),
-            ),
+          : PAGEWISE
+            ? pagewise(primary, other)
+            : withSecondReading(primary, other),
       );
       runner.setPages(pages);
       const reviews: ContentReviewLog[] = [];
@@ -197,7 +219,11 @@ describe.skipIf(!available)('a whole class through the real sidecar', () => {
       });
       const sidecarCorrector = createSidecarCorrector(corrector, { engine, client: sidecar });
       flow.setCorrector(sidecarCorrector);
-      flow.setReviewer(sidecarCorrector);
+      flow.setReviewer(
+        reviewer === corrector
+          ? sidecarCorrector
+          : createSidecarCorrector(reviewer, { engine, client: sidecar }),
+      );
 
       const phases = new Map<ReviewPhase, number>();
       let current: ReviewPhase | null = null;
@@ -225,6 +251,8 @@ describe.skipIf(!available)('a whole class through the real sidecar', () => {
         threads: process.env['ROTSTIFT_THREADS'] ?? null,
         noRepack: process.env['ROTSTIFT_NO_REPACK'] ?? null,
         textModel: corrector.id,
+        reviewModel: reviewer.id,
+        pagewise: PAGEWISE,
         secondReading: second !== null,
         content: CONTENT,
         arbeiten: works.length,

@@ -37,6 +37,7 @@ export interface StepCost {
 
 export interface StepCosts {
   readonly read: StepCost;
+  readonly confirm: StepCost;
   readonly correct: StepCost;
   readonly review: StepCost;
 }
@@ -50,21 +51,17 @@ export interface ChosenModels {
 
 export const CLOUD_COST: StepCost = { key: 'cloud', factor: 1 };
 
+const NO_COST: StepCost = { key: 'none', factor: 1 };
+
 function single(model: AnyModelInfo | null, ram: number | null): StepCost {
   return model === null ? CLOUD_COST : { key: model.id, factor: relativeTime(model, ram) };
 }
 
 export function stepCosts(models: ChosenModels, totalRamBytes: number | null): StepCosts {
   const { transcriber, second, corrector, reviewer } = models;
-  const read = single(transcriber, totalRamBytes);
   return {
-    read:
-      transcriber === null || second === null
-        ? read
-        : {
-            key: `${read.key}+${second.id}`,
-            factor: read.factor + relativeTime(second, totalRamBytes),
-          },
+    read: single(transcriber, totalRamBytes),
+    confirm: transcriber === null || second === null ? NO_COST : single(second, totalRamBytes),
     correct: single(corrector, totalRamBytes),
     review: single(reviewer, totalRamBytes),
   };

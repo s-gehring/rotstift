@@ -28,6 +28,11 @@ export interface PageTranscriber {
     signal: AbortSignal,
     onPhase?: (phase: PagePhase) => void,
   ): Promise<TranscribeResult>;
+  secondRead?(
+    png: Blob,
+    signal: AbortSignal,
+    onPhase?: (phase: PagePhase) => void,
+  ): Promise<TranscribeResult>;
   recover?(): Promise<void>;
 }
 
