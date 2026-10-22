@@ -4,6 +4,8 @@ import json
 import os
 import re
 import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -33,6 +35,22 @@ SOURCES = {
         "hf": "aryaman27/goodnotes-handwritten-dataset",
         "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550",
     },
+}
+
+FHSWF = "fhswf/german_handwriting"
+FHSWF_ROWS = 10854
+FHSWF_SAMPLE = 300
+FHSWF_BLOCK = 10
+
+COMMONS_PAPERS = {
+    "kariert-5mm-foto": ("b/ba/Office_Arbeitsbl%C3%A4tter_kariert2.jpg", "CC BY-SA 4.0"),
+    "millimeterpapier-foto": ("2/2a/Blatt_Millimeterpapier_2.jpg", "CC BY 4.0"),
+    "liniert-us-foto-1": ("a/a8/Write_Your_Story_Blank_Lined_Notebook_Paper_Creative_Commons_%284812267249%29.jpg", "CC BY 2.0"),
+    "liniert-us-foto-2": ("e/e2/Free_Wrinkled_Lined_Blank_Notebook_Paper_High_Resolution_Creative_Commons_%288077064004%29.jpg", "CC BY 2.0"),
+}
+COMMONS_PAGES = {
+    "schulheft-1953-kurrent": ("a/af/%C3%9Cbungen_in_deutscher_Schrift_in_einem_Schulheft_des_ersten_Schuljahres_%281953%29.jpg", "CC BY-SA 4.0"),
+    "schulheft-1929-kurrent": ("3/31/Schulheft_1929_Berlin_SlgKiJu.jpg", "gemeinfrei"),
 }
 
 GNHK_SPECIAL = re.compile(r"^%\w*%?\.?$")
@@ -213,15 +231,74 @@ def prepare_bressay() -> None:
     print(f"bressay: {count} pages")
 
 
+def fetch_fhswf_block(offset: int, length: int) -> list[tuple[bytes, str, int]]:
+    url = f"https://datasets-server.huggingface.co/rows?dataset={FHSWF}&config=default&split=train&offset={offset}&length={length}"
+    for attempt in range(8):
+        time.sleep(3 * attempt)
+        try:
+            rows = json.load(urllib.request.urlopen(request(url), timeout=60))["rows"]
+            return [(urllib.request.urlopen(request(row["row"]["image"]["src"]), timeout=120).read(), row["row"]["text"], row["row_idx"]) for row in rows]
+        except (OSError, KeyError, ValueError):
+            continue
+    raise SystemExit(f"{FHSWF}: rows at {offset} failed")
+
+
+def prepare_fhswf() -> None:
+    raw = ROOT / "_raw" / "fhswf"
+    raw.mkdir(parents=True, exist_ok=True)
+    _, images, truth = folders("fhswf-zeilen")
+    blocks = FHSWF_SAMPLE // FHSWF_BLOCK
+    offsets = [round(step * FHSWF_ROWS / blocks) for step in range(blocks)]
+
+    def one(offset: int) -> None:
+        for data, text, index in fetch_fhswf_block(offset, FHSWF_BLOCK):
+            name = f"fhswf-{index:05d}"
+            (raw / f"{name}.jpg").write_bytes(data)
+            with Image.open(raw / f"{name}.jpg") as image:
+                save_page(image, images / f"{name}.jpg")
+            (truth / f"{name}.txt").write_text(" ".join(text.split()) + "\n", encoding="utf-8")
+
+    with ThreadPoolExecutor(2) as pool:
+        list(pool.map(one, [offset for offset in offsets if not (truth / f"fhswf-{offset:05d}.txt").exists()]))
+    print(f"fhswf-zeilen: {len(list(truth.glob('*.txt')))} single lines in {blocks} blocks of {FHSWF_BLOCK}")
+
+
+def fetch_commons(url: str) -> bytes:
+    for attempt in range(6):
+        time.sleep(2 * attempt)
+        try:
+            return urllib.request.urlopen(request(url, {"User-Agent": "rotstift-eval/1.0 (offline evaluation, no redistribution)"}), timeout=120).read()
+        except urllib.error.HTTPError as error:
+            if error.code != 429:
+                raise
+    raise SystemExit(f"{url}: still rate limited")
+
+
+def prepare_commons() -> None:
+    raw = ROOT / "_raw" / "commons"
+    raw.mkdir(parents=True, exist_ok=True)
+    base = ROOT / "commons-heft"
+    for folder, items in (("papers", COMMONS_PAPERS), ("pages", COMMONS_PAGES)):
+        (base / folder).mkdir(parents=True, exist_ok=True)
+        for name, (path, _) in items.items():
+            target = raw / f"{name}.jpg"
+            if not target.exists():
+                target.write_bytes(fetch_commons(f"https://upload.wikimedia.org/wikipedia/commons/{path}"))
+            with Image.open(target) as image:
+                save_page(image, base / folder / f"{name}.jpg")
+    print(f"commons-heft: {len(COMMONS_PAPERS)} blank papers, {len(COMMONS_PAGES)} written pages (no transcript)")
+
+
 PREPARE = {"ru-schulaufsaetze": prepare_ru, "gnhk": prepare_gnhk, "bressay": prepare_bressay}
+OPTIONAL = {"fhswf-zeilen": prepare_fhswf, "commons-heft": prepare_commons}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch and prepare test datasets under ~/.cache/rotstift/datasets")
-    parser.add_argument("names", nargs="*", choices=list(PREPARE), default=[])
+    parser.add_argument("names", nargs="*", choices=[*PREPARE, *OPTIONAL], default=[])
     args = parser.parse_args()
     for name in args.names or list(PREPARE):
-        PREPARE[name]()
+        {**PREPARE, **OPTIONAL}[name]()
 
 
 if __name__ == "__main__":
