@@ -28,7 +28,6 @@ Geplant:
 
 - Weniger Stellen „unsicher gelesen“ durch eine genauere Texterkennung, Schwelle auf echter Schülerhandschrift prüfen.
 - Durchgestrichenes zuverlässiger erkennen, auch Gekritzel und Überschreibungen.
-- Signierte Installer für Windows und macOS, vorbereitet in [docs/signieren.md](docs/signieren.md).
 
 ## Erster Start
 
@@ -56,10 +55,10 @@ Die Modelle stecken in `src-tauri/models.json` (Quelle auf einen Commit festgele
 
 ## Testversion installieren
 
-Testversionen liegen unter [Releases](https://github.com/s-gehring/rotstift/releases). Solange keine Signierzertifikate hinterlegt sind (siehe [docs/signieren.md](docs/signieren.md)), sind sie nicht signiert, daher warnt das Betriebssystem beim ersten Start:
+Testversionen liegen unter [Releases](https://github.com/s-gehring/rotstift/releases). Die Installer sind nicht von Apple oder Microsoft signiert, daher warnt das Betriebssystem beim ersten Start. Die Warnung lässt sich einmalig bestätigen:
 
+- **macOS (15 und neuer):** Die App in den Ordner „Programme“ ziehen und öffnen. macOS meldet, Rotstift könne nicht geprüft werden. Dann unter Systemeinstellungen → Datenschutz & Sicherheit nach unten scrollen, bei Rotstift „Dennoch öffnen“ wählen und mit dem Passwort bestätigen. Hilft das nicht: `xattr -dr com.apple.quarantine /Applications/Rotstift.app`.
 - **Windows:** Bei der SmartScreen-Meldung „Weitere Informationen“ und dann „Trotzdem ausführen“ wählen.
-- **macOS:** Nach dem ersten Startversuch unter Systemeinstellungen, Datenschutz & Sicherheit, „Dennoch öffnen“ wählen. Meldet macOS, die App sei beschädigt: `xattr -dr com.apple.quarantine /Applications/Rotstift.app`.
 - **Linux:** Das `.deb` oder `.rpm` installieren oder das AppImage ausführbar machen (`chmod +x`). Mindestens Ubuntu 22.04, Debian 12 oder eine vergleichbar aktuelle Distribution.
 
 ## Entwicklung
