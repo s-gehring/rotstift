@@ -1,16 +1,24 @@
 import { detectFileKind, fileKey } from './file-kind.ts';
 import type { ImportPage } from './pages.ts';
 import { PasswordProtectedError, openPdf, releasePdf } from './pdf-documents.ts';
-import { imageThumbnail, pdfThumbnail } from './thumbnails.ts';
+import { straightenImport } from './straighten.ts';
+import { imageThumbnail, pdfThumbnail, pixelsThumbnail } from './thumbnails.ts';
 
 export async function loadImage(file: File): Promise<ImportPage[]> {
-  const thumbnail = await imageThumbnail(file);
+  const straight = await straightenImport(file);
+  const thumbnail =
+    straight === null
+      ? await imageThumbnail(file)
+      : await pixelsThumbnail(straight.preview, straight.size);
   return [
     {
       id: crypto.randomUUID(),
       fileKey: fileKey(file),
       label: file.name,
-      source: { kind: 'image', file },
+      source:
+        straight === null
+          ? { kind: 'image', file }
+          : { kind: 'image', file, dewarp: straight.plan },
       width: thumbnail.width,
       height: thumbnail.height,
       rotation: 0,

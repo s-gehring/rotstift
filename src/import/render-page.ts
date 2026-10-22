@@ -2,6 +2,7 @@ import { canvasToBlob, createCanvas, drawRotated, get2dContext, releaseCanvas } 
 import { decodeScaled, readImageSize } from './image-decode.ts';
 import { getPdfPage } from './pdf-documents.ts';
 import { rotatedSize, type ImportPage } from './pages.ts';
+import { drawStraight } from './straighten.ts';
 
 export const DEFAULT_MAX_EDGE = 2048;
 
@@ -15,10 +16,13 @@ export async function renderPageToPng(
 ): Promise<Blob> {
   const maxEdge = options.maxEdge ?? DEFAULT_MAX_EDGE;
   if (!(maxEdge > 0)) throw new RangeError('maxEdge muss größer als 0 sein.');
+  const { source } = page;
   const canvas =
-    page.source.kind === 'image'
-      ? await drawImage(page.source.file, page.rotation, maxEdge)
-      : await drawPdfPage(page.source.documentId, page.source.pageNumber, page, maxEdge);
+    source.kind === 'pdf'
+      ? await drawPdfPage(source.documentId, source.pageNumber, page, maxEdge)
+      : source.dewarp === undefined
+        ? await drawImage(source.file, page.rotation, maxEdge)
+        : await drawStraight(source.file, source.dewarp, page.rotation, maxEdge);
   try {
     return await canvasToBlob(canvas, 'image/png');
   } finally {
