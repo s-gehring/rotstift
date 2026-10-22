@@ -2,7 +2,13 @@ import process from 'node:process';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
-const MODULE_MARKERS = ['Simulierter Fehler zum Testen', 'Platzhalter für die Entwicklung'];
+const MODULE_MARKERS = [
+  'Simulierter Fehler zum Testen',
+  'Platzhalter für die Entwicklung',
+  'Lena Ferien',
+  'ferien-liniert-1',
+  'Demo-Klasse hinzufügen',
+];
 
 async function bundleCode(nodeEnv: 'production' | 'development'): Promise<string> {
   const previous = process.env['NODE_ENV'];
@@ -16,7 +22,7 @@ async function bundleCode(nodeEnv: 'production' | 'development'): Promise<string
     const bundles = Array.isArray(result) ? result : [result];
     return bundles
       .flatMap((bundle) => ('output' in bundle ? bundle.output : []))
-      .map((chunk) => (chunk.type === 'chunk' ? chunk.code : ''))
+      .map((chunk) => (chunk.type === 'chunk' ? chunk.code : chunk.fileName))
       .join('\n');
   } finally {
     if (previous === undefined) delete process.env['NODE_ENV'];
