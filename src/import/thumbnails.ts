@@ -1,5 +1,7 @@
 import { canvasToBlob, createCanvas, drawRotated, get2dContext, releaseCanvas } from './canvas.ts';
-import { decodeScaled, readImageSize } from './image-decode.ts';
+import type { RgbaImage } from '../layout/types.ts';
+import { decodeScaled, fitWithin, readImageSize, type ImageSize } from './image-decode.ts';
+import { pixelsCanvas } from './straighten.ts';
 import { getPdfPage } from './pdf-documents.ts';
 
 const THUMBNAIL_EDGE = 320;
@@ -32,6 +34,18 @@ export async function imageThumbnail(file: File): Promise<Thumbnail> {
     return await toThumbnail(canvas, size.width, size.height);
   } finally {
     bitmap.close();
+  }
+}
+
+export async function pixelsThumbnail(image: RgbaImage, size: ImageSize): Promise<Thumbnail> {
+  const source = pixelsCanvas(image);
+  try {
+    const target = fitWithin(image, THUMBNAIL_EDGE);
+    const canvas = createCanvas(target.width, target.height);
+    drawRotated(get2dContext(canvas), source, canvas, target, 0);
+    return await toThumbnail(canvas, size.width, size.height);
+  } finally {
+    releaseCanvas(source);
   }
 }
 

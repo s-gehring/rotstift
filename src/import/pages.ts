@@ -1,7 +1,9 @@
+import type { DewarpPlan } from '../layout/dewarp.ts';
+
 export type Rotation = 0 | 90 | 180 | 270;
 
 export type PageSource =
-  | { readonly kind: 'image'; readonly file: File }
+  | { readonly kind: 'image'; readonly file: File; readonly dewarp?: DewarpPlan }
   | { readonly kind: 'pdf'; readonly documentId: string; readonly pageNumber: number };
 
 export interface ImportPage {
