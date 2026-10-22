@@ -38,10 +38,27 @@ export interface LineLocation {
   readonly rough?: true;
 }
 
+export type RulingKind = 'blank' | 'lined' | 'grid';
+
+export interface RuleLine {
+  readonly points: readonly Point[];
+}
+
+export interface Ruling {
+  readonly kind: RulingKind;
+  readonly horizontal: readonly RuleLine[];
+  readonly vertical: readonly RuleLine[];
+  readonly pitch: number;
+  readonly columnPitch: number;
+  readonly angleDegrees: number;
+  readonly margins: { readonly left: RuleLine | null; readonly right: RuleLine | null };
+}
+
 export interface LayoutResult {
   readonly lines: readonly (LineLocation | null)[];
   readonly skewDegrees: number;
   readonly detectedLines: number;
+  readonly ruling?: Ruling;
 }
 
 export interface GrayImage {

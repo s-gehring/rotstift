@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { matchLines, summaryRow, type PageStats } from './heft-measure.ts';
+import {
+  expectedRuling,
+  layoutRow,
+  matchLines,
+  summaryRow,
+  type PageStats,
+} from './heft-measure.ts';
 
 const truth = [
   { text: 'Liebe Oma, lieber Opa,', bbox: [10, 10, 200, 40] as [number, number, number, number] },
@@ -60,6 +66,54 @@ describe('summaryRow', () => {
       '75.0 %',
       '12.5 %',
       '2.00',
+    ]);
+  });
+});
+
+describe('expectedRuling', () => {
+  it('expects a grid on squared paper, lines on ruled paper and nothing otherwise', () => {
+    expect(expectedRuling('kariert')).toBe('grid');
+    expect(expectedRuling('liniert-eng')).toBe('lined');
+    expect(expectedRuling(undefined)).toBe('blank');
+  });
+});
+
+const pageOf = (name: string, ruling: string, locateMs: number): PageStats => ({
+  name,
+  group: 'kariert-photo',
+  words: 50,
+  wordEdits: 0,
+  chars: 250,
+  charEdits: 0,
+  lines: 10,
+  located: 10,
+  rough: 2,
+  matched: 10,
+  hits: 9,
+  confidentWrong: 1,
+  iouSum: 8,
+  alarms: 0,
+  crashed: false,
+  seconds: 0,
+  ruling,
+  expectedRuling: 'grid',
+  locateMs,
+});
+
+describe('layoutRow', () => {
+  it('reports rough boxes, confident misses, recognised paper and time per page', () => {
+    const cells = layoutRow('kariert', [pageOf('a', 'grid', 100), pageOf('b', 'lined', 300)])
+      .split('|')
+      .map((cell) => cell.trim());
+    expect(cells.slice(1, 9)).toEqual([
+      'kariert',
+      '2',
+      '100.0 %',
+      '20.0 %',
+      '90.0 %',
+      '10.0 %',
+      '50.0 %',
+      '200',
     ]);
   });
 });

@@ -1,5 +1,5 @@
 import { gaussianSmooth } from './signal.ts';
-import type { GrayImage } from './types.ts';
+import type { BBox, GrayImage } from './types.ts';
 
 export interface InkMask {
   readonly width: number;
@@ -307,7 +307,10 @@ export function labelComponents(mask: InkMask): Components {
   return { labels, minX, maxX, minY, maxY, area, count };
 }
 
-function removeScannerArtifacts(mask: InkMask): void {
+const PAGE_EDGE_LENGTH = 0.25;
+const PAGE_EDGE_RATIO = 8;
+
+function removeScannerArtifacts(mask: InkMask, pageEdges: boolean): void {
   const { width, height, data } = mask;
   const components = labelComponents(mask);
   const longSide = Math.max(width, height);
@@ -339,6 +342,14 @@ function removeScannerArtifacts(mask: InkMask): void {
       drop[label] = 1;
       continue;
     }
+    if (
+      pageEdges &&
+      Math.max(boxWidth, boxHeight) >= longSide * PAGE_EDGE_LENGTH &&
+      Math.max(boxWidth, boxHeight) >= Math.min(boxWidth, boxHeight) * PAGE_EDGE_RATIO
+    ) {
+      drop[label] = 1;
+      continue;
+    }
     const touches = x0 < edge || y0 < edge || x1 >= width - edge || y1 >= height - edge;
     if (!touches) continue;
     const long = Math.max(boxWidth, boxHeight);
@@ -355,7 +366,7 @@ function removeScannerArtifacts(mask: InkMask): void {
 
 const BRIDGE_REACH = 2;
 
-function ruleBridges(before: Uint8Array, mask: InkMask): Uint8Array {
+function ruleBridges(before: Uint8Array, mask: InkMask, longest: number): Uint8Array {
   const { width, height, data } = mask;
   const bridges = new Uint8Array(data);
   for (let x = 0; x < width; x += 1) {
@@ -373,7 +384,7 @@ function ruleBridges(before: Uint8Array, mask: InkMask): Uint8Array {
         if (start - d >= 0 && data[(start - d) * width + x] === 1) above = true;
         if (y - 1 + d < height && data[(y - 1 + d) * width + x] === 1) below = true;
       }
-      if (above && below) {
+      if (above && below && y - start <= longest) {
         for (let k = start; k < y; k += 1) bridges[k * width + x] = 1;
       }
     }
@@ -381,18 +392,60 @@ function ruleBridges(before: Uint8Array, mask: InkMask): Uint8Array {
   return bridges;
 }
 
-export function removeRulesAndArtifacts(mask: InkMask, tan: number): InkMask {
+function clampIndex(value: number, limit: number): number {
+  return Math.min(limit, Math.max(0, Math.round(value)));
+}
+
+export function inkShareOf(mask: InkMask, scale: number): (box: BBox) => number {
+  const { width, height, data } = mask;
+  const stride = width + 1;
+  const integral = new Int32Array(stride * (height + 1));
+  for (let y = 0; y < height; y += 1) {
+    let row = 0;
+    for (let x = 0; x < width; x += 1) {
+      row += data[y * width + x] ?? 0;
+      integral[(y + 1) * stride + x + 1] = (integral[y * stride + x + 1] ?? 0) + row;
+    }
+  }
+  return (box) => {
+    const x0 = clampIndex(box.x * scale, width);
+    const x1 = clampIndex((box.x + box.width) * scale, width);
+    const y0 = clampIndex(box.y * scale, height);
+    const y1 = clampIndex((box.y + box.height) * scale, height);
+    const area = (x1 - x0) * (y1 - y0);
+    if (area <= 0) return 0;
+    const sum =
+      (integral[y1 * stride + x1] ?? 0) -
+      (integral[y0 * stride + x1] ?? 0) -
+      (integral[y1 * stride + x0] ?? 0) +
+      (integral[y0 * stride + x0] ?? 0);
+    return sum / area;
+  };
+}
+
+export interface Cleanup {
+  readonly erase?: (mask: InkMask) => void;
+  readonly pageEdges?: boolean;
+  readonly longestBridge?: number;
+}
+
+export function removeRulesAndArtifacts(
+  mask: InkMask,
+  tan: number,
+  cleanup: Cleanup = {},
+): InkMask {
   const before = new Uint8Array(mask.data);
+  cleanup.erase?.(mask);
   removeVerticalRules(mask, tan);
   removeHorizontalRules(mask, tan);
   const ruleless = new Uint8Array(mask.data);
-  removeScannerArtifacts(mask);
+  removeScannerArtifacts(mask, cleanup.pageEdges === true);
   for (let i = 0; i < ruleless.length; i += 1) {
     if (mask.data[i] !== 1) ruleless[i] = 0;
   }
   return {
     width: mask.width,
     height: mask.height,
-    data: ruleBridges(before, { ...mask, data: ruleless }),
+    data: ruleBridges(before, { ...mask, data: ruleless }, cleanup.longestBridge ?? Infinity),
   };
 }

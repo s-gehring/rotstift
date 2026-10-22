@@ -168,12 +168,13 @@ export function joinPieces(
     if (located.length === 0) return null;
     const confidence = Math.min(...located.map(({ location }) => location.confidence));
     const sources = indices.flatMap((index) => assignment.sources[index] ?? []);
-    if (sources.length === 0) {
-      const rows = mergeRows(
-        located.flatMap(({ piece, location }) => asRows(location.bbox, piece.from, piece.to)),
+    const ownBox = () =>
+      boxOf(
+        mergeRows(
+          located.flatMap(({ piece, location }) => asRows(location.bbox, piece.from, piece.to)),
+        ),
       );
-      return { bbox: boxOf(rows), confidence, rough: true };
-    }
+    if (sources.length === 0) return { bbox: ownBox(), confidence, rough: true };
     const low = Math.min(...sources);
     let high = Math.max(...sources);
     const lastPiece = Math.max(...indices);
@@ -186,6 +187,7 @@ export function joinPieces(
     const range = candidates
       .slice(low, high + 1)
       .filter((_, k) => (owner.get(low + k) ?? line) === line);
+    if (range.length === 0) return { bbox: ownBox(), confidence, rough: true };
     const rough = located.some(({ location }) => location.rough === true);
     const bbox = boxOf(rowsOver(range));
     return rough ? { bbox, confidence, rough: true } : { bbox, confidence };
