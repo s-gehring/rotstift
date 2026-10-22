@@ -2,8 +2,20 @@ import type { AnyModelInfo } from '../models/registry.ts';
 import type { EngineMonitor, EnginePhase } from '../pipeline/transcriber.ts';
 import { createLlmClient, LlmCallError, type LlmClient } from './client.ts';
 
+export const IDLE_STOP_MS = 5 * 60 * 1000;
+
 export type EngineClient = Pick<LlmClient, 'status' | 'startModel' | 'complete'> & {
   readonly stop?: () => unknown;
+  readonly stopIfIdle?: (idleMs: number) => Promise<boolean>;
+};
+
+export type EngineTimer = (callback: () => void, ms: number) => () => void;
+
+const realTimer: EngineTimer = (callback, ms) => {
+  const handle = setTimeout(callback, ms);
+  return () => {
+    clearTimeout(handle);
+  };
 };
 
 export type EngineModel = Pick<AnyModelInfo, 'id' | 'files'>;
@@ -39,6 +51,7 @@ const cancelled = () => new LlmCallError({ kind: 'cancelled' });
 export function createLlmEngine(
   client: EngineClient,
   now: () => number = () => performance.now(),
+  startTimer: EngineTimer = realTimer,
 ): LlmEngine {
   const listeners = new Set<() => void>();
   const queue: Waiter[] = [];
@@ -47,6 +60,8 @@ export function createLlmEngine(
   let holder = false;
   let epoch = 0;
   let ensuring: number | null = null;
+  let stopping = false;
+  let cancelIdle: (() => void) | undefined;
 
   const set = (modelId: string | null, next: EnginePhase) => {
     if (loaded === modelId && phase === next) return;
@@ -110,10 +125,40 @@ export function createLlmEngine(
     }
   };
 
+  const disarm = () => {
+    cancelIdle?.();
+    cancelIdle = undefined;
+  };
+
+  async function stopIdle() {
+    cancelIdle = undefined;
+    if (stopping || holder || ensuring === epoch || queue.length > 0 || phase !== 'ready') return;
+    const own = epoch;
+    stopping = true;
+    let stopped = false;
+    try {
+      stopped = client.stopIfIdle ? await client.stopIfIdle(IDLE_STOP_MS) : false;
+    } catch {
+      stopped = false;
+    }
+    stopping = false;
+    if (stopped && own === epoch) set(null, 'idle');
+    pump();
+  }
+
   function pump() {
-    if (ensuring === epoch || holder) return;
+    if (stopping || ensuring === epoch || holder) {
+      disarm();
+      return;
+    }
     const head = queue[0];
-    if (head === undefined) return;
+    if (head === undefined) {
+      if (phase === 'ready' && cancelIdle === undefined && client.stopIfIdle) {
+        cancelIdle = startTimer(() => void stopIdle(), IDLE_STOP_MS);
+      }
+      return;
+    }
+    disarm();
     const own = epoch;
     ensuring = own;
     void ensure(head).finally(() => {
@@ -164,6 +209,7 @@ export function createLlmEngine(
       if (modelId !== undefined && loaded !== null && loaded !== modelId) return;
       epoch += 1;
       holder = false;
+      disarm();
       set(null, 'idle');
       await Promise.resolve(client.stop?.()).catch(() => undefined);
       pump();

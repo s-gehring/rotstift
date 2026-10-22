@@ -110,3 +110,7 @@ export function hasRepetitionLoop(lines: readonly string[]): boolean {
   }
   return false;
 }
+
+export function isDegenerateAnswer(finishReason: string | null, lines: readonly string[]): boolean {
+  return finishReason === 'length' || hasRepetitionLoop(lines);
+}

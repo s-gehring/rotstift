@@ -162,7 +162,7 @@ fn fast() -> Policy {
 }
 
 fn text_request() -> Value {
-    json!({ "messages": [{ "role": "user", "content": "Ein geheimer Schülersatz." }], "seed": 3, "logprobs": true, "max_tokens": 50 })
+    json!({ "messages": [{ "role": "user", "content": "Ein geheimer Schülersatz." }], "seed": 3, "repeat_penalty": 1.1, "logprobs": true, "max_tokens": 50 })
 }
 
 fn class(result: Result<Value, CloudError>) -> ErrorClass {

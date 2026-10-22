@@ -1,7 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { findErrorKind } from '../annotations/catalog.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
-import { splitStruck, strokeStruck, unstrokeStruck } from '../annotations/struck.ts';
+import {
+  restrokedCaret,
+  splitStruck,
+  strokeStruck,
+  unstrokeStruck,
+} from '../annotations/struck.ts';
 import type { HintStatus } from '../correction/uncertain-reading.ts';
 import type { CommentStatus } from './review-flow.ts';
 import { formatCount, wordsText } from '../results/summary.ts';
@@ -307,7 +312,13 @@ function TextEditor({
   readonly onDone: () => void;
 }) {
   const area = useRef<HTMLTextAreaElement>(null);
+  const caret = useRef<number | null>(null);
   useEffect(() => area.current?.focus({ preventScroll: true }), []);
+  useLayoutEffect(() => {
+    if (caret.current === null) return;
+    area.current?.setSelectionRange(caret.current, caret.current);
+    caret.current = null;
+  });
   const text = strokeStruck(page.text ?? '');
   return (
     <div className="side-editor">
@@ -318,7 +329,12 @@ function TextEditor({
         readOnly={locked || !page.editable}
         rows={Math.min(Math.max(text.split('\n').length + 1, 6), 24)}
         spellCheck={false}
-        onChange={(event) => onEdit(unstrokeStruck(event.target.value))}
+        onChange={(event) => {
+          const { value, selectionStart } = event.target;
+          const edited = unstrokeStruck(value);
+          if (strokeStruck(edited) !== value) caret.current = restrokedCaret(value, selectionStart);
+          onEdit(edited);
+        }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();

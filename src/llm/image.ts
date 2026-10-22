@@ -1,5 +1,6 @@
 export const MAX_IMAGE_EDGE = 1536;
 const JPEG_QUALITY = 0.9;
+const MAX_UPSCALE = 4;
 
 export interface Size {
   width: number;
@@ -8,6 +9,16 @@ export interface Size {
 
 export function fitWithin(size: Size, maxEdge = MAX_IMAGE_EDGE): Size {
   const scale = Math.min(1, maxEdge / Math.max(size.width, size.height));
+  return {
+    width: Math.max(1, Math.round(size.width * scale)),
+    height: Math.max(1, Math.round(size.height * scale)),
+  };
+}
+
+export function modelImageSize(size: Size, maxEdge = MAX_IMAGE_EDGE): Size {
+  const longEdge = Math.max(size.width, size.height);
+  if (longEdge >= maxEdge) return fitWithin(size, maxEdge);
+  const scale = Math.min(MAX_UPSCALE, maxEdge / longEdge);
   return {
     width: Math.max(1, Math.round(size.width * scale)),
     height: Math.max(1, Math.round(size.height * scale)),
@@ -28,6 +39,16 @@ function blobDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function smoothEnlargement(
+  context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  image: ImageBitmap,
+  size: Size,
+): void {
+  if (size.width > image.width || size.height > image.height) {
+    context.imageSmoothingQuality = 'high';
+  }
+}
+
 async function encodeJpeg(image: ImageBitmap, size: Size): Promise<Blob> {
   if (typeof OffscreenCanvas !== 'undefined') {
     const canvas = new OffscreenCanvas(size.width, size.height);
@@ -35,6 +56,7 @@ async function encodeJpeg(image: ImageBitmap, size: Size): Promise<Blob> {
     if (!context) throw new Error('2D canvas is not available');
     context.fillStyle = '#fff';
     context.fillRect(0, 0, size.width, size.height);
+    smoothEnlargement(context, image, size);
     context.drawImage(image, 0, 0, size.width, size.height);
     return canvas.convertToBlob({ type: 'image/jpeg', quality: JPEG_QUALITY });
   }
@@ -45,6 +67,7 @@ async function encodeJpeg(image: ImageBitmap, size: Size): Promise<Blob> {
   if (!context) throw new Error('2D canvas is not available');
   context.fillStyle = '#fff';
   context.fillRect(0, 0, size.width, size.height);
+  smoothEnlargement(context, image, size);
   context.drawImage(image, 0, 0, size.width, size.height);
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -61,7 +84,7 @@ async function encodeJpeg(image: ImageBitmap, size: Size): Promise<Blob> {
 export async function modelImage(source: Blob, maxEdge = MAX_IMAGE_EDGE): Promise<string> {
   const image = await createImageBitmap(source);
   try {
-    return await blobDataUrl(await encodeJpeg(image, fitWithin(image, maxEdge)));
+    return await blobDataUrl(await encodeJpeg(image, modelImageSize(image, maxEdge)));
   } finally {
     image.close();
   }

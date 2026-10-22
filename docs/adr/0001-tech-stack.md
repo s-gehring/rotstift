@@ -48,10 +48,9 @@ Pipeline: Seite rendern, Vision-Modell transkribiert mit Zeilenpositionen, HTML,
 
 - Rust wird als zweite Toolchain gebraucht, bleibt aber auf die Systemanbindung beschränkt.
 - Die Darstellung hängt von der System-WebView ab (WebView2, WKWebView, WebKitGTK) und muss auf allen drei Plattformen getestet werden.
-- Installer sind zunächst unsigniert, Tester müssen Warnungen von macOS und Windows bestätigen.
+- Installer werden dauerhaft nicht signiert. Nutzer müssen einmalig die Warnungen von macOS und Windows bestätigen, die Schritte stehen im README. Unter macOS sind App und Sidecar ad-hoc signiert, damit die App nicht als beschädigt gilt.
 
 ## Offene Punkte
 
 - Modellauswahl: Qualität der Handschrifterkennung auf 8 GB ohne GPU mit einem Evaluationsset aus selbst geschriebenen Proben messen.
-- Code-Signing und Notarisierung für macOS und Windows.
 - Strategien für schwache Rechner (mmap, Teil-Offload) und ein Standard für die Fehlerschwere.

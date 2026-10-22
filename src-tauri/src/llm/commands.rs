@@ -92,6 +92,11 @@ pub fn llm_stop(runtime: State<'_, LlmRuntime>) -> RuntimeStatus {
 }
 
 #[tauri::command]
+pub fn llm_stop_if_idle(runtime: State<'_, LlmRuntime>, idle_ms: u64) -> bool {
+    runtime.stop_if_idle(idle_ms)
+}
+
+#[tauri::command]
 pub async fn llm_status(runtime: State<'_, LlmRuntime>) -> Result<RuntimeStatus, LlmError> {
     Ok(runtime.status().await)
 }
