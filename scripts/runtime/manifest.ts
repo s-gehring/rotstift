@@ -1,4 +1,4 @@
-export const LLAMA_CPP_VERSION = 'b11537';
+export const LLAMA_CPP_VERSION = 'b11551';
 
 export const LICENSE = {
   url: `https://raw.githubusercontent.com/ggml-org/llama.cpp/${LLAMA_CPP_VERSION}/LICENSE`,
@@ -15,22 +15,22 @@ export const ASSETS: readonly RuntimeAsset[] = [
   {
     target: 'aarch64-apple-darwin',
     archive: `llama-${LLAMA_CPP_VERSION}-bin-macos-arm64.tar.gz`,
-    sha256: '26a97a36c0471475795760635fce44d45232f43f4cbfff00c428388c4815aaa2',
+    sha256: 'a588d3af8486ea4c074c91e5672052d6f65f02c8ca7774407f120470875c8987',
   },
   {
     target: 'x86_64-apple-darwin',
     archive: `llama-${LLAMA_CPP_VERSION}-bin-macos-x64.tar.gz`,
-    sha256: '2bf899f48336ac4893055faee6f12e60403a0ea27e225d268de4890d33ce2adc',
+    sha256: '011a887aecf0a0616aa9a5f4bb1ebd707056ac83a2b77692b039be1da1db319a',
   },
   {
     target: 'x86_64-unknown-linux-gnu',
     archive: `llama-${LLAMA_CPP_VERSION}-bin-ubuntu-x64.tar.gz`,
-    sha256: 'ee03a40fcf16d2ebf88c02f7eac6ae40fbaf332aec18c18651dcd441610a5451',
+    sha256: '603c5a751fd05376be6fa09a53c2875833558dd9bd9c06a9c0878518092eee27',
   },
   {
     target: 'x86_64-pc-windows-msvc',
     archive: `llama-${LLAMA_CPP_VERSION}-bin-win-cpu-x64.zip`,
-    sha256: 'a05c2d35ebe9787489277d6e039b391fd006384a6c49d069395f3a7b47186fd2',
+    sha256: '5651a4530e1b55d84773137c485659a1384c3a65ea628fa39f55910b463fd892',
   },
 ];
 
