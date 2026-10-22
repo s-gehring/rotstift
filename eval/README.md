@@ -207,3 +207,23 @@ ROTSTIFT_INTEGRATION=1 ROTSTIFT_CLASS=<Ordner> ROTSTIFT_CLASS_LABEL=t4-voll ROTS
 
 - `render.py --content-form` teilt jeden Text aus `samples/content-form/` in zwei Seiten, das ergibt 10 Arbeiten zu je 2 Seiten. Eine Arbeit sind alle Bilder mit gleichem Namen vor `-1.jpg`, `-2.jpg`.
 - `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
+
+## Heftpapier (liniert und kariert)
+
+Misst, wo die Kette auf Seiten aus Schulheften scheitert: Texterkennung, Zeilenzuordnung, Strichsuche, Lage der Marken. Der Bericht steht in [docs/evaluations/2026-10-heftpapier.md](../docs/evaluations/2026-10-heftpapier.md). Die Daten liegen unter `~/.cache/rotstift/datasets/<name>/` (`ROTSTIFT_DATASETS` ändert das) und kommen nie ins Repo.
+
+```bash
+eval/.venv/bin/python -I eval/datasets.py                  # holt und bereitet auf: ru-schulaufsaetze, gnhk, bressay
+eval/.venv/bin/python -I eval/samples/render.py --heft --out ~/.cache/rotstift/datasets/heft-gerendert
+eval/.venv/bin/python -I eval/samples/render.py --heft --strike 4 --seed 1 --out ~/.cache/rotstift/datasets/heft-gerendert-strich
+eval/.venv/bin/python -I eval/resize-pages.py <Ordner mit Bildern> <Ordner-1152> --max-edge 1152
+node --experimental-transform-types eval/ocr-run.ts --model glm-ocr-q8 --images <Ordner-1152> --out <Ergebnisse>/ocr.json
+node --experimental-transform-types eval/heft-measure.ts --ocr <Ergebnisse>/ocr.json --images <Ordner-1152> \
+  --truth <Datensatz>/ground_truth --lines <Datensatz>/lines --out <Ergebnisse>/heft.json --marks
+```
+
+- **Quellen (`datasets.py`):** Jede Quelle landet in einem eigenen Ordner `_raw/<name>`, entpackt wird nur mit Pfadprüfung, nichts daraus wird ausgeführt. `ru-schulaufsaetze` (Mendeley, 19 einseitige Aufsätze, Scans auf Linienpapier), `bressay` (Zenodo, 1000 Aufsatzseiten aus Brasilien mit durchgestrichenen Wörtern, Transkript mit `~~Wort~~`), `gnhk` (Handyfotos, Zeilen aus den Wortboxen, dazu `gnhk-liniert` mit den 61 Seiten, auf denen die Heuristik Heftlinien findet). Jede Quelle hat `images/` und `ground_truth/` im `--dataset`-Format. Die Größe einer Seite ist auf 2400 px begrenzt.
+- **`render.py --heft`:** Rendert die Texte aus `samples/texts/` auf drei Papieren (`liniert` 8 mm mit Rand beidseitig und Linien nur im Schreibfeld, `liniert-eng` 7 mm mit Linien bis zum Blattrand, `kariert` 5 mm mit Rand, geschrieben wird auf jeder zweiten Karozeile), je als `scan` (leichte Drehung, Randschatten) und `photo` (Wölbung, Perspektive, Licht und Schatten, Unschärfe, Rauschen, JPEG 55–80, Tisch um die Seite, Spiralbindung oder Lochrand). Schrift, Stift (blau, schwarz, Bleistift) und Linienfarbe wechseln je Seite. Optionen: `--strike N`, `--seed K`, ein Filter (`liniert`, `photo`, …), `--effects rotation,keystone,…` (nur diese Fotoeffekte, Liste in `EFFECTS`), `--lines` (ohne `--heft`: schreibt für die früheren weißen Seiten auch `lines/` und `ground_truth/`), `--paper-image <Bild>` mit `--paper-geometry TOP PITCH LEFT` legt die Zeilen auf eine echte leere Heftseite statt auf gezeichnetes Papier.
+- **Ausgabe von `--heft`:** `images/`, `ground_truth/` (Klartext, bei `--strike` mit `~~Wort~~`), `markup/` (mit Fehlermarken) und `lines/<name>.json` mit der Wahrheit je Zeile (Text und Box in Bildpixeln), den Randlinien und den Einstellungen. Die Boxen laufen durch dieselben Verzerrungen wie das Bild.
+- **`heft-measure.ts`:** Liest die Erkennung aus `ocr-run.ts` und wertet je Seite aus: WER und CER (gestrichene Wörter der Wahrheit zählen nicht mit), `locateLines` wie in der App (Anteil der Zeilen mit Box, Treffer mit IoU ≥ 0,5 gegen die Wahrheit, „sicher falsch“ unter 0,2, Absturz), Alarme der Strichsuche je 100 Wörter. Mit `--marks` korrigiert es mit Gemma (`--model`, Standard `gemma-4-e2b-q4`), legt die Marken mit `layoutOverlay` auf die Seite und prüft, ob Striche auf der richtigen Zeile liegen und ob Randzeichen im Heftrand oder über dem Text stehen. Ein abgebrochener Lauf setzt fort. Mit `--ideal` ersetzt die Wahrheit die Erkennung (ideales Transkript), damit Zeilenzuordnung und Strichsuche ohne Lesefehler gemessen werden. Die Ergebnisse stehen im Bericht.
+- Die Lesesicherheit je Datensatz misst `ocr-calibration.ts --dataset <Datensatz> --ocr <ocr.json>`, die Strichsuche mit bekannten Strichen `strike.ts` (siehe oben).
