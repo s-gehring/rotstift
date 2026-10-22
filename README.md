@@ -83,7 +83,7 @@ pnpm dev
 | ----------------------- | -------------------------------------------------------------------------------- |
 | `pnpm dev`              | App mit Hot Reload starten                                                       |
 | `pnpm fetch:runtime`    | llama.cpp-Sidecar für das aktuelle System laden (`--target <triple>` für andere) |
-| `pnpm dev:web`          | Nur das Frontend im Browser (Port 1420)                                          |
+| `pnpm dev:web`          | Nur das Frontend im Browser (Port 1420), mit „Demo-Klasse laden“ (Heftseiten)    |
 | `pnpm build`            | Installer für das aktuelle Betriebssystem bauen                                  |
 | `pnpm check`            | Typprüfung, Lint, Format, Tests, dazu `cargo fmt`, `clippy` und `cargo test`     |
 | `pnpm format`           | Prettier und `cargo fmt` anwenden                                                |

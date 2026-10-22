@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createDemoTranscriber, DEMO_MARKER } from './demo-transcriber.ts';
 
 const png = new Blob(['png']);
+const known = new Blob(['known']);
+const recognize = (blob: Blob) =>
+  Promise.resolve(blob === known ? { lines: ['Echte Zeile', '~~gestrichen~~ Zeile'] } : null);
 
 describe('createDemoTranscriber', () => {
   it('labels every text as demo text', async () => {
@@ -37,5 +40,18 @@ describe('createDemoTranscriber', () => {
       ok: false,
       error: { kind: 'cancelled' },
     });
+  });
+
+  it('returns the transcript of a recognized page without counting it as a call', async () => {
+    const demo = createDemoTranscriber({ delayMs: 0, failEvery: 2, recognize });
+    const signal = new AbortController().signal;
+    for (let call = 0; call < 3; call += 1) {
+      expect(await demo.transcribe(known, signal)).toEqual({
+        ok: true,
+        lines: ['Echte Zeile', '~~gestrichen~~ Zeile'],
+      });
+    }
+    const results = [await demo.transcribe(png, signal), await demo.transcribe(png, signal)];
+    expect(results.map((result) => result.ok)).toEqual([true, false]);
   });
 });

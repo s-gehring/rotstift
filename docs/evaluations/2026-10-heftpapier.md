@@ -215,11 +215,9 @@ node --experimental-transform-types eval/ocr-small.ts --out <Ergebnisse>/res --t
 
 `ocr-small.ts --report` wertet vorhandene Ergebnisse ohne neuen Lauf aus.
 
-## Demo-Daten (nur Vorschlag)
+## Demo-Daten
 
-`src/pipeline/demo-transcriber.ts` liefert für jede Seite einen festen Platzhaltertext (`SAMPLES`, drei Varianten, Marker `Demo-Text`) und simuliert jeden vierten Fehler. Die Seitenbilder kommen aus den Dateien, die jemand in `pnpm dev:web` lädt. Damit gibt es keine Demo, in der Text, Zeilen und Marken zu einem sichtbaren Bild passen.
-
-Vorschlag für Phase 2: Gerenderte Heftseiten (Scan und Foto, `render.py --heft` mit festem Seed) als Bilder in einen Demo-Ordner einchecken, dazu das passende Transkript je Seite. Der Demo-Transkribierer ordnet dem Bild über seinen Namen oder Hash das Transkript zu. So zeigt `pnpm dev:web` eine Seite mit Linien, Marken und Randzeichen, und die Foto-Seite macht den Fehler aus Punkt 1 im Browser sichtbar. Eingecheckt werden dürfen nur diese selbst gerenderten Seiten (rund 250 KB je Seite), keine Daten aus GNHK, BRESSAY, ScaDS oder den Aufsätzen.
+`pnpm dev:web` bietet „Demo-Klasse laden“ (leere Klasse und „…“-Menü). Die Klasse besteht aus vier Arbeiten mit fünf selbst gerenderten Scans (`eval/samples/demo-class.py`, fester Seed, rund 1 MB) auf liniertem und kariertem Papier, mit gestrichenen Wörtern und eingebauten Fehlern. Der Demo-Transkribierer erkennt diese Seiten und liefert ihr Transkript, die Demo-Korrektur den passenden korrigierten Text, sodass Text, Zeilen, Marken und Randzeichen zum Bild passen. Andere Bilder behalten den bisherigen Platzhaltertext. Die Foto-Seiten fehlen noch, weil ihre Zeilenzuordnung nicht gelöst ist. Die e2e-Suite prüft, dass jede Marke auf ihrer Zeile liegt (`e2e/demo-klasse.spec.ts`). Im Produktions-Build ist nichts davon enthalten.
 
 ## Grenzen
 
