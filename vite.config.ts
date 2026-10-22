@@ -42,7 +42,7 @@ const host = process.env['TAURI_DEV_HOST'];
 export default defineConfig({
   plugins: [react(), pdfjsDecoders()],
   clearScreen: false,
-  test: { exclude: [...configDefaults.exclude, '**/.claude/**'] },
+  test: { exclude: [...configDefaults.exclude, '**/.claude/**', 'e2e/**'] },
   server: {
     port: 1420,
     strictPort: true,
