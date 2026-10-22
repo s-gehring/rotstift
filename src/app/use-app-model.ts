@@ -41,6 +41,7 @@ import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts'
 import { secondReaderReadiness, withSecondReader } from './second-reading.ts';
 import {
   countFinishedText,
+  createPowerHold,
   loadRunKind,
   neededRoles,
   openPageCount,
@@ -226,6 +227,11 @@ export function useAppModel(): AppModel {
   const reviewing = review.state.run !== null;
   const running = reviewing || isCounting(count.state);
   const now = useNow(running);
+  const powerHold = useMemo(() => (isTauri() ? createPowerHold() : null), []);
+  useEffect(() => {
+    powerHold?.set(running);
+  }, [powerHold, running]);
+  useEffect(() => () => powerHold?.set(false), [powerHold]);
   const costs = stepCosts(
     {
       transcriber: transcriberCloud === null ? model : null,

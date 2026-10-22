@@ -4,11 +4,13 @@ mod llm;
 #[cfg(target_os = "macos")]
 mod menu;
 mod models;
+mod power;
 mod save;
 
 use std::sync::Arc;
 
-use tauri::{Manager, RunEvent};
+use tauri::webview::PageLoadEvent;
+use tauri::{Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,6 +21,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(llm::LlmRuntime::new())
         .manage(Arc::new(models::ModelManager::new()))
+        .manage(power::system())
         .setup(|app| {
             diagnostics::init(app.handle());
             llm::commands::stop_orphaned_sidecars(app.handle());
@@ -63,13 +66,26 @@ pub fn run() {
             models::commands::model_custom_resolve,
             models::commands::model_custom_add_link,
             models::commands::model_custom_import,
+            power::commands::power_hold,
+            power::commands::power_release,
             save::save_file,
         ])
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Started {
+                webview.state::<power::SystemPowerHold>().release();
+            }
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::Destroyed = event {
+                window.state::<power::SystemPowerHold>().release();
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<llm::LlmRuntime>().stop();
+                app.state::<power::SystemPowerHold>().release();
             }
         });
 }
