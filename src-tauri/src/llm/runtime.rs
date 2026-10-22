@@ -1116,7 +1116,10 @@ mod tests {
 
         #[tokio::test(flavor = "multi_thread")]
         async fn stopping_during_startup_ends_the_sidecar() {
-            let paths = fake_sidecar("stop-during-start", "echo $$ > pid\nexec sleep 30");
+            let paths = fake_sidecar(
+                "stop-during-start",
+                "echo $$ > pid.tmp\nmv pid.tmp pid\nexec sleep 30",
+            );
             let runtime = Arc::new(LlmRuntime::new());
             let starting = {
                 let (runtime, paths) = (Arc::clone(&runtime), paths.clone());

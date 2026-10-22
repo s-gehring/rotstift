@@ -181,14 +181,14 @@ Gemessen am 21.10.2026 auf einem M4 Pro (48 GB), nur CPU, 8 Threads, llama.cpp `
 
 20 ScaDS-Seiten (Lesefehler) und 16 gerenderte Schülertexte mit 172 eingebauten Fehlern (erhalten oder eigenmächtig verbessert).
 
-| Modell                               | Lizenz     | falsch gelesene Wörter (ScaDS) | Fehler erhalten / verbessert | Schleifen | s/Seite | Peak-RAM | listen            |
-| ------------------------------------ | ---------- | -----------------------------: | ---------------------------: | --------: | ------: | -------: | ----------------- |
-| **GLM-OCR (Q8_0)**, empfohlen        | MIT        |                         20,1 % |                   91 % / 0 % |      0/20 |     7,5 |   3,2 GB | ja (empfohlen)    |
-| Granite Vision 4.1 4B (Q4_K_M), neu  | Apache-2.0 |                         17,6 % |                  56 % / 37 % |      3/20 |    22,1 |  7,7 GB¹ | nein              |
-| MiniCPM-V 4.7 1B (Q4_K_M), neu       | Apache-2.0 |                              – |                            – |         – |       – |        – | nein, lädt nicht² |
-| Qwen3-VL 4B (Q4_K_M), schon gelistet | Apache-2.0 |                        11,1 %³ |                 78 % / 18 %³ |     1/20³ |   23,3³ |  6,4 GB³ | ja                |
+| Modell                               | Lizenz     | falsch gelesene Wörter (ScaDS) | Fehler erhalten / verbessert | Schleifen | s/Seite | Peak-RAM | listen         |
+| ------------------------------------ | ---------- | -----------------------------: | ---------------------------: | --------: | ------: | -------: | -------------- |
+| **GLM-OCR (Q8_0)**, empfohlen        | MIT        |                         20,1 % |                   91 % / 0 % |      0/20 |     7,5 |   3,2 GB | ja (empfohlen) |
+| Granite Vision 4.1 4B (Q4_K_M), neu  | Apache-2.0 |                         17,6 % |                  56 % / 37 % |      3/20 |    22,1 |  7,7 GB¹ | nein           |
+| MiniCPM-V 4.7 1B (Q4_K_M), neu       | Apache-2.0 |                        33,9 %² |                 63 % / 17 %² |     2/20² |   97,4² |  2,6 GB² | nein           |
+| Qwen3-VL 4B (Q4_K_M), schon gelistet | Apache-2.0 |                        11,1 %³ |                 78 % / 18 %³ |     1/20³ |   23,3³ |  6,4 GB³ | ja             |
 
-¹ Mit Repack wie die übrigen Erkennungskandidaten, RSS nach dem Laden 6,0 GB. ² Die Laufzeit kennt den Projektortyp `minicpmv4_7` nicht. ³ Aus [Erkennung genauer](../evaluations/2026-10-erkennung-genauer.md), nicht neu gemessen; dort auch LightOnOCR-3 0.8B und 4B und Qwen3.5 2B, die ebenfalls Schülerfehler verbessern.
+¹ Mit Repack wie die übrigen Erkennungskandidaten, RSS nach dem Laden 6,0 GB. ² Mit llama.cpp `b11551` und 1536 px wie in `eval/ocr-candidates.json`, `b11537` kennt den Projektortyp `minicpmv4_7` nicht. ³ Aus [Erkennung genauer](../evaluations/2026-10-erkennung-genauer.md), nicht neu gemessen; dort auch LightOnOCR-3 0.8B und 4B und Qwen3.5 2B, die ebenfalls Schülerfehler verbessern.
 
 Kein neuer Kandidat für die Erkennung. Granite Vision verbessert 37 % der Schülerfehler (58 von 112 Rechtschreibfehlern), braucht dreimal so lange und passt nicht in 8 GB.
 
@@ -238,4 +238,5 @@ Alle gelisteten Kandidaten stehen unter Apache-2.0 oder MIT, Weitergabe als Down
 - `models.json` bekommt `customTemplates` und Gemma 4 E4B, `selection.json` hat einen Eintrag je Platz, `custom-models.json` kommt neu dazu.
 - Neue Netzwerkzugriffe: zwei API-Pfade auf `huggingface.co` und ein Range-Request für den GGUF-Kopf. Keine neuen Hosts, CSP unverändert.
 - Ohne Messung keine Lesesicherheit für eigene Erkennungsmodelle.
-- Offen: Modelle, die erst eine neuere Laufzeit kennt (MiniCPM-V 4.7), brauchen ein Update von llama.cpp. Eine Reihenfolge „erst alle Seiten erkennen, dann alle korrigieren“, die Wechsel je Lauf begrenzt, ist nicht Teil dieser Entscheidung.
+- MiniCPM-V 4.7 lädt seit dem Update auf llama.cpp `b11551`, liest aber schlechter als GLM-OCR und verbessert Schülerfehler.
+- Offen: Eine Reihenfolge „erst alle Seiten erkennen, dann alle korrigieren“, die Wechsel je Lauf begrenzt, ist nicht Teil dieser Entscheidung.
