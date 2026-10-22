@@ -180,6 +180,8 @@ Phase 2 setzt die Punkte 1, 2, 3 und 8 der [Fehlerursachen](#fehlerursachen-nach
 
 **Auf allen gerenderten Heftseiten trifft die Zeilenzuordnung jede Zeile.** Mit idealen Transkripten liegen auf allen 24 Seiten 100 % der Boxen richtig (vorher 52,3 %), mit echter Erkennung ebenfalls 100 % (vorher 48,9 %). Keine Box ist sicher falsch oder grob, keine Seite stürzt ab. Fotos sind so gut wie Scans und Karos so gut wie Linien. Auf den Seiten mit Streichungen steigt die Trefferquote von 66,2 % auf 100 %.
 
+**Auf zurückgehaltenen Seiten hält das Ergebnis weitgehend.** Zwei neu gerenderte Sätze mit anderen Seeds, Stiften, Linienfarben und Schriften treffen 96,9 % und 98,0 % (main 62,1 % und 57,3 %), ohne sicher falsche Box. Schwach bleibt `liniert-eng` als Foto (79 % und 89 %), dort werden Zeilen grob statt falsch.
+
 **Die Lineatur wird auf jeder Seite richtig erkannt.** Alle Heftseiten, die früher gerenderten Seiten und die GNHK-Fotos werden richtig als liniert oder kariert erkannt, alle ScaDS-Seiten als blank.
 
 **Auf blankem Papier ändert sich nichts.** Auf ScaDS sind alle 313 Boxen gleich (IoU ≥ 0,9 zur Box vorher), grob bleiben 7 wie vorher. Die früher gerenderten Seiten treffen weiter 100 %.
@@ -262,6 +264,22 @@ Wie oben, 12 Fotoseiten, ideale Transkripte. Nach Phase 2 stürzt keine Seite me
 
 Die Trefferquote liegt in jeder Kombination bei mindestens 98,5 %. Die Ausnahme ist `brief--liniert-eng-photo` mit Drehung und Keystone: 14 von 16 Boxen treffen, 11 davon sind grob, weil die Zuordnung dort nicht eindeutig ist. Die Werte unter 100 % in den übrigen Zeilen sind je eine Box mit IoU zwischen 0,2 und 0,5.
 
+### Zurückgehaltene Seiten
+
+Die Schwellen und Filter sind auf den Sätzen oben entwickelt. Zur Gegenprobe sind zwei neue Sätze gerendert, die vor dieser Messung niemand angesehen hat: `render.py --heft` mit Seed 2 und Seed 3, alle Fotoeffekte, Stifte, Linienfarben und Schriften in anderer Zuordnung (Seed 2: Stifte schwarz, blau, Bleistift; Linien grau, kräftig, blau; Schriften Caveat, Indie Flower, Grundschrift, Schulausgangsschrift. Seed 3: Stifte Bleistift, schwarz, blau; Linien kräftig, blau, grau; Schriften Indie Flower, Schulausgangsschrift, Caveat, Grundschrift). Seed 3 ist zur Hälfte mit Bleistift geschrieben. Je 24 Seiten, ideale Transkripte.
+
+| Papier und Aufnahme | Treffer Seed 2, main → PR | Treffer Seed 3, main → PR | sicher falsch PR | grob PR |
+| ------------------- | ------------------------- | ------------------------- | ---------------- | ------- |
+| kariert, Foto       | 23,7 % → 100,0 %          | 41,6 % → 98,7 %           | 0,0 %            | 0,0 %   |
+| kariert, Scan       | 51,3 % → 100,0 %          | 40,0 % → 100,0 %          | 0,0 %            | 0,0 %   |
+| liniert-eng, Foto   | 28,6 % → 78,6 %           | 47,3 % → 89,1 %           | 0,0 %            | 13,5 %  |
+| liniert-eng, Scan   | 100,0 % → 100,0 %         | 98,2 % → 100,0 %          | 0,0 %            | 0,9 %   |
+| liniert, Foto       | 79,7 % → 100,0 %          | 28,8 % → 98,5 %           | 0,0 %            | 1,5 %   |
+| liniert, Scan       | 100,0 % → 100,0 %         | 98,5 % → 100,0 %          | 0,0 %            | 0,0 %   |
+| **alle**            | 62,1 % → 96,9 %           | 57,3 % → 98,0 %           | 0,0 %            | 2,3 %   |
+
+Das Ergebnis hält: 97 bis 98 % Treffer statt 100 %, keine sicher falsche Box, kein Absturz (main: einer), Papier überall richtig erkannt. Schwach bleibt `liniert-eng` als Foto. Auf `ferien--liniert-eng-photo` (Seed 2) sind alle 11 Zeilen grob: Zwei Lochungen und Schattenstücke an Blatt- und Tischkante bleiben als Kandidaten übrig, weil die Linien dort bis zum Blattrand laufen und die Filter für Kandidaten außerhalb der Lineatur nicht greifen; für die Bindungserkennung sind zwei Löcher zu wenig. Die übrigen Abweichungen sind einzelne Zeilen.
+
 ### Gegenprobe mit dem Integrationstest
 
 `layout.integration.test.ts` auf den früher gerenderten linierten Seiten (`ROTSTIFT_INTEGRATION=1`): 293 von 293 Zeilen treffen wie vorher, die mittlere IoU steigt von 0,937 auf 0,964. Über die Varianten des Transkripts gibt es weiter keine sicher falsche Box, aber 14 `null` mehr (598 statt 584 von 2573), alle bei fehlenden oder eingefügten Zeilen. Vermutlich liegt das an den engeren Boxen nach dem Löschen der Linien, die die Zuordnung an manchen Stellen weniger eindeutig machen; geprüft ist das nicht.
@@ -276,7 +294,7 @@ Die Prüfung greift nur, wenn eine Seite mindestens vier sichere Zeilen hat. Sie
 
 ### Offen
 
-- **Drehung mit Keystone auf `liniert-eng`:** Eine Seite bleibt zu großen Teilen grob (siehe Ablation). Die Boxen treffen, die Zuordnung ist aber unsicher.
+- **Fotos von `liniert-eng`:** Eine Seite der Ablation (Drehung mit Keystone) bleibt zu großen Teilen grob, auf den zurückgehaltenen Seiten eine ganz. Fremdkandidaten an der Blattkante und einzelne Lochungen werden dort nicht entfernt, weil die Linien bis zum Rand laufen.
 - **Mehr `null` bei fehlenden Zeilen:** 14 von 2573 Varianten-Zeilen im Integrationstest, siehe oben.
 - **Strichsuche und Randzeichen:** Die Punkte 4 und 5 der Fehlerursachen sind nicht angefasst. `ruling.margins` liefert jetzt die Randlinien, `ruling.horizontal` die Heftlinien. Beides können Strichsuche und Overlay nutzen.
 - **Echte Fotos:** Die Fotos sind weiter simuliert. Die GNHK-Fotos zeigen nur, dass nichts abstürzt und die Lineatur gefunden wird.
