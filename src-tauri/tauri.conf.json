@@ -35,6 +35,7 @@
     "licenseFile": "../LICENSE",
     "externalBin": ["binaries/rotstift-llama-server"],
     "resources": { "binaries/llama/*": "llama/" },
+    "macOS": { "signingIdentity": "-" },
     "linux": {
       "deb": { "depends": ["libgomp1", "libssl3", "libstdc++6 (>= 12)"] },
       "rpm": { "depends": ["libgomp", "openssl-libs >= 3", "libstdc++ >= 12"] }
