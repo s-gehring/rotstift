@@ -6,6 +6,7 @@ import process from 'node:process';
 import { pipeline } from 'node:stream/promises';
 import { parseArgs } from 'node:util';
 import { CORRECTORS } from './correct-models.ts';
+import { candidateCorrectors, draftFiles } from './model-candidates.ts';
 import { CANDIDATES, fileUrl } from './models.ts';
 import type { ModelFile } from './models.ts';
 import { candidateTranscribers } from './ocr-registry.ts';
@@ -70,6 +71,14 @@ async function main() {
     ...candidateTranscribers().map((model) => ({
       id: model.id,
       files: [model.files.model, model.files.mmproj].map((file) => ({ file, url: file.url })),
+    })),
+    ...candidateCorrectors().map((model) => ({
+      id: model.id,
+      files: [{ file: model.files.model, url: model.files.model.url }],
+    })),
+    ...draftFiles().map((draft) => ({
+      id: draft.id,
+      files: [{ file: draft.file, url: draft.file.url }],
     })),
   ];
   for (const job of jobs) {
