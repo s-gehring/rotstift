@@ -380,6 +380,7 @@ describe('SettingsDialog with live model state', () => {
     expect(section('corrector').textContent).toContain('braucht etwa 7,6 GB');
     expect(container.querySelectorAll('.settings-model-note')).toHaveLength(0);
     expect(warned()).toEqual([]);
+    expect(container.querySelectorAll('.settings-model-need .visually-hidden')).toHaveLength(0);
 
     await click(radios(section('transcriber'))[1]);
     expect(fake.select).toHaveBeenCalledExactlyOnceWith(QWEN_ID);
@@ -512,6 +513,11 @@ describe('SettingsDialog with live model state', () => {
       'Gemma 4 E4B it (Q4_0)',
     ]);
     expect(section('corrector').textContent).toContain('braucht etwa 5,5 GB');
+    const hidden = [...container.querySelectorAll('.settings-model-need .visually-hidden')];
+    expect(hidden.map((note) => note.textContent)).toEqual(
+      Array(3).fill(', mehr als der verfügbare Arbeitsspeicher'),
+    );
+    expect(hidden.map((note) => note.parentElement?.dataset.warn)).toEqual(Array(3).fill('true'));
   });
 
   it('marks nothing with unknown memory', async () => {

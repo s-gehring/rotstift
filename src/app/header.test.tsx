@@ -416,6 +416,17 @@ describe('SubjectSelect with content and form', () => {
     expect(assignmentField()?.hasAttribute('aria-invalid')).toBe(false);
   });
 
+  it('flags both fields at once when Textform and Aufgabenstellung are missing', () => {
+    const scope = { ...DEFAULT_SCOPE, content: true, form: true };
+    draw({ scope, missing: null });
+    draw({ scope, missing: 'formName' });
+
+    expect(formInput()?.getAttribute('aria-invalid')).toBe('true');
+    expect(assignmentField()?.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(formInput());
+    expect(errors()).toEqual(['Textform fehlt', 'Aufgabenstellung fehlt']);
+  });
+
   it('opens but flags nothing once the scope no longer needs the field', () => {
     draw({ scope: DEFAULT_SCOPE, missing: null });
     draw({

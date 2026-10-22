@@ -34,8 +34,8 @@ export function SubjectSelect() {
   const withAssignment = cleanAssignment(scope.assignment) !== '';
   const isOpen = open && !run.running;
   const { missing, clearMissing } = subject;
-  const assignmentMissing = missing === 'assignment' && needsAssignment(scope);
-  const formNameMissing = missing === 'formName' && needsFormName(scope);
+  const assignmentMissing = missing !== null && needsAssignment(scope);
+  const formNameMissing = missing !== null && needsFormName(scope);
   const [shownMissing, setShownMissing] = useState(missing);
   if (shownMissing !== missing) {
     setShownMissing(missing);
@@ -110,6 +110,7 @@ export function SubjectSelect() {
           id={id}
           role="dialog"
           aria-label="Korrektur"
+          tabIndex={-1}
           className="scope-popover"
           onKeyDown={onKeyDown}
         >

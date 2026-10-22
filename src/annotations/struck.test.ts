@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   markStruck,
   readStruck,
+  restrokedCaret,
   splitStruck,
   strokeStruck,
   unstrokeStruck,
@@ -90,6 +91,19 @@ describe('struck text in an editor', () => {
   it('keeps spaces at the edge of a stroked run outside the tildes', () => {
     expect(unstrokeStruck('a̶ ̶b')).toBe('~~a~~ b');
     expect(unstrokeStruck(' ̶')).toBe(' ');
+  });
+
+  it('keeps the caret behind a word that was just struck', () => {
+    const typed = 'Ich ~~hab~~ habe Hunger.';
+    expect(restrokedCaret(typed, 'Ich ~~hab~~'.length)).toBe('Ich h̶a̶b̶'.length);
+  });
+
+  it('keeps the caret in front of a word whose opening tildes were typed last', () => {
+    expect(restrokedCaret('Ich ~~hab~~ habe', 'Ich ~~'.length)).toBe('Ich '.length);
+  });
+
+  it('keeps the caret inside a stroked run', () => {
+    expect(restrokedCaret('h̶a̶xb̶ c', 'h̶a̶x'.length)).toBe('h̶a̶x'.length);
   });
 
   it('splits a text into plain and struck parts', () => {
