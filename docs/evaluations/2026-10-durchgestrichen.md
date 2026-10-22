@@ -165,6 +165,10 @@ Eingebaut ist der Arbeitspunkt mit der höchsten Precision bei mindestens gleich
 - Die Information steht als `~~` im Text. Eine Anzeige in der Prüfansicht (etwa grau durchgestrichen) wäre der nächste Schritt für die Oberfläche.
 - Zeichnet das Overlay Marken an Wörtern neben einer Streichung, liegt die Position richtig, weil die Marken auf den vollen Zeilentext zurückgerechnet werden.
 
+## Nachtrag: Heftpapier
+
+Die Strichsuche löscht jetzt die Heftlinien vor der Suche, legt die Zeilen entlang ihrer Grundlinie und arbeitet auf 1600 px. Gemessen in [Heftpapier, Phase 2: Strichsuche](2026-10-heftpapier.md#phase-2-strichsuche). Auf den zurückgehaltenen Sätzen 4 und 5 dieses Berichts steigt der Recall unter den abgeschriebenen gestrichenen Wörtern von 66,2 % auf 73,2 % bei 92,4 % statt 93,6 % Precision (12 statt 9 Fehlalarme). In Originalgröße statt 1152 px, wie die App die Seiten bekommt, sind es 73,2 % statt 67,7 % bei 93,5 % statt 91,2 % Precision. ScaDS bleibt bei 4 Fehlalarmen. Auf gerenderten Heftseiten (liniert und kariert, Scan und Foto) sind es auf zurückgehaltenen Seiten 74,0 % bei 99,3 % Precision. Das Ziel von 80 % Recall bei 95 % Precision ist damit auf Heftpapier näher, aber weiter nicht erreicht.
+
 ## Reproduktion
 
 Befehle in [eval/README.md](../../eval/README.md#durchgestrichenes). Die Prompt-Varianten mit `ocr-run.ts --prompt`, die Tinte mit `strike.ts --method ink`.
