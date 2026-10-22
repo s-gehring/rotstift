@@ -1,6 +1,6 @@
 # Evaluation: Heftpapier und Handyfotos (Oktober 2026)
 
-Frage: Wie gut kommt Rotstift mit echten Schulheften zurecht, also mit linierten und karierten Seiten, Rand, Spiralbindung und Fotos vom Handy? Bisher wurden Erkennung, Zeilenzuordnung ([ADR 0004](../adr/0004-zeilenpositionen.md)) und Strichsuche ([Durchgestrichenes](2026-10-durchgestrichen.md)) auf weißem Papier und auf ScaDS-Scans gemessen. Dieser Bericht beschafft Testdaten, baut einen Renderer für Heftpapier und misst, was an der Pipeline bricht. Phase 1 ändert an der App nichts. Was Phase 2 an der Zeilenzuordnung geändert hat, steht unter [Phase 2: Heftlinien](#phase-2-heftlinien), das Begradigen von Handyfotos unter [Phase 2: Fotos begradigen](#phase-2-fotos-begradigen).
+Frage: Wie gut kommt Rotstift mit echten Schulheften zurecht, also mit linierten und karierten Seiten, Rand, Spiralbindung und Fotos vom Handy? Bisher wurden Erkennung, Zeilenzuordnung ([ADR 0004](../adr/0004-zeilenpositionen.md)) und Strichsuche ([Durchgestrichenes](2026-10-durchgestrichen.md)) auf weißem Papier und auf ScaDS-Scans gemessen. Dieser Bericht beschafft Testdaten, baut einen Renderer für Heftpapier und misst, was an der Pipeline bricht. Phase 1 ändert an der App nichts. Was Phase 2 an der Zeilenzuordnung geändert hat, steht unter [Phase 2: Heftlinien](#phase-2-heftlinien), das Begradigen von Handyfotos unter [Phase 2: Fotos begradigen](#phase-2-fotos-begradigen), die Strichsuche unter [Phase 2: Strichsuche](#phase-2-strichsuche).
 
 ## Ergebnis
 
@@ -164,6 +164,7 @@ Sortiert nach dem Schaden für den Nutzer, nicht nach dem Aufwand.
    Lösungsvorschlag: Den Heftrand aus der Seite erkennen (senkrechte Randlinie, bei Karos die Doppellinie), die Randspalte dorthin legen und nur bei fehlendem Rand auf die Textausdehnung zurückfallen.
 5. **Strichsuche verwechselt Heftlinien mit Streichungen und umgekehrt.** Recall 13 % auf `liniert-eng`, 25 % mit 7 Fehlalarmen auf Karos, 0–13 % auf Fotos, gegenüber 69 % auf Linienpapier mit Rand.
    Lösungsvorschlag: Heftlinien vor der Suche herausrechnen (Zeilenraster aus der Zeilensuche, Pixel entlang der Heftlinien als Hintergrund behandeln, bei Karos auch senkrechte Linien), dann Schwellen für Strichlänge und Neigung neu messen.
+   Stand Phase 2: Gelöst, die Heftlinien werden vor der Suche gelöscht, die Zeilen folgen der Grundlinie, 74 % Recall bei 99 % Precision auf zurückgehaltenen Seiten ([Phase 2](#phase-2-strichsuche)).
 6. **Lesesicherheit täuscht auf Handyfotos.** 17 % der Wörter mit Sicherheit ≥ 0,99 sind auf GNHK falsch, AUC 0,71. Die Schwelle 0,95 aus ScaDS lässt dort zu viele Lesefehler als Rechtschreibfehler durch.
    Lösungsvorschlag: Die Schwelle je Aufnahmeart wählen (Scan oder Foto, aus der Entzerrung ableitbar) oder Fotos strenger behandeln, bis die Kalibrierung auf deutschen Fotos gemessen ist.
 7. **Kleine Scans werden nicht vergrößert.** `fitWithin` skaliert nur herunter. BRESSAY (550 px breit) läuft ins Tokenlimit (WER 237 %), mit 1152 px nach Vergrößern 63 %.
@@ -420,7 +421,7 @@ Auf blankem Papier ohne Blattkante gibt es kein Maß, ScaDS bleibt deshalb immer
 | 12 Fotos | 48         | 8 (16,7 %)     | 9 (18,8 %)      | 55 (3,6 %)        | 34 (2,2 %)         | 12,7 %           | 20,9 %            |
 | 12 Scans | 48         | 11 (22,9 %)    | 11 (22,9 %)     | 42 (2,7 %)        | 42 (2,7 %)         | 20,8 %           | 20,8 %            |
 
-Die Strichsuche selbst ist nicht angefasst. Dass sie auf Heftpapier schwach bleibt und auch auf Scans viele Fehlalarme hat, ist Fehlerursache 4 und offen.
+Die Strichsuche selbst ist nicht angefasst. Die Zahlen sind zu schlecht, weil die idealen Transkripte anders umbrachen als die Seite, siehe [Phase 2: Strichsuche](#zählweise-1).
 
 ### Echte Erkennung
 
@@ -468,6 +469,132 @@ node --experimental-transform-types eval/heft-measure.ts --ideal --dewarp --imag
   --truth <Ordner>/ground_truth --lines <Ordner>/lines --out <Ergebnisse>/nachher.json --no-wer
 node --experimental-transform-types eval/strike.ts --ocr <ideal.json> --images <Ordner>/images --truth <Ordner>/ground_truth --method ink --dewarp
 node --experimental-transform-types eval/dewarp-pages.ts <Ordner>/images <Ordner-begradigt>
+```
+
+## Phase 2: Strichsuche
+
+Behoben ist Fehlerursache 5 für Scans und Fotos auf Linien und Karos. Die Strichsuche (`src/layout/strike.ts`) bekommt jetzt die Heftlinien aus `findRuling`, legt ihre Zeilen entlang der Grundlinien aus `locateLines` und arbeitet auf 1600 statt 1200 px. Das Lerngerüst der zweiten Fassung (Pfadsuche, logistische Regression, Zuordnung über Strichspannen, siehe [Durchgestrichenes](2026-10-durchgestrichen.md)) bleibt, die Gewichte auch.
+
+### Ergebnis
+
+**Auf allen sechs Heftpapieren liegt die Strichsuche jetzt auf dem Niveau von Linienpapier mit Rand oder darüber.** Auf den zurückgehaltenen Seiten (Seeds 8 und 9, 48 Seiten, 192 gestrichene Wörter) steigt der Recall unter den abgeschriebenen gestrichenen Wörtern von 47,9 % auf 74,0 %, die Precision von 91,1 % auf 99,3 % (1 statt 9 Fehlalarme). Auf den Entwicklungsseiten (Seeds 1 bis 3, 72 Seiten, 288 Wörter) sind es 69,8 % statt 52,8 % bei 98,0 % statt 97,4 % Precision. Einzeln erreicht jede Gruppe auf den zurückgehaltenen Seiten mindestens 62,5 %, `liniert-eng` als Foto (Bleistift, kleine Schrift) bleibt das Schlusslicht.
+
+**Auf den bisherigen Sätzen steigt der Recall, die Precision bleibt fast gleich, auf echter Schrift gibt es nicht mehr Fehlalarme.** Die gerenderten Sätze 2 bis 5 mit echter Erkennung steigen von 65,1 % und 66,2 % auf 74,3 % und 73,2 % Recall (Precision 93,9 % und 92,4 % statt 94,5 % und 93,6 %). In der Auflösung der App (1240 × 1754 statt 1152 px) steigen beide Werte. ScaDS bleibt bei 4 Fehlalarmen auf 7556 Wörtern. Auf echter Schrift in hoher Auflösung (7 russische Schulaufsätze, 8 GNHK-Fotos, 300 FH-SWF-Zeilen) meldet die neue Fassung 4 statt 10 Wörter, darunter eine echte Streichung.
+
+**Das Begradigen trägt bei Fotos mit.** Ohne Begradigen erreichen die zurückgehaltenen Seiten 68,8 % bei 96,4 % (main 35,4 % bei 91,9 %).
+
+**Die Strichsuche braucht rund 70 ms mehr je Seite.** Mit Zeilenfindung im Median 252 statt 198 ms je Scan und 272 statt 191 ms je Foto.
+
+### Was sich geändert hat
+
+1. **Heftlinien vor der Suche löschen.** Für die Merkmale (Tinte darüber und darunter, Kernzone) löscht die Strichsuche Linien und Bindung wie die Zeilensuche (`eraseRuling`, `eraseBinding`). Für die Pfadsuche löscht sie nur, was nicht dunkler ist als die Linie: Je Stelle entlang einer Heft- oder Karolinie vergleicht sie den Kontrast mit dem typischen Kontrast derselben Linie in der Umgebung (±80 px) und lässt dunklere Pixel stehen. `eraseRuling` allein löschte auch Striche, die auf einer Karolinie liegen, weil es die Linie lokal schätzt.
+2. **Zeilen entlang der Grundlinie.** Das Band jeder Zeile folgt der Oberkante aus `locateLines` (`LineBox.band`) statt einer geraden Box mit Seitenneigung. Die Kernzone (x-Höhe) kommt aus dem Profil der Tintenanfänge je Zeile statt aus der Pixelzählung, ihre Höhe ist auf der Seite einheitlich (Median aller Zeilen), nur ihre Lage wird je Zeile gesucht. Vorher lag die Kernzone auf Heftpapier oft auf einer Heftlinie.
+3. **Schwache Schrift.** Ist der mittlere Kontrast der Tinte niedrig (Bleistift auf Fotos), binarisiert die Strichsuche mit einer niedrigeren Kontrastschwelle (40 % des Medians, zwischen 10 und 22). Auf normaler Schrift greift das nicht.
+4. **Höhere Arbeitsauflösung.** Bei 1200 px hat die kleine Schrift auf `liniert-eng` (7 mm) eine x-Höhe von 10 bis 11 px, kurze Striche sind dann kaum von Buchstabenteilen zu unterscheiden. Mit 1600 px steigt `liniert-eng` als Scan auf den Entwicklungsseiten von 48 % auf 77 %. Die Schwelle für dünne Stellen wächst mit der Auflösung. Die Seitenschwelle wächst von 2,05 bei höchstens 1200 px auf 2,5 bei 1600 px, weil feinere Bilder mehr starke Kandidaten auf echter Schrift liefern. Bilder bis 1200 px (ScaDS, die verkleinerten Sätze) laufen wie vorher, nur mit Seitenschwelle 2,05 statt 2.
+
+Neu gelernte Gewichte (`eval/strike-learn.ts`, auf den Entwicklungsseiten) brachten keine bessere Abwägung. Laut Stufenanalyse hat schon die alte Pfadsuche für 90 bis 100 % der Striche einen Kandidaten, verloren gehen sie an der Seitenschwelle und bei der Zuordnung zu den Wörtern.
+
+### Zählweise
+
+`render.py --heft --strike 4` schreibt jetzt die Strichboxen nach allen Verzerrungen (`.strikes.json`). Gemessen wird mit idealen Transkripten aus den Wahrheitszeilen (`strike.ts --ideal --lines`), damit die Zeilen genau so umbrechen wie auf der Seite, mit `--dewarp` wie in der App. Entwickelt wurde auf den Seeds 1 bis 3. Die Seeds 8 und 9 sind zurückgehalten. Sie wurden einmal für einen Zwischenstand gemessen (1200 px, 62,0 %), danach wurden die Einstellungen nur noch auf den Entwicklungsseiten und auf echter Schrift gewählt und vor der zweiten Messung festgelegt.
+
+Die Werte im Abschnitt [Fotos begradigen](#strichsuche) (rund 20 % Recall und 76 Fehlalarme auf `heft-gerendert-strich`) sind zu schlecht: Die idealen Transkripte kamen dort aus der `.txt`, die anders umbricht als die gerenderte Seite, sodass gefundene Striche auf Wörter der falschen Zeile fielen. Mit `--lines` erreicht main auf demselben Satz 57,3 % bei 98,2 % Precision und einem Fehlalarm.
+
+### Zurückgehaltene Seiten
+
+Seeds 8 und 9, ideale Transkripte, mit Begradigen. Recall unter den abgeschriebenen gestrichenen Wörtern, je Gruppe 32 Wörter.
+
+| Papier und Aufnahme   | Recall main | Recall neu | Fehlalarme main | Fehlalarme neu | Precision main | Precision neu |
+| --------------------- | ----------- | ---------- | --------------- | -------------- | -------------- | ------------- |
+| liniert, Scan         | 65,6 %      | 84,4 %     | 1               | 0              | 95,5 %         | 100 %         |
+| liniert, Foto         | 37,5 %      | 81,3 %     | 0               | 0              | 100 %          | 100 %         |
+| liniert-eng, Scan     | 37,5 %      | 62,5 %     | 1               | 0              | 92,3 %         | 100 %         |
+| liniert-eng, Foto     | 40,6 %      | 62,5 %     | 4               | 1              | 76,5 %         | 95,2 %        |
+| kariert, Scan         | 46,9 %      | 90,6 %     | 2               | 0              | 88,2 %         | 100 %         |
+| kariert, Foto         | 59,4 %      | 62,5 %     | 1               | 0              | 95,0 %         | 100 %         |
+| alle                  | 47,9 %      | 74,0 %     | 9               | 1              | 91,1 %         | 99,3 %        |
+| alle, ohne Begradigen | 35,4 %      | 68,8 %     | 6               | 5              | 91,9 %         | 96,4 %        |
+
+### Entwicklungsseiten
+
+Seeds 1 bis 3, ideale Transkripte, mit Begradigen, je Gruppe 48 Wörter.
+
+| Papier und Aufnahme   | Recall main | Recall neu | Fehlalarme main | Fehlalarme neu |
+| --------------------- | ----------- | ---------- | --------------- | -------------- |
+| liniert, Scan         | 60,4 %      | 72,9 %     | 1               | 0              |
+| liniert, Foto         | 56,3 %      | 66,7 %     | 0               | 0              |
+| liniert-eng, Scan     | 37,5 %      | 77,1 %     | 0               | 3              |
+| liniert-eng, Foto     | 41,7 %      | 52,1 %     | 2               | 1              |
+| kariert, Scan         | 56,3 %      | 75,0 %     | 0               | 0              |
+| kariert, Foto         | 64,6 %      | 75,0 %     | 1               | 0              |
+| alle                  | 52,8 %      | 69,8 %     | 4               | 4              |
+| alle, ohne Begradigen | 37,2 %      | 65,3 %     | 5               | 5              |
+
+`kariert` als Scan lag mit 1200 px bei 92 %, bei 1600 px sind es 75 %. Der Verlust betrifft kurze Wörter (drei Buchstaben), deren Strich nur knapp über der Seitenschwelle liegt. Auf den zurückgehaltenen Seiten sind es 90,6 %.
+
+### Echte Erkennung
+
+Die sechs Fotoseiten aus Phase 1 (`heft-gerendert-strich`, GLM-OCR), mit Begradigen: 61,1 % statt 55,6 % Recall unter den 18 abgeschriebenen gestrichenen Wörtern, 2 statt 4 Fehlalarme (Precision 84,6 % statt 71,4 %). Die Stichprobe ist klein.
+
+### Bisherige Sätze und echte Schrift
+
+| Satz                                    | Recall main | Recall neu | Fehlalarme main | Fehlalarme neu | Precision main | Precision neu |
+| --------------------------------------- | ----------- | ---------- | --------------- | -------------- | -------------- | ------------- |
+| Sätze 2 und 3, 1152 px (Entwicklung)    | 65,1 %      | 74,3 %     | 7               | 9              | 94,5 %         | 93,9 %        |
+| Sätze 4 und 5, 1152 px (zurückgehalten) | 66,2 %      | 73,2 %     | 9               | 12             | 93,6 %         | 92,4 %        |
+| Sätze 2 und 3, 1240 × 1754 px           | 70,4 %      | 72,2 %     | 12              | 10             | 91,6 %         | 93,1 %        |
+| Sätze 4 und 5, 1240 × 1754 px           | 67,7 %      | 73,2 %     | 13              | 10             | 91,2 %         | 93,5 %        |
+| ScaDS, 77 Seiten, 7556 Wörter           | –           | –          | 4               | 4              | –              | –             |
+
+Die Sätze 2 bis 5 sind die gerenderten weißen Seiten aus [Durchgestrichenes](2026-10-durchgestrichen.md) mit echter Erkennung (GLM-OCR). Die Erkennung lief auf 1152 px, die Strichsuche in der App bekommt die Seite aber bis 2048 px. Die Zeilen „1240 × 1754 px“ messen deshalb dieselben Transkripte auf den Seiten in Originalgröße, neu gerendert mit denselben Seeds (gleiche Texte).
+
+Echte Schrift ohne gestrichene Wörter in der Wahrheit, gezählt sind alle Meldungen:
+
+| Satz                              | Wörter | Meldungen main | Meldungen neu |
+| --------------------------------- | ------ | -------------- | ------------- |
+| Russische Schulaufsätze, 7 Seiten | 1083   | 9              | 2             |
+| GNHK liniert, 8 Fotos             | 575    | 1              | 0             |
+| FH-SWF, 300 Zeilen                | 1839   | 0              | 2             |
+
+Von den Meldungen der neuen Fassung auf den Aufsätzen ist eine eine echte Streichung („сторинника“ mit Korrektur darüber), die andere ein Fehlalarm. Die beiden FH-SWF-Meldungen liegen auf einer einzelnen Zeile, wo die Seitenschwelle mangels Kandidaten nicht greift.
+
+### Korrektur
+
+`strike-correct.ts` auf den zurückgehaltenen Sätzen 4 und 5 aus [Durchgestrichenes](2026-10-durchgestrichen.md#korrektur) (32 Seiten, GLM-OCR, Gemma 4 E2B wie in der App). Gezählt sind Marken auf tatsächlich gestrichenen Wörtern, also Fehlalarme durch übersehenes Gestrichenes:
+
+| Strichsuche          | Marken je 100 Wörter | davon auf Gestrichenem |
+| -------------------- | -------------------- | ---------------------- |
+| keine, 1152 px       | 14,33                | 3,22                   |
+| main, 1152 px        | 12,09                | 1,18                   |
+| neu, 1152 px         | 11,68                | 0,90                   |
+| main, 1240 × 1754 px | 11,94                | 1,14                   |
+| neu, 1240 × 1754 px  | 11,82                | 0,92                   |
+
+Die Marken auf Gestrichenem sinken um ein Fünftel (37 und 38 statt 47 auf 32 Seiten). Die Werte „keine“ und „main, 1152 px“ stammen aus dem Bericht Durchgestrichenes, Gemma antwortet nicht ganz gleich von Lauf zu Lauf.
+
+### Laufzeit
+
+`findStruckWords` mit Zeilenfindung auf den begradigten Entwicklungsseiten (48 Seiten aus Seed 1 und 2), Apple M4 Pro, Node, zweiter Lauf je Seite, Maschine durch andere Sitzungen belastet (Last um 8):
+
+| Aufnahme | main, Median | neu, Median | main, höchstens | neu, höchstens |
+| -------- | ------------ | ----------- | --------------- | -------------- |
+| Scan     | 198 ms       | 252 ms      | 269 ms          | 384 ms         |
+| Foto     | 191 ms       | 272 ms      | 316 ms          | 436 ms         |
+
+### Grenzen
+
+- **Gerenderte Striche:** Gelernt und gemessen ist auf gerenderten Strichen in Handschrift-Schriftarten. Echte Kinderhandschrift mit echten Streichungen fehlt weiterhin.
+- **Kleine Schrift im Foto:** `liniert-eng` als Foto bleibt bei 52 bis 63 %. Dort trennt die Zeilensuche manche Zeilen falsch, und Bleistift ist auch mit niedriger Schwelle oft zu blass.
+- **Einzelne Zeilen:** Auf Bildern mit weniger als 30 Kandidaten gilt nur die feste Mindestbewertung. Das betrifft einzelne Zeilen, keine ganzen Seiten.
+
+Nachbauen:
+
+```bash
+eval/.venv/bin/python -I eval/samples/render.py --heft --strike 4 --seed 8 --out <Ordner>
+node --experimental-transform-types eval/strike.ts --ideal --images <Ordner>/images --truth <Ordner>/ground_truth \
+  --lines <Ordner>/lines --method ink --dewarp --group
+node --experimental-transform-types eval/strike-learn.ts --ideal --images <Ordner>/images --truth <Ordner>/ground_truth \
+  --lines <Ordner>/lines --dewarp --dump <Kandidaten.json>
 ```
 
 ## Demo-Daten

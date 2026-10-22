@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { applyDewarp, planDewarp } from '../src/layout/dewarp.ts';
@@ -63,29 +63,65 @@ function strikeStyles(truthDir: string, name: string): string[] {
   return Array.isArray(styles) ? styles.map(String) : [];
 }
 
+export function idealRun(imageDir: string, truthDir: string, linesDir: string | undefined): OcrRun {
+  const pages = readdirSync(imageDir)
+    .filter((file) => file.endsWith('.jpg'))
+    .toSorted()
+    .map((file) => {
+      const name = file.slice(0, -'.jpg'.length);
+      const meta = linesDir === undefined ? undefined : join(linesDir, `${name}.json`);
+      let content = readFileSync(join(truthDir, `${name}.txt`), 'utf8');
+      if (meta !== undefined && existsSync(meta)) {
+        const truth: { lines?: { text: string }[] } = JSON.parse(readFileSync(meta, 'utf8'));
+        content = (truth.lines ?? []).map((line) => line.text).join('\n');
+      }
+      return {
+        name,
+        content,
+        finishReason: 'stop',
+        seconds: 0,
+        promptTokens: 0,
+        generatedTokens: 0,
+        tokens: [],
+      };
+    });
+  return { model: 'ideal', machine: '', threads: 0, imageMaxEdge: 0, peakRssBytes: 0, pages };
+}
+
+function groupOf(name: string): string {
+  return name.split('--')[1] ?? 'alle';
+}
+
 function main() {
   const { values } = parseArgs({
     options: {
       ocr: { type: 'string', multiple: true },
+      ideal: { type: 'boolean', default: false },
       images: { type: 'string', multiple: true },
       truth: { type: 'string', multiple: true },
+      lines: { type: 'string', multiple: true },
       method: { type: 'string', default: 'none' },
       verbose: { type: 'boolean', default: false },
       dewarp: { type: 'boolean', default: false },
+      group: { type: 'boolean', default: false },
     },
   });
-  if (!values.ocr || !values.truth || values.ocr.length !== values.truth.length)
-    throw new Error('--ocr und --truth paarweise angeben');
+  const sets = values.ideal ? (values.images?.length ?? 0) : (values.ocr?.length ?? 0);
+  if (!values.truth || sets === 0 || sets !== values.truth.length)
+    throw new Error('--ocr (oder --ideal mit --images) und --truth paarweise angeben');
   const useInk = values.method === 'ink' || values.method === 'both';
   const usePrompt = values.method === 'prompt' || values.method === 'both';
   const scores: StrikeScore[] = [];
   const byStyle = new Map<string, Map<StrikeOutcome, number>>();
   let inkSeconds = 0;
   let ocrSeconds = 0;
-  values.ocr.forEach((ocrFile, set) => {
-    const truthDir = values.truth?.[set] ?? '';
+  const byGroup = new Map<string, StrikeScore[]>();
+  for (let set = 0; set < sets; set += 1) {
+    const truthDir = values.truth[set] ?? '';
     const imageDir = values.images?.[set] ?? '';
-    const run: OcrRun = JSON.parse(readFileSync(ocrFile, 'utf8'));
+    const run: OcrRun = values.ideal
+      ? idealRun(imageDir, truthDir, values.lines?.[set])
+      : JSON.parse(readFileSync(values.ocr?.[set] ?? '', 'utf8'));
     for (const page of run.pages) {
       const truthFile = join(truthDir, `${page.name}.txt`);
       if (!existsSync(truthFile)) continue;
@@ -107,6 +143,7 @@ function main() {
       const truth = tokens(readFileSync(truthFile, 'utf8'));
       const score = scoreStrikes(truth, hypothesis);
       scores.push(score);
+      byGroup.set(groupOf(page.name), [...(byGroup.get(groupOf(page.name)) ?? []), score]);
       const styles = strikeStyles(truthDir, page.name);
       strikeOutcomes(truth, hypothesis).forEach((outcome, index) => {
         const style = styles[index] ?? 'unbekannt';
@@ -119,7 +156,7 @@ function main() {
         console.log(`${page.name}: ${JSON.stringify(score)} ${flagged.join(' ')}`);
       }
     }
-  });
+  }
   const total = sumScores(scores);
   console.log(`Seiten: ${scores.length}, Wörter (Soll ohne Gestrichenes): ${total.truthWords}`);
   console.log(
@@ -143,6 +180,17 @@ function main() {
   console.log(
     `Recall der abgeschriebenen: ${percent(total.detected, total.detected + total.transcribed)}`,
   );
+  if (values.group) {
+    console.log(
+      '| Gruppe | Seiten | gestrichen | erkannt | Recall (abgeschrieben) | Fehlalarme | Precision |',
+    );
+    for (const [group, list] of [...byGroup].toSorted(([a], [b]) => a.localeCompare(b))) {
+      const sum = sumScores(list);
+      console.log(
+        `| ${group} | ${list.length} | ${sum.struck} | ${sum.detected} | ${percent(sum.detected, sum.detected + sum.transcribed)} | ${sum.falseAlarms} | ${percent(sum.detected, sum.detected + sum.falseAlarms)} |`,
+      );
+    }
+  }
   const countErrors = scores.map((score) => Math.abs(score.countedWords - score.truthWords));
   console.log(
     `Wortzahl: ${total.countedWords} statt ${total.truthWords}, mittlere Abweichung je Seite ${(countErrors.reduce((a, b) => a + b, 0) / Math.max(1, scores.length)).toFixed(2)} Wörter (${percent(
