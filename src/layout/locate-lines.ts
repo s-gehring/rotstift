@@ -2,22 +2,36 @@ import { assignWithSources } from './assign.ts';
 import { topAt } from './band.ts';
 import { toWorkingGray } from './gray.ts';
 import { joinPieces, splitLongLines } from './flow.ts';
-import { binarize, estimateSkewTangent, removeRulesAndArtifacts } from './ink.ts';
+import { binarize, estimateSkewTangent, inkShareOf, removeRulesAndArtifacts } from './ink.ts';
+import { markImplausible } from './plausible.ts';
 import { placeRoughly } from './rough.ts';
+import { eraseBinding, eraseRuling, findRuling, insideRuling, scaleRuling } from './ruling.ts';
 import { segmentLines } from './segment.ts';
-import type { LayoutResult, LineBox, RgbaImage } from './types.ts';
+import type { BBox, LayoutResult, LineBox, RgbaImage, Ruling } from './types.ts';
+
+const LONGEST_BRIDGE = 8;
 
 export function detectLineBoxes(image: RgbaImage): {
   boxes: LineBox[];
   inkCounts: number[];
   skewDegrees: number;
+  ruling: Ruling;
+  inkShare: (box: BBox) => number;
 } {
   const gray = toWorkingGray(image);
+  const ruling = findRuling(gray, image);
   const mask = binarize(gray);
   const rough = estimateSkewTangent(mask);
-  const bridges = removeRulesAndArtifacts(mask, rough);
+  const bridges = removeRulesAndArtifacts(mask, rough, {
+    erase: (target) => {
+      eraseRuling(target, gray, ruling);
+      eraseBinding(target, ruling);
+    },
+    pageEdges: true,
+    longestBridge: LONGEST_BRIDGE,
+  });
   const tan = estimateSkewTangent(mask);
-  const { lines } = segmentLines(mask, bridges, tan);
+  const lines = segmentLines(mask, bridges, tan).lines.filter((line) => insideRuling(ruling, line));
   const unscale = 1 / gray.scale;
   const clampX = (value: number) => Math.min(image.width, Math.max(0, value));
   const clampY = (value: number) => Math.min(image.height, Math.max(0, value));
@@ -44,6 +58,8 @@ export function detectLineBoxes(image: RgbaImage): {
     boxes,
     inkCounts: lines.map((line) => line.inkCount),
     skewDegrees: (Math.atan(tan) * 180) / Math.PI,
+    ruling: scaleRuling(ruling, unscale),
+    inkShare: inkShareOf(mask, gray.scale),
   };
 }
 
@@ -61,11 +77,13 @@ export function locateLines(image: RgbaImage, transcript: readonly string[]): La
   const flow = splitLongLines(transcript, candidates);
   const assignment = assignWithSources(candidates, flow.texts);
   const placed = placeRoughly(candidates, assignment, flow.texts);
+  const lines = flow.split
+    ? joinPieces(flow, assignment, placed, candidates, transcript.length)
+    : placed;
   return {
-    lines: flow.split
-      ? joinPieces(flow, assignment, placed, candidates, transcript.length)
-      : placed,
+    lines: markImplausible(lines, detected.ruling, detected.inkShare),
     skewDegrees: detected.skewDegrees,
     detectedLines: detected.boxes.length,
+    ruling: detected.ruling,
   };
 }

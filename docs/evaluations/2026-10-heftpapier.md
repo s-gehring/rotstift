@@ -1,6 +1,6 @@
 # Evaluation: Heftpapier und Handyfotos (Oktober 2026)
 
-Frage: Wie gut kommt Rotstift mit echten Schulheften zurecht, also mit linierten und karierten Seiten, Rand, Spiralbindung und Fotos vom Handy? Bisher wurden Erkennung, Zeilenzuordnung ([ADR 0004](../adr/0004-zeilenpositionen.md)) und Strichsuche ([Durchgestrichenes](2026-10-durchgestrichen.md)) auf weißem Papier und auf ScaDS-Scans gemessen. Dieser Bericht beschafft Testdaten, baut einen Renderer für Heftpapier und misst, was an der Pipeline bricht. Geändert wird an der App nichts (Phase 1), die Lösungsvorschläge sind Phase 2.
+Frage: Wie gut kommt Rotstift mit echten Schulheften zurecht, also mit linierten und karierten Seiten, Rand, Spiralbindung und Fotos vom Handy? Bisher wurden Erkennung, Zeilenzuordnung ([ADR 0004](../adr/0004-zeilenpositionen.md)) und Strichsuche ([Durchgestrichenes](2026-10-durchgestrichen.md)) auf weißem Papier und auf ScaDS-Scans gemessen. Dieser Bericht beschafft Testdaten, baut einen Renderer für Heftpapier und misst, was an der Pipeline bricht. Phase 1 ändert an der App nichts. Was Phase 2 an der Zeilenzuordnung geändert hat, steht unter [Phase 2: Heftlinien](#phase-2-heftlinien).
 
 ## Ergebnis
 
@@ -64,11 +64,11 @@ Der Randzeichen-Wert gilt nur für Papiere mit gezeichnetem Rand. Bei `liniert-e
 
 ### Vergleich mit ScaDS und den früher gerenderten Seiten
 
-| Satz                                                 | Seiten | Wörter | WER    | CER   | Zeilen mit Box | Box trifft | Marken je 100 Wörter | Markenzeile richtig | Striche auf der Zeile |
-| ---------------------------------------------------- | ------ | ------ | ------ | ----- | -------------- | ---------- | -------------------- | ------------------- | --------------------- |
-| ScaDS-Scans                                          | 6      | 603    | 20,9 % | 6,2 % | 100,0 %        | –          | 11,9                 | –                   | –                     |
-| Früher gerenderte Seiten (`samples/`, weißes Papier) | 4      | 478    | 0,6 %  | 0,1 % | 100,0 %        | 100,0 %    | 9,0                  | 100,0 %             | 100,0 %               |
-| Heftpapier, alle (Scans und Fotos)                   | 12     | 1434   | 4,5 %  | 1,0 % | 89,5 %         | 48,9 %     | 10,0                 | 57,5 %              | 61,7 %                |
+| Satz                                           | Seiten | Wörter | WER    | CER   | Zeilen mit Box | Box trifft | Marken je 100 Wörter | Markenzeile richtig | Striche auf der Zeile |
+| ---------------------------------------------- | ------ | ------ | ------ | ----- | -------------- | ---------- | -------------------- | ------------------- | --------------------- |
+| ScaDS-Scans                                    | 6      | 603    | 20,9 % | 6,2 % | 100,0 %        | –          | 11,9                 | –                   | –                     |
+| Früher gerenderte Seiten (`samples/`, liniert) | 4      | 478    | 0,6 %  | 0,1 % | 100,0 %        | 100,0 %    | 9,0                  | 100,0 %             | 100,0 %               |
+| Heftpapier, alle (Scans und Fotos)             | 12     | 1434   | 4,5 %  | 1,0 % | 89,5 %         | 48,9 %     | 10,0                 | 57,5 %              | 61,7 %                |
 
 ScaDS hat keine Wahrheitsboxen, die Spalten „Box trifft“, „Markenzeile richtig“ und „Striche auf der Zeile“ sind dort leer. Die ScaDS-Seiten sind die ersten sechs (`000`, `013`, …, `065`) der 77.
 
@@ -153,10 +153,13 @@ Sortiert nach dem Schaden für den Nutzer, nicht nach dem Aufwand.
 
 1. **Die Zeilenzuordnung kennt keine Perspektive.** Auf Fotos 0–6 % Treffer, 39–94 % „sicher falsch“, damit liegen alle Striche und Marken auf der falschen Zeile oder fehlen (Wirkung: nahezu die ganze Fotokorrektur). Nach der Ablation tragen Drehung, Trapezverzerrung, Wölbung und Ringbindung jeweils einzeln schon 25–73 % Verlust, zusammen 31 %.
    Lösungsvorschlag: Vor der Zeilensuche das Blatt begradigen (Seitenkanten oder Heftlinien finden, eine Homographie schätzen, entzerren) und erst danach `locateLines` laufen lassen. Alternativ die Zeilen aus den Wortboxen des Erkennungsmodells holen, falls ein Modell sie liefert. Dazu ein Selbsttest: Wenn die Zuordnung nach dem Begradigen immer noch von den Linien abweicht, `null` statt falscher Box liefern.
+   Stand Phase 2: Gelöst ohne Begradigen, die Heftlinien werden gefunden und gelöscht ([Phase 2](#phase-2-heftlinien)).
 2. **`locateLines` meldet keine Mehrdeutigkeit, wenn es falsch liegt.** Die Boxen auf Fotos sind überwiegend „sicher falsch“, nicht `null` (z. B. 93 % bei `liniert-photo`). Nutzer sehen so Marken an falscher Stelle statt einer ehrlichen Rückfallanzeige (Wirkung: falsch platzierte Marken).
    Lösungsvorschlag: Ein Plausibilitätsmaß für die Zuordnung (Abstand der Boxen zu den gefundenen Heftlinien, Anteil des Textes in den Boxen) und unterhalb einer Schwelle `null`.
+   Stand Phase 2: Umgesetzt als grobe Platzierung statt `null` (`markImplausible`).
 3. **Absturz bei Kariert-Foto.** `locateLines` wirft `RangeError`; mit Trapez-Eingabe erneut.
    Lösungsvorschlag: Absturz reproduzieren (`brief--kariert-photo` aus `render.py --heft`), Indexprüfung in der Bandsegmentierung ergänzen, Regressionstest mit gerendertem Foto.
+   Stand Phase 2: Behoben, Regressionstest mit verkleinertem Testbild.
 4. **Randzeichen berücksichtigen den Heftrand nicht.** Selbst auf dem sauberen Scan stehen nur 35 % der Randzeichen im Rand, 45 % über dem Text (`liniert-scan`). `layoutOverlay` leitet die Randspalte aus der Textausdehnung ab.
    Lösungsvorschlag: Den Heftrand aus der Seite erkennen (senkrechte Randlinie, bei Karos die Doppellinie), die Randspalte dorthin legen und nur bei fehlendem Rand auf die Textausdehnung zurückfallen.
 5. **Strichsuche verwechselt Heftlinien mit Streichungen und umgekehrt.** Recall 13 % auf `liniert-eng`, 25 % mit 7 Fehlalarmen auf Karos, 0–13 % auf Fotos, gegenüber 69 % auf Linienpapier mit Rand.
@@ -167,6 +170,116 @@ Sortiert nach dem Schaden für den Nutzer, nicht nach dem Aufwand.
    Lösungsvorschlag: Auf die Zielkante hochskalieren (bikubisch) und Wiederholungsschleifen erkennen (Abbruch bei sich wiederholenden Zeilen, danach erneut mit Strafterm). Das mit deutschen Scans niedriger Auflösung gegenprüfen, bevor es eingebaut wird.
 8. **Karo-Scan wird schlechter zugeordnet als Linien-Scan.** 65 % Treffer, 30 % sicher falsch.
    Lösungsvorschlag: Bei Karos die Zeilen auf dem Raster als Vielfaches des Karoabstands suchen statt als Bänder.
+   Stand Phase 2: Gelöst, Karos werden als Raster erkannt und gelöscht, 100 % Treffer.
+
+## Phase 2: Heftlinien
+
+Phase 2 setzt die Punkte 1, 2, 3 und 8 der [Fehlerursachen](#fehlerursachen-nach-wirkung) um, die Entscheidung steht in [ADR 0004](../adr/0004-zeilenpositionen.md). `findRuling` (`src/layout/ruling.ts`) findet je Seite Lineatur, Karoraster und Randlinien oder meldet blankes Papier. Linien und Tinte werden an Länge und Regelmäßigkeit unterschieden, nicht an der Farbe. Vor der Zeilensuche werden die Linien aus der Tintenmaske gelöscht, danach fallen Spiralbindung, Blattkante und Kandidaten außerhalb der Lineatur weg. `markImplausible` (`src/layout/plausible.ts`) setzt Zeilen, deren Box nicht zur Seite passt, auf grob. Fotos werden nicht begradigt. Der Absturz ist behoben.
+
+### Ergebnis
+
+**Auf allen gerenderten Heftseiten trifft die Zeilenzuordnung jede Zeile.** Mit idealen Transkripten liegen auf allen 24 Seiten 100 % der Boxen richtig (vorher 52,3 %), mit echter Erkennung ebenfalls 100 % (vorher 48,9 %). Keine Box ist sicher falsch oder grob, keine Seite stürzt ab. Fotos sind so gut wie Scans und Karos so gut wie Linien. Auf den Seiten mit Streichungen steigt die Trefferquote von 66,2 % auf 100 %.
+
+**Die Lineatur wird auf jeder Seite richtig erkannt.** Alle Heftseiten, die früher gerenderten Seiten und die GNHK-Fotos werden richtig als liniert oder kariert erkannt, alle ScaDS-Seiten als blank.
+
+**Auf blankem Papier ändert sich nichts.** Auf ScaDS sind alle 313 Boxen gleich (IoU ≥ 0,9 zur Box vorher), grob bleiben 7 wie vorher. Die früher gerenderten Seiten treffen weiter 100 %.
+
+**Bei abweichendem Transkript halbiert die Plausibilitätsprüfung die sicher falschen Boxen fast.** Über 108 Seiten und 9 Varianten des Transkripts (unverändert sowie fehlende, eingefügte, geteilte und verschmolzene Zeilen, siehe `src/layout/perturb.ts`) gibt die Zuordnung 11 719 sichere Boxen aus. Davon liegen 43 mit IoU < 0,2 daneben (0,37 %), nach der Prüfung noch 23 (0,20 %). Dafür werden 13 richtige Boxen grob (0,11 %).
+
+**Die Lineatur kostet wenig Zeit.** `findRuling` braucht je Seite im Median 18 ms (blankes Papier) bis 25 ms (Heftseiten), auf der A4-Testseite 31 ms, höchstens 41 ms. `locateLines` wird insgesamt um 10 bis 50 ms langsamer, weil zusätzlich Linien gelöscht und Zeilen geprüft werden. Gemessen auf demselben Mac bei ruhiger Maschine, Wanduhrzeit, Median aus fünf abwechselnden Läufen je Seite: Heftseiten 115 → 125 ms, ScaDS 82 → 101 ms, die A4-Seite aus `locate-lines.test.ts` 150 → 200 ms.
+
+### Zählweise
+
+„Sicher falsch“ zählt jetzt nur Boxen, die die Zuordnung als sicher ausgibt und die mit IoU < 0,2 danebenliegen. Grob platzierte Zeilen (`rough`, Konfidenz 0, siehe [ADR 0003](../adr/0003-overlay.md)) stehen in einer eigenen Spalte, als Anteil an allen Transkriptzeilen mit Wahrheitsbox. Phase 1 hat grobe Boxen mitgezählt, wenn sie danebenlagen. Deshalb stehen oben für ideale Transkripte 39,5 % sicher falsch, nach der neuen Zählweise sind es 2,8 % sicher falsch und 43,1 % grob. Die Spalten „vorher“ unten sind mit dem Stand vor Phase 2 und der neuen Zählweise neu gemessen (`eval/heft-measure.ts`, Spalten „grob“ und „Papier erkannt“).
+
+Die früher gerenderten Seiten (`eval/samples/rendered`) sind liniert, nicht weiß. Phase 1 hat das falsch angegeben, die Tabelle oben ist korrigiert.
+
+### Ideale Transkripte
+
+24 Seiten, 392 Zeilen.
+
+| Papier und Aufnahme | Seiten              | Treffer vorher | Treffer nachher | sicher falsch vorher | sicher falsch nachher | grob vorher | grob nachher | Papier erkannt |
+| ------------------- | ------------------- | -------------- | --------------- | -------------------- | --------------------- | ----------- | ------------ | -------------- |
+| kariert, Foto       | 4 (1 Absturz) → 4   | 2,7 %          | 100,0 %         | 0,0 %                | 0,0 %                 | 73,3 %      | 0,0 %        | 100,0 %        |
+| kariert, Scan       | 4 → 4               | 64,9 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 36,4 %      | 0,0 %        | 100,0 %        |
+| liniert-eng, Foto   | 4 → 4               | 1,8 %          | 100,0 %         | 16,4 %               | 0,0 %                 | 78,2 %      | 0,0 %        | 100,0 %        |
+| liniert-eng, Scan   | 4 → 4               | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        | 100,0 %        |
+| liniert, Foto       | 4 → 4               | 49,2 %         | 100,0 %         | 3,1 %                | 0,0 %                 | 66,2 %      | 0,0 %        | 100,0 %        |
+| liniert, Scan       | 4 → 4               | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        | 100,0 %        |
+| alle                | 24 (1 Absturz) → 24 | 52,3 %         | 100,0 %         | 2,8 %                | 0,0 %                 | 43,1 %      | 0,0 %        | 100,0 %        |
+
+### Echte Erkennung
+
+Dieselbe OCR-Ausgabe wie in Phase 1 (GLM-OCR Q8), 12 Seiten, 190 Zeilen.
+
+| Papier und Aufnahme | Seiten              | Treffer vorher | Treffer nachher | sicher falsch vorher | sicher falsch nachher | grob vorher | grob nachher | Papier erkannt |
+| ------------------- | ------------------- | -------------- | --------------- | -------------------- | --------------------- | ----------- | ------------ | -------------- |
+| kariert, Foto       | 2 (1 Absturz) → 2   | 5,6 %          | 100,0 %         | 2,8 %                | 0,0 %                 | 41,7 %      | 0,0 %        | 100,0 %        |
+| kariert, Scan       | 2 → 2               | 88,2 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 17,6 %      | 0,0 %        | 100,0 %        |
+| liniert-eng, Foto   | 2 → 2               | 3,4 %          | 100,0 %         | 13,8 %               | 0,0 %                 | 79,3 %      | 0,0 %        | 100,0 %        |
+| liniert-eng, Scan   | 2 → 2               | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        | 100,0 %        |
+| liniert, Foto       | 2 → 2               | 0,0 %          | 100,0 %         | 6,5 %                | 0,0 %                 | 90,3 %      | 0,0 %        | 100,0 %        |
+| liniert, Scan       | 2 → 2               | 100,0 %        | 100,0 %         | 0,0 %                | 0,0 %                 | 0,0 %       | 0,0 %        | 100,0 %        |
+| alle                | 12 (1 Absturz) → 12 | 48,9 %         | 100,0 %         | 3,7 %                | 0,0 %                 | 37,9 %      | 0,0 %        | 100,0 %        |
+
+### Weitere Sätze
+
+| Satz                                | Seiten | Abstürze vorher | Abstürze nachher | Treffer vorher | Treffer nachher | sicher falsch nachher | grob vorher | grob nachher | Papier erkannt |
+| ----------------------------------- | ------ | --------------- | ---------------- | -------------- | --------------- | --------------------- | ----------- | ------------ | -------------- |
+| Heftseiten mit Streichungen, ideal  | 24     | 0               | 0                | 66,2 %         | 100,0 %         | 0,0 %                 | 36,3 %      | 0,0 %        | 100,0 %        |
+| Früher gerenderte Seiten, ideal     | 4      | 0               | 0                | 100,0 %        | 100,0 %         | 0,0 %                 | 0,0 %       | 0,0 %        | 100,0 %        |
+| Früher gerenderte Seiten, Erkennung | 4      | 0               | 0                | 100,0 %        | 100,0 %         | 0,0 %                 | 0,0 %       | 0,0 %        | 100,0 %        |
+| ScaDS (blankes Papier), Erkennung   | 20     | 0               | 0                | –              | –               | –                     | 2,2 %       | 2,2 %        | 100,0 %        |
+| GNHK liniert (Fotos), Erkennung     | 8      | 3               | 0                | –              | –               | –                     | 25,2 %      | 35,8 %       | 100,0 %        |
+
+ScaDS und GNHK haben keine Wahrheitsboxen, dort zählt nur „grob“. Auf GNHK stürzten vorher drei von acht Seiten ab. Auf den fünf übrigen sinkt der Anteil grober Zeilen von 31 auf 20 von 60, die drei bisher abgestürzten Seiten bringen 24 von 63 grobe Zeilen dazu. Ob die groben Zeilen dort zu Recht grob sind, lässt sich ohne Wahrheitsboxen nicht messen.
+
+### Ablation der Fotoeffekte
+
+Wie oben, 12 Fotoseiten, ideale Transkripte. Nach Phase 2 stürzt keine Seite mehr ab.
+
+| Aktive Effekte                | Treffer vorher | Treffer nachher | sicher falsch vorher | sicher falsch nachher | grob vorher | grob nachher | Abstürze vorher |
+| ----------------------------- | -------------- | --------------- | -------------------- | --------------------- | ----------- | ------------ | --------------- |
+| keine                         | 97,9 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 11,8 %      | 0,0 %        | 0               |
+| nur Drehung                   | 70,8 %         | 99,5 %          | 3,1 %                | 0,0 %                 | 37,4 %      | 0,0 %        | 0               |
+| nur Keystone                  | 24,6 %         | 99,5 %          | 5,1 %                | 0,0 %                 | 57,4 %      | 0,0 %        | 2               |
+| Drehung und Keystone          | 30,3 %         | 98,5 %          | 17,9 %               | 0,0 %                 | 55,4 %      | 5,6 %        | 0               |
+| nur Wölbung                   | 51,3 %         | 100,0 %         | 8,2 %                | 0,0 %                 | 39,0 %      | 0,0 %        | 0               |
+| nur Bindung                   | 72,8 %         | 100,0 %         | 0,5 %                | 0,0 %                 | 26,2 %      | 0,0 %        | 0               |
+| nur Falzschatten (`spine`)    | 97,9 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 12,8 %      | 0,0 %        | 0               |
+| nur Schatten                  | 93,3 %         | 100,0 %         | 0,5 %                | 0,0 %                 | 4,6 %       | 0,5 %        | 0               |
+| nur Licht                     | 97,4 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 1,0 %       | 0,5 %        | 0               |
+| nur Unschärfe                 | 89,7 %         | 100,0 %         | 4,6 %                | 0,0 %                 | 14,4 %      | 0,5 %        | 0               |
+| nur Rauschen                  | 97,4 %         | 100,0 %         | 0,0 %                | 0,0 %                 | 3,6 %       | 0,5 %        | 0               |
+| nur Tisch um die Seite        | 97,4 %         | 99,5 %          | 0,0 %                | 0,0 %                 | 10,3 %      | 0,0 %        | 0               |
+| Wölbung und Bindung           | 49,7 %         | 100,0 %         | 3,1 %                | 0,0 %                 | 48,7 %      | 0,0 %        | 0               |
+| Drehung, Keystone und Wölbung | 34,9 %         | 99,5 %          | 6,7 %                | 0,0 %                 | 63,6 %      | 0,0 %        | 0               |
+| alle                          | 31,3 %         | 100,0 %         | 17,4 %               | 0,0 %                 | 75,9 %      | 0,0 %        | 0               |
+| alle ohne Keystone            | 32,3 %         | 100,0 %         | 3,6 %                | 0,0 %                 | 59,5 %      | 0,0 %        | 1               |
+| alle ohne Wölbung             | 20,0 %         | 99,5 %          | 5,1 %                | 0,0 %                 | 64,1 %      | 0,0 %        | 2               |
+| alle ohne Bindung             | 35,4 %         | 100,0 %         | 8,7 %                | 0,0 %                 | 71,8 %      | 0,0 %        | 0               |
+| alle ohne Drehung             | 25,6 %         | 99,5 %          | 11,8 %               | 0,0 %                 | 74,9 %      | 0,0 %        | 0               |
+
+Die Trefferquote liegt in jeder Kombination bei mindestens 98,5 %. Die Ausnahme ist `brief--liniert-eng-photo` mit Drehung und Keystone: 14 von 16 Boxen treffen, 11 davon sind grob, weil die Zuordnung dort nicht eindeutig ist. Die Werte unter 100 % in den übrigen Zeilen sind je eine Box mit IoU zwischen 0,2 und 0,5.
+
+### Gegenprobe mit dem Integrationstest
+
+`layout.integration.test.ts` auf den früher gerenderten linierten Seiten (`ROTSTIFT_INTEGRATION=1`): 293 von 293 Zeilen treffen wie vorher, die mittlere IoU steigt von 0,937 auf 0,964. Über die Varianten des Transkripts gibt es weiter keine sicher falsche Box, aber 14 `null` mehr (598 statt 584 von 2573), alle bei fehlenden oder eingefügten Zeilen. Vermutlich liegt das an den engeren Boxen nach dem Löschen der Linien, die die Zuordnung an manchen Stellen weniger eindeutig machen; geprüft ist das nicht.
+
+### Plausibilität
+
+Die Prüfung greift nur, wenn eine Seite mindestens vier sichere Zeilen hat. Sie vergleicht jede sichere Zeile mit dem Median der Seite: Höhe je Teilzeile über dem 2,5-Fachen, Tintendichte unter 40 % und, nur auf linierten Seiten, eine um mehr als ein Viertel Linienabstand verschobene Lage zu den Heftlinien bei weniger als 75 % der Höhe. Die Schwellen sind auf den Varianten oben gewählt (ideale Heftseiten, Seiten mit Streichungen und fünf Ablationsstufen), dieselben Seiten dienen auch zur Messung. Auf Karos traf die Lageprüfung mehr richtige Boxen als falsche (38 richtige, 7 falsche, keine davon sicher falsch) und ist dort abgeschaltet. Von den 23 sicher falschen Boxen, die nach der Prüfung bleiben, gehören 22 zu einer Zeile, die im Transkript oder im Bild fehlt, eine zu einer eingefügten Zeile.
+
+### Testbild und Regressionstest
+
+`src/layout/fixtures/heft-kariert-foto.jpg` ist `brief--kariert-photo` aus `render.py --heft` mit dem Standard-Seed, wie für die Messung auf 1152 px verkleinert, dann auf 900 px Kantenlänge und JPEG-Qualität 35 gebracht (50 KB). `heft-kariert-foto.json` enthält Text und Wahrheitsboxen im selben Maßstab. Auf dieser Seite stürzte `locateLines` in Phase 1 ab, der alte Stand wirft auf dem Testbild weiter die `RangeError`. `src/layout/ruling.test.ts` prüft darauf Karoraster, mindestens 90 % Treffer und keine sicher falsche Box. `src/layout/flow.test.ts` hält die Ursache fest: Verliert eine Zeile beim Zusammensetzen ihre einzige Kandidatenzeile an die Nachbarzeile, wird sie grob platziert, statt eine leere Liste auszuwerten.
+
+### Offen
+
+- **Drehung mit Keystone auf `liniert-eng`:** Eine Seite bleibt zu großen Teilen grob (siehe Ablation). Die Boxen treffen, die Zuordnung ist aber unsicher.
+- **Mehr `null` bei fehlenden Zeilen:** 14 von 2573 Varianten-Zeilen im Integrationstest, siehe oben.
+- **Strichsuche und Randzeichen:** Die Punkte 4 und 5 der Fehlerursachen sind nicht angefasst. `ruling.margins` liefert jetzt die Randlinien, `ruling.horizontal` die Heftlinien. Beides können Strichsuche und Overlay nutzen.
+- **Echte Fotos:** Die Fotos sind weiter simuliert. Die GNHK-Fotos zeigen nur, dass nichts abstürzt und die Lineatur gefunden wird.
 
 ## Phase 2: Kleine Scans
 

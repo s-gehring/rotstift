@@ -70,6 +70,11 @@ export interface PageStats {
   alarms: number;
   crashed: boolean;
   seconds: number;
+  rough?: number;
+  roughHits?: number;
+  ruling?: string;
+  expectedRuling?: string;
+  locateMs?: number;
   marks?: MarkStats;
 }
 
@@ -265,6 +270,11 @@ async function startCorrector(model: string, threads: number) {
   };
 }
 
+export function expectedRuling(paper: string | undefined): string {
+  if (paper === undefined) return 'blank';
+  return paper.startsWith('kariert') ? 'grid' : 'lined';
+}
+
 const percent = (part: number, whole: number) =>
   whole === 0 ? '–' : `${((100 * part) / whole).toFixed(1)} %`;
 
@@ -346,6 +356,48 @@ export function summaryRow(label: string, pages: readonly PageStats[]): string {
   return `| ${cells.join(' | ')} |`;
 }
 
+export function layoutRow(label: string, pages: readonly PageStats[]): string {
+  const sum = (pick: (page: PageStats) => number) =>
+    pages.reduce((total, page) => total + pick(page), 0);
+  const matched = sum((page) => page.matched);
+  const crashes = pages.filter((page) => page.crashed).length;
+  const timed = pages.filter((page) => page.locateMs !== undefined);
+  const cells = [
+    label,
+    `${pages.length}${crashes > 0 ? ` (${crashes} Absturz)` : ''}`,
+    percent(
+      sum((page) => page.located),
+      sum((page) => page.lines),
+    ),
+    percent(
+      sum((page) => page.rough ?? 0),
+      sum((page) => page.lines),
+    ),
+    matched === 0
+      ? '–'
+      : percent(
+          sum((page) => page.hits),
+          matched,
+        ),
+    matched === 0
+      ? '–'
+      : percent(
+          sum((page) => page.confidentWrong),
+          matched,
+        ),
+    percent(pages.filter((page) => page.ruling === page.expectedRuling).length, pages.length),
+    timed.length === 0
+      ? '–'
+      : (timed.reduce((total, page) => total + (page.locateMs ?? 0), 0) / timed.length).toFixed(0),
+  ];
+  return `| ${cells.join(' | ')} |`;
+}
+
+export const LAYOUT_HEADER = [
+  '| Gruppe | Seiten | Zeilen mit Box | davon grob | Box trifft (IoU ≥ 0,5) | Box sicher falsch | Papier erkannt | ms je Seite |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- |',
+].join('\n');
+
 export const SUMMARY_HEADER = [
   '| Gruppe | Seiten | Wörter | WER | CER | Zeilen mit Box | Box trifft (IoU ≥ 0,5) | Box sicher falsch | Strich-Alarme je 100 Wörter | Marken je 100 Wörter | Marken ohne Box | Markenzeile richtig | Striche auf der Zeile | Randzeichen im Heftrand | Randzeichen über Text |',
   '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -367,6 +419,7 @@ async function main() {
       threads: { type: 'string', default: '6' },
       marks: { type: 'boolean', default: false },
       'no-wer': { type: 'boolean', default: false },
+      paper: { type: 'string' },
     },
   });
   if ((!values.ocr && !values.ideal) || !values.images || !values.truth || !values.out) {
@@ -387,9 +440,13 @@ async function main() {
             .toSorted()
             .map((file) => {
               const name = file.slice(0, -'.jpg'.length);
+              const truthLines = readMeta(values.lines, name).lines;
               return {
                 name,
-                content: readFileSync(join(truthDir, `${name}.txt`), 'utf8'),
+                content:
+                  truthLines === undefined
+                    ? readFileSync(join(truthDir, `${name}.txt`), 'utf8')
+                    : truthLines.map((line) => line.text).join('\n'),
                 finishReason: 'stop',
                 seconds: 0,
                 promptTokens: 0,
@@ -422,6 +479,7 @@ async function main() {
       const hypothesis = lines.join('\n');
       const factor = meta.size ? image.width / meta.size[0] : 1;
       let crashed = false;
+      const started = performance.now();
       const layout: ReturnType<typeof locateLines> = (() => {
         try {
           return locateLines(image, lines);
@@ -431,10 +489,12 @@ async function main() {
           return { lines: lines.map(() => null), skewDegrees: 0, detectedLines: 0 };
         }
       })();
+      const locateMs = performance.now() - started;
       const matches = meta.lines ? matchLines(lines, meta.lines) : lines.map(() => -1);
       let matched = 0;
       let hits = 0;
       let confidentWrong = 0;
+      let roughHits = 0;
       let iouSum = 0;
       lines.forEach((_, index) => {
         const at = matches[index] ?? -1;
@@ -446,7 +506,11 @@ async function main() {
         const overlap = iou(found.bbox, scaled(entry.bbox, factor));
         iouSum += overlap;
         if (overlap >= HIT) hits += 1;
-        else if (overlap < WRONG) confidentWrong += 1;
+        if (found.rough === true) {
+          if (overlap >= HIT) roughHits += 1;
+        } else if (overlap < WRONG) {
+          confidentWrong += 1;
+        }
       });
       let struck: number[][] = [];
       try {
@@ -475,6 +539,13 @@ async function main() {
         alarms: struck.reduce((sum, words) => sum + words.length, 0),
         crashed,
         seconds: page.seconds,
+        rough: layout.lines.filter(
+          (line, index) => line?.rough === true && (lines[index] ?? '').trim() !== '',
+        ).length,
+        roughHits,
+        ruling: layout.ruling?.kind ?? 'blank',
+        expectedRuling: expectedRuling(values.paper ?? meta.paper),
+        locateMs,
       };
       if (session !== null) {
         const bboxes = toBboxes(layout, lines.length);
@@ -512,6 +583,17 @@ async function main() {
       : [];
   console.log(`\n${values.label ?? values.out}\n\n${SUMMARY_HEADER}`);
   console.log([...rows, summaryRow('alle', done)].join('\n'));
+  const layoutRows =
+    groups.length > 1
+      ? groups.map((group) =>
+          layoutRow(
+            group,
+            done.filter((page) => page.group === group),
+          ),
+        )
+      : [];
+  console.log(`\n${LAYOUT_HEADER}`);
+  console.log([...layoutRows, layoutRow('alle', done)].join('\n'));
 }
 
 if (import.meta.main) {

@@ -9,6 +9,9 @@ export interface PageSpec {
   readonly seed?: number;
   readonly ruled?: boolean;
   readonly margin?: boolean;
+  readonly grid?: boolean;
+  readonly ruleShade?: number;
+  readonly inkShade?: number;
   readonly skewDegrees?: number;
   readonly wobble?: number;
   readonly drift?: number;
@@ -171,16 +174,32 @@ export function renderPage(spec: PageSpec): SyntheticPage {
   const spacing = pitch;
   const top = spacing * 1.6;
   const ruleLayer = new Float32Array(width * height);
-  if (spec.ruled === true) {
-    for (let k = -2; top + k * spacing < height + spacing; k += 1) {
-      const y = top + k * spacing + spacing * 0.1;
+  const grid = spec.grid === true;
+  const ruleStep = grid ? spacing / 2 : spacing;
+  const ruleRadius = grid ? 0.7 : 1;
+  if (spec.ruled === true || grid) {
+    for (let k = -4; top + k * ruleStep < height + spacing; k += 1) {
+      const y = top + k * ruleStep + spacing * 0.1;
       stroke(
         ruleLayer,
         [
           [-width, y],
           [width * 2, y],
         ],
-        1,
+        ruleRadius,
+        null,
+      );
+    }
+  }
+  if (grid) {
+    for (let x = -spacing; x < width + spacing; x += ruleStep) {
+      stroke(
+        ruleLayer,
+        [
+          [x, -height],
+          [x, height * 2],
+        ],
+        ruleRadius,
         null,
       );
     }
@@ -326,8 +345,9 @@ export function renderPage(spec: PageSpec): SyntheticPage {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < width * height; i += 1) {
     let value = paper[i] ?? 236;
-    value -= (ruleLayer[i] ?? 0) * 62;
-    value = value * (1 - (ink[i] ?? 0)) + 45 * (ink[i] ?? 0);
+    value -= (ruleLayer[i] ?? 0) * (spec.ruleShade ?? 62);
+    const inkValue = 236 - (spec.inkShade ?? 191);
+    value = Math.min(value, value * (1 - (ink[i] ?? 0)) + inkValue * (ink[i] ?? 0));
     data[i * 4] = value;
     data[i * 4 + 1] = value;
     data[i * 4 + 2] = value;
