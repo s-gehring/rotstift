@@ -231,6 +231,32 @@ function plainGray(plane: Plane): GrayImage {
   return { ...plane, scale: 1 };
 }
 
+interface Distortion {
+  readonly traced: number[][];
+  readonly bend: number;
+  readonly keystoneDegrees: number;
+}
+
+function measureDistortion(
+  lines: readonly { readonly points: readonly Point[] }[],
+  frame: Frame,
+  plane: Plane,
+): Distortion {
+  const model = fitSlopes(slopesFromLines(lines), plane.width, plane.height);
+  const traced = Array.from({ length: MESH_ROWS }, (_, j) =>
+    traceRow(model, frame.width, (j * frame.height) / (MESH_ROWS - 1)),
+  );
+  const fits = model === null ? [] : lineFits(traced, frame.width, model);
+  const bend = Math.max(0, ...fits.map((fit) => fit.residual)) / frame.height;
+  const angles = fits.map((fit) => (Math.atan(fit.slope) * 180) / Math.PI);
+  const keystoneDegrees = angles.length === 0 ? 0 : Math.max(...angles) - Math.min(...angles);
+  return { traced, bend, keystoneDegrees };
+}
+
+function distorted({ bend, keystoneDegrees }: Distortion): boolean {
+  return bend >= MIN_BEND || keystoneDegrees >= MIN_KEYSTONE_DEGREES;
+}
+
 export function analyzeDewarp(image: RgbaImage, options: DewarpOptions = {}): DewarpReport {
   const gray: GrayImage = toWorkingGray(image, WORKING_SIDE);
   const small = halve(gray);
@@ -245,24 +271,19 @@ export function analyzeDewarp(image: RgbaImage, options: DewarpOptions = {}): De
   let plane = fromSheet === null ? gray : warpPlane(gray, frame);
   const findRules = options.rules ?? ((plain: GrayImage) => findRuling(plain).horizontal);
   let lines = findRules(plainGray(plane));
+  let distortion = measureDistortion(lines, frame, plane);
   let rotationDegrees = 0;
   if (fromSheet === null && lines.length > 0) {
     const radians = Math.atan(weightedMedianSlope(slopesFromLines(lines)));
     rotationDegrees = (radians * 180) / Math.PI;
-    if (Math.abs(rotationDegrees) >= MIN_ROTATION_DEGREES) {
+    if (Math.abs(rotationDegrees) >= MIN_ROTATION_DEGREES && distorted(distortion)) {
       frame = rotatedFrame(gray, radians);
       plane = warpPlane(gray, frame);
       lines = findRules(plainGray(plane));
+      distortion = measureDistortion(lines, frame, plane);
     }
   }
-  const model = fitSlopes(slopesFromLines(lines), plane.width, plane.height);
-  const traced = Array.from({ length: MESH_ROWS }, (_, j) =>
-    traceRow(model, frame.width, (j * frame.height) / (MESH_ROWS - 1)),
-  );
-  const fits = model === null ? [] : lineFits(traced, frame.width, model);
-  const bend = Math.max(0, ...fits.map((fit) => fit.residual)) / frame.height;
-  const angles = fits.map((fit) => (Math.atan(fit.slope) * 180) / Math.PI);
-  const keystoneDegrees = angles.length === 0 ? 0 : Math.max(...angles) - Math.min(...angles);
+  const { traced, bend, keystoneDegrees } = distortion;
   const corners =
     fromSheet === null || sheet === null
       ? null
@@ -280,9 +301,7 @@ export function analyzeDewarp(image: RgbaImage, options: DewarpOptions = {}): De
     rules: lines.length,
   };
   const needed =
-    (fromSheet !== null && skewDegrees >= MIN_SHEET_SKEW_DEGREES) ||
-    bend >= MIN_BEND ||
-    keystoneDegrees >= MIN_KEYSTONE_DEGREES;
+    (fromSheet !== null && skewDegrees >= MIN_SHEET_SKEW_DEGREES) || distorted(distortion);
   if (!needed) return { ...report, plan: null };
   const spacing = frame.width / (MESH_COLUMNS - 1);
   const mesh: number[] = [];

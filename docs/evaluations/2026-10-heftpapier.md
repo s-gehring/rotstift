@@ -360,7 +360,7 @@ Handyfotos werden beim Import begradigt, wenn sie sicher als verzerrtes Foto erk
 
 **Die Strichsuche auf Fotos wird genauer.** Auf den 12 Fotoseiten mit Streichungen sinken die Fehlalarme von 55 auf 34, der Recall steigt leicht von 16,7 % auf 18,8 %. Fotos liegen damit auf dem Niveau der Scans.
 
-**Begradigen kostet unter 0,2 s je Seite.** Planen auf 1200 px braucht im Median 65 bis 77 ms (höchstens 132 ms), Anwenden beim Zeichnen auf 2048 px 41 bis 61 ms. Ein Scan kostet nur die Prüfung (41 ms).
+**Begradigen kostet unter 0,2 s je Seite.** Planen auf 1200 px braucht in Node im Median 49 bis 55 ms (höchstens 122 ms), Anwenden beim Zeichnen auf 2048 px 41 bis 62 ms. Ein Scan kostet nur die Prüfung (25 ms). In WebKit, der Engine der Mac-App, ist beides etwa dreimal so langsam.
 
 ### Ideale Transkripte
 
@@ -441,13 +441,15 @@ Die GNHK-Fotos (687 Seiten, Englisch, keine Wahrheitsboxen) laufen wie in der Ap
 
 ### Laufzeit
 
-Apple M4 Pro, CPU-Zeit je Seite, Median aus drei Läufen, Maschine mit anderen Sitzungen belastet (Last um 8). Planen auf 1200 px wie beim Import, Anwenden auf 2048 px wie beim Zeichnen für Erkennung und Overlay.
+Apple M4 Pro, Node, CPU-Zeit je Seite, Median aus drei Läufen, Maschine mit anderen Sitzungen belastet (Last 10 bis 17). Planen auf 1200 px wie beim Import, Anwenden auf 2048 px wie beim Zeichnen für Erkennung und Overlay.
 
 | Satz                     | Seiten | Planen, Median | Planen, höchstens | Anwenden, Median | Anwenden, höchstens |
 | ------------------------ | ------ | -------------- | ----------------- | ---------------- | ------------------- |
-| Gerenderte Fotos         | 48     | 65 ms          | 100 ms            | 41 ms            | 50 ms               |
-| GNHK liniert             | 61     | 77 ms          | 132 ms            | 61 ms            | 86 ms               |
-| ScaDS (Scans, kein Plan) | 77     | 41 ms          | 62 ms             | –                | –                   |
+| Gerenderte Fotos         | 48     | 49 ms          | 94 ms             | 41 ms            | 47 ms               |
+| GNHK liniert             | 61     | 55 ms          | 122 ms            | 62 ms            | 98 ms               |
+| ScaDS (Scans, kein Plan) | 77     | 25 ms          | 42 ms             | –                | –                   |
+
+In WebKit (Playwright, 12 gerenderte Fotos, Wanduhrzeit, Last um 12) braucht Planen im Median 129 ms (höchstens 305 ms), Anwenden 167 ms (höchstens 255 ms). Chromium liegt bei 31 und 35 ms.
 
 Geplant wird einmal je Seite beim Import im Worker. Angewandt wird bei jedem Zeichnen der Seite (Vorschau, Erkennung, Zeilen, Export), dazu kommt das Dekodieren des Bildes wie bisher.
 

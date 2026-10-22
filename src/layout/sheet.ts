@@ -46,11 +46,12 @@ export interface Sheet {
 
 function runningExtreme(
   plane: Plane,
+  data: Uint8Array,
   radius: number,
   horizontal: boolean,
-  pick: (a: number, b: number) => number,
+  brightest: boolean,
 ): Uint8Array {
-  const { width, height, data } = plane;
+  const { width, height } = plane;
   const out = new Uint8Array(data.length);
   const lines = horizontal ? height : width;
   const length = horizontal ? width : height;
@@ -58,9 +59,11 @@ function runningExtreme(
   for (let line = 0; line < lines; line += 1) {
     const base = horizontal ? line * width : line;
     for (let i = 0; i < length; i += 1) {
-      let value = data[base + i * stride] ?? 0;
-      for (let k = Math.max(0, i - radius); k <= Math.min(length - 1, i + radius); k += 1) {
-        value = pick(value, data[base + k * stride] ?? 0);
+      const to = Math.min(length - 1, i + radius);
+      let value = brightest ? 0 : 255;
+      for (let k = Math.max(0, i - radius); k <= to; k += 1) {
+        const sample = data[base + k * stride] ?? 0;
+        if (brightest ? sample > value : sample < value) value = sample;
       }
       out[base + i * stride] = value;
     }
@@ -69,10 +72,10 @@ function runningExtreme(
 }
 
 export function closeDark(plane: Plane, radius = CLOSE_RADIUS): Plane {
-  const step = (data: Uint8Array, horizontal: boolean, pick: (a: number, b: number) => number) =>
-    runningExtreme({ ...plane, data }, radius, horizontal, pick);
-  const dilated = step(step(plane.data, true, Math.max), false, Math.max);
-  return { ...plane, data: step(step(dilated, true, Math.min), false, Math.min) };
+  const step = (data: Uint8Array, horizontal: boolean, brightest: boolean) =>
+    runningExtreme(plane, data, radius, horizontal, brightest);
+  const dilated = step(step(plane.data, true, true), false, true);
+  return { ...plane, data: step(step(dilated, true, false), false, false) };
 }
 
 function scanLength(plane: Plane, side: Side): { scans: number; depth: number } {
@@ -168,21 +171,22 @@ function bestLine(points: readonly EdgePoint[], scans: number, depth: number): S
   const votes = new Int32Array(2 * slopes.length * bins);
   for (const { along, across, sign } of points) {
     const channel = sign > 0 ? 0 : 1;
-    slopes.forEach((slope, s) => {
-      const bin = Math.round(across - slope * along) + reach;
-      if (bin < 0 || bin >= bins) return;
+    for (let s = 0; s < slopes.length; s += 1) {
+      const bin = Math.round(across - (slopes[s] ?? 0) * along) + reach;
+      if (bin < 0 || bin >= bins) continue;
       const at = (channel * slopes.length + s) * bins + bin;
       votes[at] = (votes[at] ?? 0) + 1;
-    });
+    }
   }
   let best = -1;
   let bestVotes = 0;
-  votes.forEach((count, at) => {
+  for (let at = 0; at < votes.length; at += 1) {
+    const count = votes[at] ?? 0;
     if (count > bestVotes) {
       bestVotes = count;
       best = at;
     }
-  });
+  }
   if (best < 0) return null;
   const channel = Math.floor(best / (slopes.length * bins));
   const slope = slopes[Math.floor(best / bins) % slopes.length] ?? 0;

@@ -28,7 +28,7 @@ Eine Seite ohne Plan läuft durch denselben Code wie vorher und bleibt Pixel fü
 
 ## Folgen
 
-- Planen kostet je Seite rund 0,1 s auf 1200 px, Anwenden beim Zeichnen auf 2048 px rund 40 bis 60 ms (Messung in [Heftpapier, Phase 2: Fotos begradigen](../evaluations/2026-10-heftpapier.md#phase-2-fotos-begradigen)).
+- Planen kostet je Seite in WebKit, der Engine der Mac-App, rund 0,13 s auf 1200 px, Anwenden beim Zeichnen auf 2048 px rund 0,17 s (Messung in [Heftpapier, Phase 2: Fotos begradigen](../evaluations/2026-10-heftpapier.md#phase-2-fotos-begradigen)).
 - Fotos, die nur gedreht sind und keinen Tisch zeigen, bleiben unbegradigt, auch mit Heftlinien. Die Zeilensuche gleicht die Schräglage dort weiter selbst aus.
 - Auf blankem Papier ohne sichtbare Blattkante gibt es kein Maß für die Wölbung. Solche Fotos bleiben wie sie sind.
 - Ein Scan, dessen Heftlinien messbar auseinanderlaufen (etwa ein schief aufgelegtes Heft), wird begradigt. In den Messsätzen betrifft das eine von über 1100 Scanseiten.
