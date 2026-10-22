@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEUTSCH, ENGLISCH } from '../annotations/profile.ts';
 import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
@@ -10,6 +10,7 @@ import { page } from '../review/test-support.ts';
 import { createEstimator, DEFAULT_RATES } from './estimate.ts';
 import {
   countFinishedText,
+  createPowerHold,
   loadRunKind,
   neededRoles,
   openPageCount,
@@ -667,5 +668,73 @@ describe('startWorkload', () => {
   it('leaves out pages that are already read', () => {
     const count = runState({ a: entry('x'), b: entry('y') });
     expect(work('correct', count, plain)).toEqual({ read: 1, correct: 3, review: 0 });
+  });
+});
+
+function recorder() {
+  const calls: string[] = [];
+  const invoke = (command: string) => {
+    calls.push(command);
+    return Promise.resolve();
+  };
+  return { calls, invoke };
+}
+
+describe('createPowerHold', () => {
+  it('holds when a run starts and releases when it ends', async () => {
+    const { calls, invoke } = recorder();
+    const power = createPowerHold(invoke);
+    power.set(true);
+    power.set(false);
+    await vi.waitFor(() => expect(calls).toEqual(['power_hold', 'power_release']));
+  });
+
+  it('does not repeat a command while the state is unchanged', async () => {
+    const { calls, invoke } = recorder();
+    const power = createPowerHold(invoke);
+    power.set(false);
+    power.set(true);
+    power.set(true);
+    await vi.waitFor(() => expect(calls).toEqual(['power_hold']));
+  });
+
+  it('releases after a failed run just as after a finished one', async () => {
+    const { calls, invoke } = recorder();
+    const power = createPowerHold(invoke);
+    power.set(true);
+    power.set(false);
+    power.set(true);
+    power.set(false);
+    await vi.waitFor(() =>
+      expect(calls).toEqual(['power_hold', 'power_release', 'power_hold', 'power_release']),
+    );
+  });
+
+  it('keeps the commands in order when the first one is slow', async () => {
+    const calls: string[] = [];
+    const invoke = (command: string) => {
+      calls.push(command);
+      return command === 'power_hold'
+        ? new Promise<void>((resolve) => setTimeout(resolve, 30))
+        : Promise.resolve();
+    };
+    const power = createPowerHold(invoke);
+    power.set(true);
+    power.set(false);
+    await Promise.resolve();
+    expect(calls).toEqual(['power_hold']);
+    await vi.waitFor(() => expect(calls).toEqual(['power_hold', 'power_release']));
+  });
+
+  it('survives a rejected command and keeps working', async () => {
+    const calls: string[] = [];
+    const invoke = (command: string) => {
+      calls.push(command);
+      return calls.length === 1 ? Promise.reject(new Error('no backend')) : Promise.resolve();
+    };
+    const power = createPowerHold(invoke);
+    power.set(true);
+    power.set(false);
+    await vi.waitFor(() => expect(calls).toEqual(['power_hold', 'power_release']));
   });
 });
