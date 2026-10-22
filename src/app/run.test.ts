@@ -7,6 +7,7 @@ import type { PageEntry, RunState } from '../pipeline/runner.ts';
 import { IDLE_ENGINE, type ReviewEngine } from '../review/engine-phase.ts';
 import type { ReviewPage, ReviewPhase, ReviewState, RunStages } from '../review/review-flow.ts';
 import { page } from '../review/test-support.ts';
+import { createEstimator, DEFAULT_RATES } from './estimate.ts';
 import {
   countFinishedText,
   loadRunKind,
@@ -20,6 +21,7 @@ import {
   saveRunKind,
   startDecision,
   startRun,
+  startWorkload,
   type KindStorage,
   type Readiness,
 } from './run.ts';
@@ -283,12 +285,12 @@ describe('runProgress', () => {
   });
 
   it('counts finished pages while counting words and says when the model loads', () => {
-    const counting = runState({}, { batch: { total: 3, finished: 1 } });
+    const counting = runState({}, { batch: { total: 2, finished: 1 } });
     expect(runProgress(EMPTY_REVIEW, counting, IDLE_ENGINE, 0)).toEqual({
-      label: 'Seite 1 von 3',
+      label: 'Seite 1 von 2',
       detail: null,
       value: 1,
-      max: 3,
+      max: 2,
     });
     expect(
       runProgress(EMPTY_REVIEW, counting, { transcriber: 'starting', corrector: 'idle' }, 0)
@@ -296,12 +298,13 @@ describe('runProgress', () => {
     ).toBe('Modell wird geladen …');
   });
 
-  it('estimates the remaining time of counting once a page has been measured', () => {
-    const counting = runState(
-      {},
-      { batch: { total: 3, finished: 1 }, durationsMs: [30_000], runningSince: 0 },
+  it('estimates the remaining time of counting from the rule of thumb or the measured rate', () => {
+    const counting = runState({}, { batch: { total: 3, finished: 1 } });
+    expect(runProgress(EMPTY_REVIEW, counting, IDLE_ENGINE, 0)?.detail).toBe('noch etwa 1 min');
+    const slow = createEstimator({ ...DEFAULT_RATES, read: 90 });
+    expect(runProgress(EMPTY_REVIEW, counting, IDLE_ENGINE, 0, null, slow)?.detail).toBe(
+      'noch etwa 3 min',
     );
-    expect(runProgress(EMPTY_REVIEW, counting, IDLE_ENGINE, 0)?.detail).toBe('noch etwa 1 Minute');
   });
 
   it('fills one bar over all steps of a correction run without naming them', () => {
@@ -347,7 +350,7 @@ describe('runProgress', () => {
       expect(values[index]).toBeGreaterThanOrEqual(values[index - 1] ?? 0);
     }
     expect(progress.map((step) => step?.label)).toEqual(values.map((value) => `${value}\u00a0%`));
-    expect(progress.every((step) => step?.max === 100 && step.detail === null)).toBe(true);
+    expect(progress.every((step) => step?.max === 100)).toBe(true);
   });
 
   it('leaves out pages outside the run', () => {
@@ -359,22 +362,44 @@ describe('runProgress', () => {
     expect(runProgress(begin, halfRead, IDLE_ENGINE, 0, start)?.label).toBe('30\u00a0%');
   });
 
-  it('estimates the remaining time from the progress made since the start', () => {
+  it('starts from the rule of thumb for the steps of the run', () => {
+    const queued = runState({ a: pending('waiting'), b: pending('waiting') });
     const begin = reviewState(
       { a: waiting, b: waiting },
       { run: { phase: 'transcribing', total: 2, finished: 0 } },
     );
-    const start = startRun(begin, runState({ a: pending('waiting'), b: pending('waiting') }), 0);
-    expect(
-      runProgress(begin, runState({ a: pending('running') }), IDLE_ENGINE, 30_000, start)?.detail,
-    ).toBeNull();
+    const start = startRun(begin, queued, 0);
+    expect(runProgress(begin, queued, IDLE_ENGINE, 0, start)?.detail).toBe('noch etwa 2 min');
     const halfTranscribed = runState({ a: pending('done'), b: pending('running') });
-    expect(runProgress(begin, halfTranscribed, IDLE_ENGINE, 60_000, start)?.detail).toBe(
-      'noch etwa 3 Minuten',
+    expect(runProgress(begin, halfTranscribed, IDLE_ENGINE, 0, start)?.detail).toBe(
+      'noch etwa 1 min',
     );
   });
 
-  it('waits for real progress before estimating a run whose pages were already read', () => {
+  const run = (stages: RunStages) =>
+    reviewState(
+      { a: waiting, b: waiting },
+      { run: { phase: 'transcribing', total: 2, finished: 0, stages } },
+    );
+
+  it('adds the content review of the arbeiten to the estimate when it is chosen', () => {
+    const queued = runState({ a: pending('waiting'), b: pending('waiting') });
+    const arbeiten = [{ pages: [{ id: 'a' }] }, { pages: [{ id: 'b' }] }];
+    const estimate = (stages: RunStages) => {
+      const begin = run(stages);
+      return runProgress(begin, queued, IDLE_ENGINE, 0, startRun(begin, queued, 0, arbeiten))
+        ?.detail;
+    };
+    expect(estimate({ pages: true, review: false })).toBe('noch etwa 2 min');
+    const slowReview = createEstimator({ ...DEFAULT_RATES, review: 120 });
+    const begin = run({ pages: true, review: true });
+    const start = startRun(begin, queued, 0, arbeiten);
+    expect(runProgress(begin, queued, IDLE_ENGINE, 0, start, slowReview)?.detail).toBe(
+      'noch etwa 6 min',
+    );
+  });
+
+  it('shows no estimate for a run whose pages were already read and corrected soon', () => {
     const transcribed = runState({ a: pending('done'), b: pending('done') });
     const begin = reviewState(
       { a: waiting, b: waiting },
@@ -570,16 +595,15 @@ describe('progress of the content review phase', () => {
   it('shows the percentage of a review-only run and estimates its time', () => {
     const begin = inRun('reviewing', 4, 0, reviewOnly);
     const start = startRun(begin, finishedCount, 0);
-    expect(start).toEqual({ pageIds: [], at: 0, fraction: 0 });
+    expect(start).toEqual({ pageIds: [], works: 0, at: 0, fraction: 0 });
 
     const quarter = inRun('reviewing', 4, 1, reviewOnly);
     expect(runProgress(quarter, finishedCount, IDLE_ENGINE, 10_000, start)).toEqual({
       label: '25\u00a0%',
-      detail: 'noch etwa 30 Sekunden',
+      detail: 'noch etwa 1 min',
       value: 25,
       max: 100,
     });
-    expect(runProgress(begin, finishedCount, IDLE_ENGINE, 10_000, start)?.detail).toBeNull();
   });
 
   it('shows the percentage of the review part within a run that also corrects pages', () => {
@@ -616,5 +640,32 @@ describe('progress of the content review phase', () => {
       label: 'Wird abgebrochen …',
       value: null,
     });
+  });
+});
+
+describe('startWorkload', () => {
+  const pages = [page('a'), page('b'), page('c')];
+  const arbeiten = [{ pages: [pages[0]!, pages[1]!] }, { pages: [pages[2]!] }];
+  const content: CorrectionScope = {
+    ...DEFAULT_SCOPE,
+    content: true,
+    assignment: 'Beschreibe deinen Tag.',
+  };
+  const plain: CorrectionScope = { ...DEFAULT_SCOPE, spelling: true, content: false };
+  const work = (kind: 'count' | 'correct', count: RunState, scope: CorrectionScope) =>
+    startWorkload(kind, pages, arbeiten, count, reviewState({}), DEUTSCH, scope);
+
+  it('counts only the reading for the word count', () => {
+    expect(work('count', runState({}), plain)).toEqual({ read: 3, correct: 0, review: 0 });
+  });
+
+  it('adds correcting and reviewing for the chosen scope', () => {
+    expect(work('correct', runState({}), plain)).toEqual({ read: 3, correct: 3, review: 0 });
+    expect(work('correct', runState({}), content).review).toBe(2);
+  });
+
+  it('leaves out pages that are already read', () => {
+    const count = runState({ a: entry('x'), b: entry('y') });
+    expect(work('correct', count, plain)).toEqual({ read: 1, correct: 3, review: 0 });
   });
 });

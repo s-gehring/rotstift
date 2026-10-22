@@ -27,14 +27,15 @@ Das Fenster hat eine Kopfzeile und darunter genau eine von zwei Ansichten.
 
 ### Ablauf und Hauptaktion
 
-| Zustand            | Hauptaktion oben rechts                                                                  |
-| ------------------ | ---------------------------------------------------------------------------------------- |
-| Keine Arbeiten     | keine, die Ablagefläche füllt das Fenster                                                |
-| Arbeiten geladen   | Fach-Auswahl und „Korrigieren“, im Pfeilmenü daneben „Nur Wörter zählen“                 |
-| Lauf               | Fortschritt in der Kopfzeile („Seite 12 von 61“, Restzeit sobald schätzbar), „Abbrechen“ |
-| Fertig             | „Exportieren“ mit Menü                                                                   |
-| Neue Arbeiten dazu | wieder „Korrigieren“ bzw. „Wörter zählen“, läuft nur für das Fehlende                    |
+| Zustand            | Hauptaktion oben rechts                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| Keine Arbeiten     | keine, die Ablagefläche füllt das Fenster                                                         |
+| Arbeiten geladen   | Fach-Auswahl und „Korrigieren“, im Pfeilmenü daneben „Nur Wörter zählen“                          |
+| Lauf               | Fortschritt in der Kopfzeile („Seite 12 von 61“, „noch etwa 12 min“ ab einer Minute), „Abbrechen“ |
+| Fertig             | „Exportieren“ mit Menü                                                                            |
+| Neue Arbeiten dazu | wieder „Korrigieren“ bzw. „Wörter zählen“, läuft nur für das Fehlende                             |
 
+- **Restzeit:** Sie startet mit einer Faustregel je Schritt (30 s je Seite Erkennung, 15 s je Seite Korrektur, 20 s je Arbeit Inhalt und Form) und lernt aus den gemessenen Zeiten des Laufs. Es zählen nur die gewählten Schritte und die offenen Seiten. Die zuletzt gemessenen Sekunden je Schritt bleiben lokal gespeichert. Vor dem Start steht die Dauer nur im Tooltip der Hauptaktion („etwa 20 min“).
 - **Korrigieren** erkennt den Text und korrigiert ihn. Die Wortzahl fällt dabei mit ab. **Nur Wörter zählen** erkennt nur und braucht kein Korrekturmodell. Die zuletzt gewählte Art bleibt die Hauptaktion.
 - **Fach** ist ein kleines Aufklappfeld links neben dem Knopf. Der Knopf zeigt das Fach, darin stehen Fach, Rechtschreibung, Grammatik und Aufgabenstellung ([0007](0007-korrekturumfang.md)). Die Sprache folgt aus dem Fach und wird nicht gesondert gewählt. Welche Kürzel markiert werden, steht nicht in der Oberfläche.
 - **Exportieren** bietet: Klassen-PDF, Tabelle (CSV), Tabelle kopieren. In der Arbeit-Ansicht zusätzlich und zuerst „Diese Arbeit als PDF“. Gespeichert wird immer über den Systemdialog mit vorgeschlagenem Namen. Erfolg zeigt eine kurze Meldung, die von selbst verschwindet.

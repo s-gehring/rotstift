@@ -5,7 +5,6 @@ import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { DownloadError } from '../models/types.ts';
-import { describeProgress, formatRemaining } from '../pipeline/progress.ts';
 import { startablePages, type RunState } from '../pipeline/runner.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import {
@@ -18,6 +17,15 @@ import {
 import { engineText, type ReviewEngine } from '../review/engine-phase.ts';
 import type { ReviewPhase, ReviewRun, ReviewState, ReviewStatus } from '../review/review-flow.ts';
 import { pageCondition, summarizeClass } from '../review/summary.ts';
+import {
+  createEstimator,
+  NO_WORK,
+  remainingSeconds,
+  remainingText,
+  type Estimator,
+  type Snapshot,
+  type Workload,
+} from './estimate.ts';
 import type { ModelRole, RunKind, RunProgress } from './types.ts';
 
 export const RUN_KIND_STORAGE_KEY = 'rotstift.run-kind';
@@ -86,6 +94,21 @@ export function startDecision(
   return { action: 'launch' };
 }
 
+function openPages(
+  kind: RunKind,
+  pages: readonly ImportPage[],
+  count: RunState,
+  review: ReviewState,
+  profile: CorrectionProfile,
+): readonly ImportPage[] {
+  if (kind === 'count') return startablePages(pages, count).queue;
+  if (review.profile !== null && review.profile.id !== profile.id) return pages;
+  return pages.filter((page) => {
+    const condition = pageCondition(page, review.pages[page.id], count.entries);
+    return condition !== 'corrected' && condition !== 'empty';
+  });
+}
+
 export function openPageCount(
   kind: RunKind,
   pages: readonly ImportPage[],
@@ -93,12 +116,33 @@ export function openPageCount(
   review: ReviewState,
   profile: CorrectionProfile,
 ): number {
-  if (kind === 'count') return startablePages(pages, count).queue.length;
-  if (review.profile !== null && review.profile.id !== profile.id) return pages.length;
-  return pages.filter((page) => {
-    const condition = pageCondition(page, review.pages[page.id], count.entries);
-    return condition !== 'corrected' && condition !== 'empty';
-  }).length;
+  return openPages(kind, pages, count, review, profile).length;
+}
+
+type ArbeitPages = readonly { readonly pages: readonly { readonly id: string }[] }[];
+
+function worksTouching(arbeiten: ArbeitPages, pageIds: ReadonlySet<string>): number {
+  return arbeiten.filter((arbeit) => arbeit.pages.some((page) => pageIds.has(page.id))).length;
+}
+
+export function startWorkload(
+  kind: RunKind,
+  pages: readonly ImportPage[],
+  arbeiten: ArbeitPages,
+  count: RunState,
+  review: ReviewState,
+  profile: CorrectionProfile,
+  scope: CorrectionScope,
+): Workload {
+  const open = openPages(kind, pages, count, review, profile);
+  const read = open.filter((page) => count.entries[page.id]?.status !== 'done').length;
+  if (kind === 'count') return { ...NO_WORK, read };
+  const ids = new Set(open.map((page) => page.id));
+  return {
+    read,
+    correct: scope.spelling || scope.grammar ? open.length : 0,
+    review: reviewsContent(scope) ? worksTouching(arbeiten, ids) : 0,
+  };
 }
 
 const PAGE_WEIGHT = { transcribing: 0.6, locating: 0.05, correcting: 0.35 } as const;
@@ -131,6 +175,7 @@ const LOADING_TEXT = 'Modell wird geladen …';
 
 export interface RunStart {
   readonly pageIds: readonly string[];
+  readonly works: number;
   readonly at: number;
   readonly fraction: number;
 }
@@ -167,22 +212,66 @@ export function reviewFraction(
   return transcribing + locating + correcting + reviewing * share(run.finished, run.total);
 }
 
-export function startRun(review: ReviewState, count: RunState, at: number): RunStart {
+export function startRun(
+  review: ReviewState,
+  count: RunState,
+  at: number,
+  arbeiten: ArbeitPages = [],
+): RunStart {
   const pageIds = activePageIds(review);
-  return { pageIds, at, fraction: reviewFraction(review, count, pageIds) };
+  return {
+    pageIds,
+    works: worksTouching(arbeiten, new Set(pageIds)),
+    at,
+    fraction: reviewFraction(review, count, pageIds),
+  };
 }
 
-function countRemaining(count: RunState, now: number): string | null {
-  const progress = describeProgress(count, now);
-  if (progress === null || progress.remainingMs === null) return null;
-  return `noch ${formatRemaining(progress.remainingMs)}`;
+export function runSnapshot(
+  review: ReviewState,
+  count: RunState,
+  start: RunStart | null,
+): Snapshot | null {
+  const { run } = review;
+  if (run === null) {
+    const { batch } = count;
+    if (batch === null) return null;
+    return { step: 'read', left: { ...NO_WORK, read: Math.max(0, batch.total - batch.finished) } };
+  }
+  const pageIds = start?.pageIds ?? activePageIds(review);
+  const pagesStage = run.stages?.pages !== false;
+  const reviewLeft = run.stages?.review === true ? (start?.works ?? 0) : 0;
+  const status = (id: string) => count.entries[id]?.status;
+  if (run.phase === 'transcribing') {
+    return {
+      step: 'read',
+      left: {
+        read: pageIds.filter((id) => status(id) !== 'done' && status(id) !== 'error').length,
+        correct: pagesStage ? pageIds.filter((id) => status(id) !== 'error').length : 0,
+        review: reviewLeft,
+      },
+    };
+  }
+  const left = Math.max(0, run.total - run.finished);
+  if (run.phase === 'locating') {
+    return { step: 'correct', left: { read: 0, correct: run.total, review: reviewLeft } };
+  }
+  if (run.phase === 'correcting') {
+    return { step: 'correct', left: { read: 0, correct: left, review: reviewLeft } };
+  }
+  return { step: 'review', left: { read: 0, correct: 0, review: left } };
 }
 
-function reviewRemaining(fraction: number, start: RunStart, now: number): string | null {
-  const gained = fraction - start.fraction;
-  const elapsed = now - start.at;
-  if (gained <= 0 || elapsed <= 0) return null;
-  return `noch ${formatRemaining((elapsed * (1 - fraction)) / gained)}`;
+function remainingDetail(
+  review: ReviewState,
+  count: RunState,
+  start: RunStart | null,
+  estimator: Estimator,
+  now: number,
+): string | null {
+  const snapshot = runSnapshot(review, count, start);
+  if (snapshot === null) return null;
+  return remainingText(remainingSeconds(estimator, snapshot, now));
 }
 
 function pagesLabel(finished: number, total: number): string {
@@ -195,6 +284,7 @@ export function runProgress(
   engine: ReviewEngine,
   now: number,
   start: RunStart | null = null,
+  estimator: Estimator = createEstimator(),
 ): RunProgress | null {
   const { run } = review;
   if (run !== null) {
@@ -205,11 +295,7 @@ export function runProgress(
     const loading = engineText(run, engine) !== null;
     return {
       label: `${percent}\u00a0%`,
-      detail: loading
-        ? LOADING_TEXT
-        : start === null
-          ? null
-          : reviewRemaining(fraction, start, now),
+      detail: loading ? LOADING_TEXT : remainingDetail(review, count, start, estimator, now),
       value: percent,
       max: 100,
     };
@@ -218,7 +304,10 @@ export function runProgress(
   if (batch === null) return null;
   return {
     label: pagesLabel(batch.finished, batch.total),
-    detail: engine.transcriber === 'starting' ? LOADING_TEXT : countRemaining(count, now),
+    detail:
+      engine.transcriber === 'starting'
+        ? LOADING_TEXT
+        : remainingDetail(review, count, start, estimator, now),
     value: batch.finished,
     max: batch.total,
   };

@@ -22,6 +22,16 @@ import { useReview } from '../review/use-review.ts';
 import { useGrading } from '../stats/use-grading.ts';
 import { useWeighting } from '../stats/use-weighting.ts';
 import { useToast } from '../ui/Toast.tsx';
+import {
+  createEstimator,
+  durationText,
+  endRun,
+  type Estimator,
+  loadRates,
+  observe,
+  saveRates,
+  totalSeconds,
+} from './estimate.ts';
 import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts';
 import {
   countFinishedText,
@@ -31,9 +41,11 @@ import {
   readiness,
   reviewFinishedText,
   runProgress,
+  runSnapshot,
   saveRunKind,
   startDecision,
   startRun,
+  startWorkload,
   type Readiness,
   type RunStart,
 } from './run.ts';
@@ -60,21 +72,44 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function useRunStart(flow: ReviewFlow, runner: Runner): RunStart | null {
-  const [start, setStart] = useState<RunStart | null>(null);
-  useEffect(
-    () =>
-      flow.subscribe(() => {
-        const review = flow.getState();
-        const at = performance.now();
-        setStart((current) => {
-          if (review.run === null) return null;
-          return current ?? startRun(review, runner.getState(), at);
-        });
-      }),
-    [flow, runner],
-  );
-  return start;
+interface RunClock {
+  readonly start: RunStart | null;
+  readonly estimator: Estimator;
+}
+
+function useRunClock(
+  flow: ReviewFlow,
+  runner: Runner,
+  arbeiten: AppModel['importState']['arbeiten'],
+): RunClock {
+  const [clock, setClock] = useState<RunClock>(() => ({
+    start: null,
+    estimator: createEstimator(loadRates()),
+  }));
+  useEffect(() => {
+    const update = () => {
+      const review = flow.getState();
+      const count = runner.getState();
+      const at = performance.now();
+      setClock((current) => {
+        const start =
+          review.run === null ? null : (current.start ?? startRun(review, count, at, arbeiten));
+        const snapshot = runSnapshot(review, count, start);
+        const estimator =
+          snapshot === null ? endRun(current.estimator) : observe(current.estimator, snapshot, at);
+        return start === current.start && estimator === current.estimator
+          ? current
+          : { start, estimator };
+      });
+    };
+    const unsubscribe = [flow.subscribe(update), runner.subscribe(update)];
+    return () => {
+      for (const stop of unsubscribe) stop();
+    };
+  }, [flow, runner, arbeiten]);
+  const { rates } = clock.estimator;
+  useEffect(() => saveRates(rates), [rates]);
+  return clock;
 }
 
 function useNavigation(arbeiten: AppModel['importState']['arbeiten']): Navigation {
@@ -155,7 +190,12 @@ export function useAppModel(): AppModel {
   const reviewing = review.state.run !== null;
   const running = reviewing || isCounting(count.state);
   const now = useNow(running);
-  const runStart = useRunStart(review.flow, count.runner);
+  const { start: runStart, estimator } = useRunClock(
+    review.flow,
+    count.runner,
+    importState.arbeiten,
+  );
+  const { rates } = estimator;
 
   const [kind, setStoredKind] = useState<RunKind>(() => loadRunKind());
   const setKind = useCallback((next: RunKind) => {
@@ -188,9 +228,27 @@ export function useAppModel(): AppModel {
     return null;
   };
 
+  const estimateText = (wanted: RunKind) => {
+    const work = startWorkload(
+      wanted,
+      pages,
+      importState.arbeiten,
+      count.state,
+      review.state,
+      profile,
+      scope,
+    );
+    return durationText(totalSeconds(rates, work));
+  };
+
   const openPages = {
     count: openPageCount('count', pages, count.state, review.state, profile),
     correct: openPageCount('correct', pages, count.state, review.state, profile),
+  };
+
+  const estimates = {
+    count: estimateText('count'),
+    correct: estimateText('correct'),
   };
 
   const cancelled = useRef(false);
@@ -286,7 +344,7 @@ export function useAppModel(): AppModel {
       running,
       stopping: review.state.stopping,
       progress: running
-        ? (runProgress(review.state, count.state, engine, now, runStart) ?? {
+        ? (runProgress(review.state, count.state, engine, now, runStart, estimator) ?? {
             label: 'Wird vorbereitet …',
             detail: null,
             value: null,
@@ -294,6 +352,7 @@ export function useAppModel(): AppModel {
           })
         : null,
       openPages,
+      estimates,
       done: {
         count: pages.length > 0 && openPages.count === 0,
         correct: pages.length > 0 && openPages.correct === 0,
