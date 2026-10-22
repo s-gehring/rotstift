@@ -262,7 +262,7 @@ export function useAppModel(): AppModel {
     if (wanted !== kind) setKind(wanted);
     if (running || pages.length === 0) return;
     if (wanted === 'correct' && (needsAssignment(scope) || needsFormName(scope))) {
-      setMissing(needsAssignment(scope) ? 'assignment' : 'formName');
+      setMissing(needsFormName(scope) ? 'formName' : 'assignment');
       return;
     }
     const decision = startDecision(wanted, roleReadiness, scope);
