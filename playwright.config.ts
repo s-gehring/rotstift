@@ -15,7 +15,13 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'webkit-start',
+      testMatch: 'webkit-start.setup.ts',
+      timeout: 120_000,
+      use: { ...devices['Desktop Safari'] },
+    },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, dependencies: ['webkit-start'] },
   ],
   webServer: {
     command: `pnpm exec vite --port ${PORT} --strictPort`,
