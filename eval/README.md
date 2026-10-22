@@ -207,3 +207,32 @@ ROTSTIFT_INTEGRATION=1 ROTSTIFT_CLASS=<Ordner> ROTSTIFT_CLASS_LABEL=t4-voll ROTS
 
 - `render.py --content-form` teilt jeden Text aus `samples/content-form/` in zwei Seiten, das ergibt 10 Arbeiten zu je 2 Seiten. Eine Arbeit sind alle Bilder mit gleichem Namen vor `-1.jpg`, `-2.jpg`.
 - `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
+
+## Gründlicher Modus
+
+Misst, was mehr Rechenzeit oder größere Modelle je Schritt an Qualität bringen und ob es auf 8 GB ohne GPU in etwa 3 min je Seite passt. Der Bericht steht in [docs/evaluations/2026-10-gruendlich.md](../docs/evaluations/2026-10-gruendlich.md).
+
+```bash
+node --experimental-transform-types eval/download-models.ts --models gemma-4-26b-a4b-q4,gemma-4-e4b-q8,mtp-gemma-4-e4b
+node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-26b-a4b-q4 --threads 8 --out <Ergebnisse>/profiles-de-26b.json
+node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --passes 2 --out <Ergebnisse>/profiles-de-e4b-2x.json
+EVAL_SERVER_ARGS="--spec-type ngram-simple" node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --out <Ergebnisse>/profiles-de-e4b-ngram.json
+node --experimental-transform-types eval/gruendlich-union.ts --votes 1 <Ergebnisse>/profiles-de-e2b.json <Ergebnisse>/profiles-de-e4b.json
+node --experimental-transform-types eval/gruendlich-zweite-lesung.ts --ocr <GLM-OCR.json> --second <LightOnOCR.json> --corrections <Korrekturlauf.json> --rules 0.95/0.95,0.8/1.01
+```
+
+- `model-candidates.ts` enthält zusätzlich Gemma 4 E2B und E4B in Q8_0, Gemma 4 26B A4B, Qwen3.6 35B A3B und Qwen3.5 9B sowie `gemma-4-e4b-q4-denken` (dieselbe Datei mit 12288 Kontext und 8192 Ausgabe-Token, gedacht für `EVAL_SERVER_ARGS="--reasoning on"`). `download-models.ts` lädt sie und die MTP-Köpfe für spekulatives Dekodieren (`mtp-gemma-4-e2b`, `mtp-gemma-4-e4b`, `mtp-gemma-4-26b-a4b`).
+- `EVAL_SERVER_ARGS` hängt Argumente an jeden llama-server der Eval an, nach denen des Skripts, sodass sie gewinnen. Beispiele: `--reasoning on`, `--spec-type ngram-simple`, `--spec-type draft-mtp --model-draft <Pfad zum MTP-Kopf>`, `-ctk q8_0 -ctv q8_0`.
+- `profiles.ts --passes N` lässt das Modell seine eigene Korrektur N-mal überarbeiten. Die Marken entstehen wie in der App aus dem Vergleich von Original und letzter Fassung.
+- `gruendlich-union.ts` vereinigt die Marken mehrerer `profiles.ts`-Läufe (`--votes 1`) oder behält nur Marken, die mindestens `--votes` Läufe an derselben Stelle setzen, und wertet neu aus.
+- `gruendlich-zweite-lesung.ts` nimmt eine zweite Erkennung derselben Seiten (`--second`, aus `ocr-run.ts`) und richtet sie Wort für Wort am Transkript aus (Levenshtein über Wörter). Eine Regel `a/b` macht eine Marke zum Hinweis „unsicher gelesen“, wenn ein berührtes Wort von der zweiten Lesung bestätigt ist und seine Lesesicherheit unter `a` liegt oder unbestätigt ist und unter `b` liegt. `0.95/0.95` ist die App heute, `b` über 1 heißt „unbestätigt ist immer ein Hinweis“. Kennzahlen wie bei `hints.ts`.
+- **Speicherdeckel** (Linux mit systemd und cgroup v2, ohne Root): Modelldatei vorher aus dem Seitencache werfen, sonst zählen ihre Seiten nicht zum Deckel, dann den Lauf in einem eigenen Scope starten:
+
+  ```bash
+  python3 -I -c 'import os,sys; [os.posix_fadvise(os.open(p, os.O_RDONLY), 0, 0, os.POSIX_FADV_DONTNEED) for p in sys.argv[1:]]' ~/.cache/rotstift/models/*.gguf
+  systemd-run --user --scope -p MemoryMax=4608M -p MemorySwapMax=0 -- node --experimental-transform-types eval/profiles.ts --set de --model gemma-4-e4b-q4 --threads 4 --out <Ergebnis.json>
+  ```
+
+  `memory.peak`, `memory.events` und `workingset_refault_file` im Scope zeigen, ob der Deckel griff und wie oft Seiten der Modelldatei neu gelesen wurden. Die Gemma-Modelle laufen in der Eval mit `--no-repack` (`cpuRepack: false`), ihre Gewichte bleiben dadurch Seiten der Datei, die der Kernel unter dem Deckel verwerfen und neu lesen kann.
+
+- `EVAL_MAX_TOKENS` setzt in `content-form.ts` die Ausgabegrenze je Merkmalsfrage der Variante `features` (Standard 96). Mit `--reasoning on` braucht das Modell dafür mehrere Tausend Token.

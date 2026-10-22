@@ -103,7 +103,7 @@ async function featureReview(
         messages: request.messages,
         temperature,
         seed,
-        max_tokens: 96,
+        max_tokens: Number(process.env['EVAL_MAX_TOKENS'] ?? 96),
         response_format: {
           type: 'json_schema',
           json_schema: { name: 'antwort', schema: request.schema },
