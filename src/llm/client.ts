@@ -74,6 +74,7 @@ export function createLlmClient(invoke: Invoke = tauriInvoke, route: ChatRoute =
   return {
     startModel: (modelId: string) => call<RuntimeStatus>('llm_start_model', { modelId }),
     stop: () => call<RuntimeStatus>('llm_stop'),
+    stopIfIdle: (idleMs: number) => call<boolean>('llm_stop_if_idle', { idleMs }),
     status: () => call<RuntimeStatus>('llm_status'),
     chat,
     async complete(request: ChatRequest, options: ChatOptions = {}): Promise<Completion> {

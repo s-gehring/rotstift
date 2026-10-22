@@ -315,6 +315,20 @@ impl LlmRuntime {
         RuntimeStatus::Stopped
     }
 
+    pub fn stop_if_idle(&self, idle_ms: u64) -> bool {
+        let Ok(_starting) = self.starting.try_lock() else {
+            return false;
+        };
+        let requests = self.requests();
+        if !requests.pending.is_empty() || self.lock().server.is_none() {
+            return false;
+        }
+        self.stop();
+        drop(requests);
+        diagnostics::record("sidecar_idle_stop", json!({ "idleMs": idle_ms }));
+        true
+    }
+
     pub async fn start(
         &self,
         paths: &RuntimePaths,
@@ -1220,6 +1234,33 @@ mod tests {
             assert!(runtime.requests().pending.is_empty());
             assert!(!runtime.is_busy());
             runtime.stop();
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn idle_stop_spares_a_running_request_and_ends_an_idle_sidecar() {
+            let port = fake_server(false);
+            let paths = fake_sidecar("idle-stop", &format!("{}\nexec sleep 30", listening(port)));
+            let runtime = Arc::new(LlmRuntime::new());
+            assert!(!runtime.stop_if_idle(1));
+            runtime.start(&paths, options("model.gguf")).await.unwrap();
+            let chat = {
+                let runtime = Arc::clone(&runtime);
+                tokio::spawn(async move {
+                    let request = json!({ "messages": [{ "role": "user", "content": "x" }] });
+                    runtime.chat(Some("r1".into()), request).await
+                })
+            };
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            assert!(!runtime.stop_if_idle(1));
+            assert!(matches!(
+                runtime.status().await,
+                RuntimeStatus::Ready { .. }
+            ));
+            assert!(runtime.cancel("r1"));
+            assert_eq!(chat.await.unwrap(), Err(LlmError::Cancelled));
+            assert!(runtime.stop_if_idle(1));
+            assert_eq!(runtime.status().await, RuntimeStatus::Stopped);
+            assert_eq!(records(&paths), 0);
         }
 
         #[tokio::test]
