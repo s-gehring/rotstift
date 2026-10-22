@@ -265,6 +265,7 @@ function ModelSection({
             candidateState === 'corrupt' ||
             (setup.state.statuses[candidate.id]?.downloadedBytes ?? 0) > 0;
           const origin = customSource(candidate);
+          const tooLarge = exceedsMemory(candidate, ram);
           return (
             <div key={candidate.id} className="settings-model">
               <label className="settings-model-label">
@@ -285,11 +286,13 @@ function ModelSection({
                   <span className="settings-model-line">
                     <span className="settings-model-name">{candidate.displayName}</span>
                     <span className="settings-model-size">{formatSize(totalBytes(candidate))}</span>
-                    <span
-                      className="settings-model-need"
-                      data-warn={exceedsMemory(candidate, ram) ? 'true' : undefined}
-                    >
+                    <span className="settings-model-need" data-warn={tooLarge ? 'true' : undefined}>
                       braucht etwa {formatSize(estimateRamBytes(candidate, ram))}
+                      {tooLarge && (
+                        <span className="visually-hidden">
+                          , mehr als der verfügbare Arbeitsspeicher
+                        </span>
+                      )}
                     </span>
                     <span className="settings-model-state" data-state={candidateState ?? 'unknown'}>
                       {candidateState === null ? '' : STATE_TEXT[candidateState]}

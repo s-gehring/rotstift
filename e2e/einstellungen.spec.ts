@@ -31,6 +31,12 @@ test.describe('on a laptop with 8 GB', () => {
     await expect(
       modelRow(recognition, /^Qwen3-VL/u).locator('.settings-model-need'),
     ).toHaveAttribute('data-warn', 'true');
+    await expect(recognition.getByRole('radio', { name: /^Qwen3-VL/u })).toHaveAccessibleName(
+      /braucht etwa .*, mehr als der verfügbare Arbeitsspeicher/u,
+    );
+    await expect(recognition.getByRole('radio', { name: /^GLM-OCR/u })).not.toHaveAccessibleName(
+      /Arbeitsspeicher/u,
+    );
     await expect(dialog.getByText(`· ${LOCAL}`)).toBeVisible();
   });
 
