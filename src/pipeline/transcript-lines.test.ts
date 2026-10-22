@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { countWords } from '../stats/count-words.ts';
-import { hasRepetitionLoop, parseTranscript, splitTranscript } from './transcript-lines.ts';
+import {
+  hasRepetitionLoop,
+  isDegenerateAnswer,
+  parseTranscript,
+  splitTranscript,
+} from './transcript-lines.ts';
 
 describe('splitTranscript', () => {
   it('splits plain answers into lines and trims the edges', () => {
@@ -150,6 +155,39 @@ describe('hasRepetitionLoop', () => {
     expect(hasRepetitionLoop(Array.from({ length: 10 }, () => 'Ich darf nicht schwatzen.'))).toBe(
       false,
     );
+  });
+
+  it('keeps enumerations, shared sentence openings and repeated words in real texts', () => {
+    const enumeration = [
+      'Ich habe Äpfel, Birnen, Bananen, Kirschen, Pflaumen, Trauben, Orangen,',
+      'Zitronen, Mandarinen, Erdbeeren, Himbeeren, Brombeeren und Heidelbeeren gekauft.',
+    ];
+    const openings = Array.from(
+      { length: 12 },
+      (_, index) => `Am Tag ${index + 1} sind wir früh aufgestanden und haben gefrühstückt.`,
+    );
+    const stutter = ['Es war sehr, sehr, sehr, sehr, sehr, sehr kalt und nass.'];
+    const ladder = Array.from({ length: 15 }, (_, index) => `Wir gehen ${index + 1} Schritte.`);
+    for (const lines of [enumeration, openings, stutter, ladder]) {
+      expect(hasRepetitionLoop(lines)).toBe(false);
+    }
+  });
+});
+
+describe('isDegenerateAnswer', () => {
+  it('flags answers that ran into the token limit, whatever they say', () => {
+    expect(isDegenerateAnswer('length', ['Ein ganz normaler Satz.'])).toBe(true);
+    expect(isDegenerateAnswer('stop', ['Ein ganz normaler Satz.'])).toBe(false);
+    expect(isDegenerateAnswer(null, ['Ein ganz normaler Satz.'])).toBe(false);
+  });
+
+  it('flags a finished answer that is one long loop', () => {
+    expect(
+      isDegenerateAnswer(
+        'stop',
+        Array.from({ length: 40 }, () => 'und so weiter ging es'),
+      ),
+    ).toBe(true);
   });
 });
 

@@ -5,6 +5,7 @@ import { recommendModel } from '../models/registry.ts';
 import {
   createLlmTranscriber,
   describeLlmError,
+  RETRY_REPEAT_PENALTY,
   type EngineClient,
   type LlmTranscriberDeps,
 } from './llm-transcriber.ts';
@@ -218,15 +219,11 @@ async function run(text: Completion) {
 }
 
 describe('incomplete answers', () => {
-  it('fails instead of counting a page whose answer was cut off', async () => {
+  it('fails instead of counting a page whose answer was cut off twice', async () => {
     const result = await run(answer('Erste Zeile\nZweite Zeile\nDritte Zei', 'length'));
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
-      error: {
-        kind: 'failed',
-        message:
-          'Die Antwort des Modells war unvollständig. Bitte die Seite erneut erkennen lassen.',
-      },
+      error: { kind: 'failed', message: expect.stringContaining('zweiten Versuch') },
     });
   });
 
@@ -268,6 +265,65 @@ describe('incomplete answers', () => {
       ok: true,
       lines: ['Hallo Welt'],
     });
+  });
+});
+
+describe('repetition loops', () => {
+  const loop = answer('und dann sind wir\n'.repeat(200), 'length');
+  const good = answer('Am Montag sind wir in den Wald gegangen.');
+
+  it('asks again with a repeat penalty and uses the second answer', async () => {
+    const engine = client();
+    engine.complete.mockResolvedValueOnce(loop).mockResolvedValueOnce(good);
+    const phases: string[] = [];
+    const result = await transcriber(engine).transcribe(
+      png,
+      new AbortController().signal,
+      (phase) => phases.push(phase),
+    );
+    expect(result).toMatchObject({ ok: true, lines: ['Am Montag sind wir in den Wald gegangen.'] });
+    expect(engine.complete).toHaveBeenCalledTimes(2);
+    const [first, second] = engine.complete.mock.calls.map(([request]) => request);
+    expect(first).not.toHaveProperty('repeat_penalty');
+    expect(second?.repeat_penalty).toBe(RETRY_REPEAT_PENALTY);
+    expect(second?.messages).toEqual(first?.messages);
+    expect(phases).toContain('request');
+  });
+
+  it('retries a loop the model ended by itself', async () => {
+    const engine = client();
+    engine.complete
+      .mockResolvedValueOnce(answer('und dann sind wir gegangen\n'.repeat(200)))
+      .mockResolvedValueOnce(good);
+    expect((await transcriber(engine).transcribe(png, new AbortController().signal)).ok).toBe(true);
+    expect(engine.complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports the page as failed when the second try loops as well', async () => {
+    const engine = client();
+    engine.complete.mockResolvedValue(loop);
+    const result = await transcriber(engine).transcribe(png, new AbortController().signal);
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: 'failed', message: expect.stringContaining('Wiederholung') },
+    });
+    expect(engine.complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks only once for answers that look fine', async () => {
+    const engine = client();
+    const refrain = answer('Ich darf nicht schwatzen.\n'.repeat(10));
+    engine.complete.mockResolvedValue(refrain);
+    const result = await transcriber(engine).transcribe(png, new AbortController().signal);
+    expect(result.ok).toBe(true);
+    expect(engine.complete).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry when only reasoning text came back', async () => {
+    const engine = client();
+    engine.complete.mockResolvedValue(answer('<think>\nnur gedacht', 'length'));
+    await transcriber(engine).transcribe(png, new AbortController().signal);
+    expect(engine.complete).toHaveBeenCalledOnce();
   });
 });
 

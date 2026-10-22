@@ -10,7 +10,7 @@ import {
 import { modelImage } from '../llm/image.ts';
 import type { LlmError } from '../llm/types.ts';
 import type { ModelInfo } from '../models/registry.ts';
-import { hasRepetitionLoop, parseTranscript } from './transcript-lines.ts';
+import { isDegenerateAnswer, parseTranscript } from './transcript-lines.ts';
 import type {
   EngineMonitor,
   PageTranscriber,
@@ -31,10 +31,12 @@ export interface LlmTranscriberDeps {
 
 export type LlmTranscriber = PageTranscriber & { readonly engine: EngineMonitor };
 
+export const RETRY_REPEAT_PENALTY = 1.15;
+
 const INCOMPLETE_MESSAGE =
   'Die Antwort des Modells war unvollständig. Bitte die Seite erneut erkennen lassen.';
 const LOOP_MESSAGE =
-  'Das Modell hat sich bei dieser Seite in einer Wiederholung verfangen. Bitte die Seite erneut erkennen lassen.';
+  'Das Modell hat sich bei dieser Seite auch im zweiten Versuch in einer Wiederholung verfangen. Bei kleinen oder unscharfen Scans hilft ein neuer Scan mit höherer Auflösung (mindestens 150 dpi).';
 
 const MEMORY_HINT =
   'Vermutlich reicht der freie Arbeitsspeicher nicht aus. Bitte andere Programme schließen.';
@@ -141,20 +143,29 @@ export function createLlmTranscriber(deps: LlmTranscriberDeps): LlmTranscriber {
         const image = await encode(png, model.request.imageMaxEdge);
         signal.throwIfAborted();
         onPhase?.('request');
-        const answer = await client.complete(
-          {
-            messages: [visionMessage(model.prompt, [image])],
-            temperature: model.request.temperature,
-            max_tokens: model.request.maxOutputTokens,
-            ...(model.request.uncertainBelow !== null && { logprobs: true }),
-          },
-          { signal },
-        );
+        const ask = (repeatPenalty?: number) =>
+          client.complete(
+            {
+              messages: [visionMessage(model.prompt, [image])],
+              temperature: model.request.temperature,
+              max_tokens: model.request.maxOutputTokens,
+              ...(model.request.uncertainBelow !== null && { logprobs: true }),
+              ...(repeatPenalty !== undefined && { repeat_penalty: repeatPenalty }),
+            },
+            { signal },
+          );
+        let answer = await ask();
         onPhase?.('parsing');
-        if (answer.finishReason === 'length') return incomplete(INCOMPLETE_MESSAGE);
-        const { lines, removedThinking } = parseTranscript(answer.text);
+        let { lines, removedThinking } = parseTranscript(answer.text);
         if (removedThinking && lines.length === 0) return incomplete(INCOMPLETE_MESSAGE);
-        if (hasRepetitionLoop(lines)) return incomplete(LOOP_MESSAGE);
+        if (isDegenerateAnswer(answer.finishReason, lines)) {
+          onPhase?.('request');
+          answer = await ask(RETRY_REPEAT_PENALTY);
+          onPhase?.('parsing');
+          ({ lines, removedThinking } = parseTranscript(answer.text));
+          if (removedThinking && lines.length === 0) return incomplete(INCOMPLETE_MESSAGE);
+          if (isDegenerateAnswer(answer.finishReason, lines)) return incomplete(LOOP_MESSAGE);
+        }
         const reading = pageReading(answer, lines, model.request.uncertainBelow);
         return { ok: true, lines, startupMs: lease.startupMs, ...(reading && { reading }) };
       } catch (error) {
