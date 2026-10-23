@@ -11,6 +11,8 @@ export const PROTECTION_OFF_TEXT =
   'Ohne Schutz sendet Rotstift Namen und andere persönliche Angaben aus den Schülerarbeiten unverändert an den Anbieter.';
 export const PROTECTION_OFF_IMAGES =
   'Bei der Erkennung gehen außerdem die Seiten als Bilder mit der Handschrift der Schülerinnen und Schüler an den Anbieter. Auch Handschrift ist personenbezogen.';
+export const PROTECTION_OFF_SUBSCRIPTION =
+  'Bei einem privaten Abo besteht in der Regel kein Vertrag zur Auftragsverarbeitung, und je nach Kontoeinstellung nutzt der Anbieter die Daten zum Training.';
 export const PROTECTION_OFF_LIABILITY =
   'Schalten Sie den Schutz nur aus, wenn für diesen Anbieter ein Vertrag zur Auftragsverarbeitung besteht. Für die Einhaltung der DSGVO und aller anderen Gesetze sind Sie selbst verantwortlich.';
 

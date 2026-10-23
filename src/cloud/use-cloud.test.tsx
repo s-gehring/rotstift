@@ -40,6 +40,7 @@ const INPUT: CloudInput = {
   baseUrl: 'https://api.mistral.ai/v1',
   model: 'mistral-small-latest',
   key: 'fake-test-key',
+  cliPath: null,
   protection: null,
   protectionConfirmed: false,
 };
@@ -53,6 +54,8 @@ function fakeClient(overrides: Partial<CloudClient> = {}): CloudClient {
     clear: vi.fn<CloudClient['clear']>(() => Promise.resolve(EMPTY)),
     check: vi.fn<CloudClient['check']>(() => Promise.resolve(undefined)),
     models: vi.fn<CloudClient['models']>(() => Promise.resolve([])),
+    findCli: vi.fn<CloudClient['findCli']>(() => Promise.resolve(null)),
+    pickCli: vi.fn<CloudClient['pickCli']>(() => Promise.resolve(null)),
     ...overrides,
   };
 }

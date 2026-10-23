@@ -33,6 +33,7 @@ impl Endpoint {
         match self.api {
             Api::Openai => self.url(&["chat", "completions"]),
             Api::Anthropic => self.url(&["messages"]),
+            Api::Cli => self.base.clone(),
         }
     }
 
@@ -65,6 +66,8 @@ pub fn parse(template: &Template, base_url: &str) -> Result<Endpoint, ErrorClass
         return Err(ErrorClass::InvalidAddress);
     }
     match base.scheme() {
+        "cli" if template.api == Api::Cli => return cli(base),
+        _ if template.api == Api::Cli => return Err(ErrorClass::InvalidAddress),
         "https" => {}
         "http" if template.base_url.is_none() => {}
         "http" => return Err(ErrorClass::Insecure),
@@ -85,6 +88,21 @@ pub fn parse(template: &Template, base_url: &str) -> Result<Endpoint, ErrorClass
         host,
         loopback,
         api: template.api,
+    })
+}
+
+fn cli(base: Url) -> Result<Endpoint, ErrorClass> {
+    let host = match base.host() {
+        Some(Host::Domain(name)) if base.path().is_empty() && base.port().is_none() => {
+            name.to_ascii_lowercase()
+        }
+        _ => return Err(ErrorClass::InvalidAddress),
+    };
+    Ok(Endpoint {
+        base,
+        host,
+        loopback: false,
+        api: Api::Cli,
     })
 }
 
@@ -156,6 +174,23 @@ mod tests {
         );
         assert_eq!(
             parse(anthropic, "http://api.anthropic.com/v1").unwrap_err(),
+            ErrorClass::InvalidAddress
+        );
+    }
+
+    #[test]
+    fn cli_templates_only_take_their_own_cli_address() {
+        let claude = find("claude-code").unwrap();
+        let endpoint = parse(claude, "cli://claude").unwrap();
+        assert_eq!(endpoint.host, "claude");
+        assert!(!endpoint.loopback);
+        assert!(!endpoint.secure());
+        assert_eq!(
+            parse(claude, "https://api.anthropic.com/v1").unwrap_err(),
+            ErrorClass::InvalidAddress
+        );
+        assert_eq!(
+            server("cli://claude").unwrap_err(),
             ErrorClass::InvalidAddress
         );
     }

@@ -200,7 +200,7 @@ impl Sender {
         };
         if let Some(key) = key {
             request = match endpoint.api {
-                Api::Openai => request.bearer_auth(key),
+                Api::Openai | Api::Cli => request.bearer_auth(key),
                 Api::Anthropic => request
                     .header("x-api-key", key)
                     .header("anthropic-version", anthropic::VERSION),
@@ -251,6 +251,13 @@ impl Sender {
         key: Option<&str>,
         job: Job<'_>,
     ) -> Outcome {
+        if endpoint.api == Api::Cli {
+            return Outcome {
+                result: Err(ErrorClass::InvalidRequest),
+                attempts: 0,
+                status: None,
+            };
+        }
         let client = match self.client(endpoint, pinned) {
             Ok(client) => client,
             Err(class) => {

@@ -49,6 +49,8 @@ pub fn run() {
             cloud::commands::cloud_check,
             cloud::commands::cloud_chat,
             cloud::commands::cloud_cancel,
+            cloud::commands::cli_find,
+            cloud::commands::cli_pick,
             diagnostics::commands::diag_log,
             diagnostics::commands::diag_heartbeat,
             diagnostics::commands::diag_read,

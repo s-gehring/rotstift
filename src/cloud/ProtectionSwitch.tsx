@@ -6,6 +6,7 @@ import {
   PROTECTION_LABEL,
   PROTECTION_OFF_IMAGES,
   PROTECTION_OFF_LIABILITY,
+  PROTECTION_OFF_SUBSCRIPTION,
   PROTECTION_OFF_TEXT,
   PROTECTION_OFF_TITLE,
   PROTECTION_ON_NOTE,
@@ -13,10 +14,12 @@ import {
 
 export function ProtectionWarning({
   role,
+  subscription,
   onCancel,
   onConfirm,
 }: {
   readonly role: ModelRole;
+  readonly subscription: boolean;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
@@ -35,7 +38,8 @@ export function ProtectionWarning({
       </p>
       <p>
         {PROTECTION_OFF_TEXT}
-        {role === 'transcriber' && ` ${PROTECTION_OFF_IMAGES}`} {PROTECTION_OFF_LIABILITY}
+        {role === 'transcriber' && ` ${PROTECTION_OFF_IMAGES}`}
+        {subscription && ` ${PROTECTION_OFF_SUBSCRIPTION}`} {PROTECTION_OFF_LIABILITY}
       </p>
       <Button ref={cancel} onClick={onCancel}>
         Abbrechen
@@ -51,12 +55,14 @@ export function ProtectionSwitch({
   role,
   on,
   askBeforeOff,
+  subscription = false,
   disabled = false,
   onChange,
 }: {
   readonly role: ModelRole;
   readonly on: boolean;
   readonly askBeforeOff: boolean;
+  readonly subscription?: boolean;
   readonly disabled?: boolean;
   readonly onChange: (on: boolean, confirmed: boolean) => void;
 }) {
@@ -65,6 +71,7 @@ export function ProtectionSwitch({
     return (
       <ProtectionWarning
         role={role}
+        subscription={subscription}
         onCancel={() => setAsking(false)}
         onConfirm={() => {
           setAsking(false);

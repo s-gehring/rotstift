@@ -4,14 +4,16 @@ use std::time::Instant;
 use serde::Serialize;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Manager, Runtime, State};
+use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
 
 use super::anthropic::{self, RemoteModel};
+use super::cli::{self, CliInfo, Prompt};
 use super::config::{Choice, Config, Consent, protection_consent_valid, protection_default};
 use super::endpoint::{self, pinned_addresses};
 use super::keys::{self, KeyStore, Keys};
 use super::send::Job;
-use super::templates::{self, Api, KeyNeed, TokenField};
+use super::templates::{self, Api, KeyNeed, Template, TokenField};
 use super::{
     CONSENT_VERSION, CloudError, CloudState, ErrorClass, PROTECTION_CONSENT_VERSION, Step,
 };
@@ -34,6 +36,7 @@ pub struct StepView {
     pub(super) confirmed: bool,
     pub(super) protection: bool,
     pub(super) key: Option<KeyStore>,
+    pub(super) cli: Option<CliInfo>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -135,10 +138,18 @@ impl CloudState {
         let resolved = choice.resolve().ok()?;
         let account = keys::account(&endpoint::normalize(&choice.base_url));
         let key = self.keys.get(&account).await.map(|(_, store)| store);
-        let label = match resolved.template.base_url {
-            Some(_) => resolved.template.label.clone(),
+        let template = resolved.template;
+        let label = match template.base_url {
+            Some(_) => template
+                .short_label
+                .clone()
+                .unwrap_or_else(|| template.label.clone()),
             None => resolved.endpoint.host.clone(),
         };
+        let cli = choice.cli_path.clone().map(|path| CliInfo {
+            path,
+            version: choice.cli_version.clone().unwrap_or_default(),
+        });
         Some(StepView {
             template: choice.template.clone(),
             label,
@@ -149,6 +160,7 @@ impl CloudState {
             confirmed: resolved.confirmed(),
             protection: resolved.protected(),
             key,
+            cli,
         })
     }
 
@@ -169,6 +181,7 @@ impl CloudState {
         }
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub async fn use_step(
         &self,
@@ -181,6 +194,57 @@ impl CloudState {
         protection: Option<bool>,
         protection_confirmed: bool,
     ) -> Result<CloudView, CloudError> {
+        self.use_choice(
+            step,
+            Selection {
+                template: template_id,
+                base_url,
+                model,
+                key,
+                cli_path: None,
+            },
+            confirmed,
+            protection,
+            protection_confirmed,
+        )
+        .await
+    }
+
+    async fn cli_choice(
+        &self,
+        template: &Template,
+        model: &str,
+        key: Option<&String>,
+        cli_path: Option<&str>,
+    ) -> Result<Option<CliInfo>, ErrorClass> {
+        if template.api != Api::Cli {
+            return Ok(None);
+        }
+        let adapter = Self::cli_adapter(&template.id)?;
+        if key.is_some() || !Self::cli_model(template, model) {
+            return Err(ErrorClass::InvalidRequest);
+        }
+        let path = cli_path.ok_or(ErrorClass::CliMissing)?;
+        cli::inspect(&self.cli, adapter, std::path::Path::new(path))
+            .await
+            .map(Some)
+    }
+
+    pub async fn use_choice(
+        &self,
+        step: Step,
+        selection: Selection<'_>,
+        confirmed: bool,
+        protection: Option<bool>,
+        protection_confirmed: bool,
+    ) -> Result<CloudView, CloudError> {
+        let Selection {
+            template: template_id,
+            base_url,
+            model,
+            key,
+            cli_path,
+        } = selection;
         let template = templates::find(template_id).ok_or(ErrorClass::NotConfigured)?;
         let base_url = endpoint::normalize(base_url);
         let endpoint = endpoint::parse(template, &base_url)?;
@@ -194,6 +258,9 @@ impl CloudState {
             return Err(ErrorClass::InvalidRequest.into());
         }
         let key = clean_key(key);
+        let cli_info = self
+            .cli_choice(template, model, key.as_ref(), cli_path)
+            .await?;
         if key.is_some() && !endpoint.secure() {
             return Err(ErrorClass::Insecure.into());
         }
@@ -251,6 +318,8 @@ impl CloudState {
                 consent,
                 protection: Some(protection),
                 protection_consent: protection_consent.clone(),
+                cli_path: cli_info.as_ref().map(|info| info.path.clone()),
+                cli_version: cli_info.map(|info| info.version),
             },
         );
         config.save(&self.config_path)?;
@@ -379,6 +448,23 @@ impl CloudState {
             .remove(id);
     }
 
+    async fn cancellable<T>(
+        &self,
+        request_id: Option<String>,
+        work: impl std::future::Future<Output = T>,
+    ) -> Option<T> {
+        let Some(id) = request_id else {
+            return Some(work.await);
+        };
+        let cancelled = self.register(id.clone())?;
+        let outcome = tokio::select! {
+            outcome = work => Some(outcome),
+            _ = cancelled => None,
+        };
+        self.unregister(&id);
+        outcome
+    }
+
     pub fn cancel(&self, id: &str) -> bool {
         let mut requests = self
             .requests
@@ -420,6 +506,10 @@ impl CloudState {
         if parsed.has_images() && step != Step::Transcriber {
             return Err(ErrorClass::InvalidRequest.into());
         }
+        if resolved.template.api == Api::Cli {
+            let body = body(parsed, &choice.model, resolved.template.token_field)?;
+            return self.cli_chat(request_id, step, choice, &body).await;
+        }
         let endpoint = &resolved.endpoint;
         let account = keys::account(&endpoint::normalize(&choice.base_url));
         let key = self.keys.get(&account).await.map(|(key, _)| key);
@@ -438,24 +528,12 @@ impl CloudState {
         let body = match resolved.template.api {
             Api::Openai => body,
             Api::Anthropic => anthropic::request(&body)?,
+            Api::Cli => return Err(ErrorClass::InvalidRequest.into()),
         };
         let bytes = body.to_string().len();
         let started = Instant::now();
         let send = self.sender.post(endpoint, &pinned, key.as_deref(), &body);
-        let outcome = match request_id {
-            None => Some(send.await),
-            Some(id) => match self.register(id.clone()) {
-                None => None,
-                Some(cancelled) => {
-                    let outcome = tokio::select! {
-                        outcome = send => Some(outcome),
-                        _ = cancelled => None,
-                    };
-                    self.unregister(&id);
-                    outcome
-                }
-            },
-        };
+        let outcome = self.cancellable(request_id, send).await;
         let (result, attempts, status) = match outcome {
             Some(outcome) => (outcome.result, outcome.attempts, outcome.status),
             None => (Err(ErrorClass::Cancelled), 0, None),
@@ -473,6 +551,73 @@ impl CloudState {
             }),
         );
         result.map_err(CloudError::from)
+    }
+
+    async fn cli_chat(
+        &self,
+        request_id: Option<String>,
+        step: Step,
+        choice: &Choice,
+        body: &Value,
+    ) -> Result<Value, CloudError> {
+        let adapter = Self::cli_adapter(&choice.template)?;
+        let template = templates::find(&choice.template).ok_or(ErrorClass::NotConfigured)?;
+        if !Self::cli_model(template, &choice.model) {
+            return Err(ErrorClass::InvalidRequest.into());
+        }
+        let path =
+            std::path::PathBuf::from(choice.cli_path.as_ref().ok_or(ErrorClass::CliMissing)?);
+        let prompt = Prompt::from_body(body, &choice.model)?;
+        let started = Instant::now();
+        let run = async {
+            let _turn = self.cli_lock.lock().await;
+            cli::chat(&self.cli, adapter, &path, &prompt).await
+        };
+        let outcome = self.cancellable(request_id, run).await;
+        let (result, bytes) = outcome.unwrap_or((Err(ErrorClass::Cancelled), 0));
+        diagnostics::record(
+            "cloud_request",
+            json!({
+                "template": choice.template,
+                "step": step.name(),
+                "ms": started.elapsed().as_millis() as u64,
+                "attempts": u32::from(bytes > 0),
+                "bytes": bytes,
+                "status": null,
+                "outcome": match &result { Ok(_) => "ok", Err(class) => class.name() },
+            }),
+        );
+        result.map_err(CloudError::from)
+    }
+
+    fn cli_model(template: &Template, model: &str) -> bool {
+        cli::valid_model(model)
+            && template
+                .cli
+                .as_ref()
+                .is_some_and(|cli| cli.models.iter().any(|known| known == model))
+    }
+
+    fn cli_adapter(template_id: &str) -> Result<&'static dyn cli::Adapter, ErrorClass> {
+        templates::find(template_id)
+            .filter(|template| !template.hidden)
+            .and_then(|template| template.cli.as_ref())
+            .and_then(|template| cli::adapter(&template.adapter))
+            .ok_or(ErrorClass::NotConfigured)
+    }
+
+    pub async fn find_cli(&self, template_id: &str) -> Result<Option<CliInfo>, CloudError> {
+        let adapter = Self::cli_adapter(template_id)?;
+        Ok(cli::locate::find(&self.cli, adapter).await)
+    }
+
+    pub async fn inspect_cli(
+        &self,
+        template_id: &str,
+        path: &std::path::Path,
+    ) -> Result<CliInfo, CloudError> {
+        let adapter = Self::cli_adapter(template_id)?;
+        Ok(cli::inspect(&self.cli, adapter, path).await?)
     }
 
     pub async fn models(
@@ -568,6 +713,14 @@ pub async fn cloud_config(state: State<'_, CloudState>) -> Result<CloudView, Clo
     Ok(state.view().await)
 }
 
+pub struct Selection<'a> {
+    pub template: &'a str,
+    pub base_url: &'a str,
+    pub model: &'a str,
+    pub key: Option<String>,
+    pub cli_path: Option<&'a str>,
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn cloud_use(
@@ -577,22 +730,57 @@ pub async fn cloud_use(
     base_url: String,
     model: String,
     key: Option<String>,
+    cli_path: Option<String>,
     confirmed: bool,
     protection: Option<bool>,
     protection_confirmed: Option<bool>,
 ) -> Result<CloudView, CloudError> {
     state
-        .use_step(
+        .use_choice(
             step,
-            &template,
-            &base_url,
-            &model,
-            key,
+            Selection {
+                template: &template,
+                base_url: &base_url,
+                model: &model,
+                key,
+                cli_path: cli_path.as_deref(),
+            },
             confirmed,
             protection,
             protection_confirmed.unwrap_or(false),
         )
         .await
+}
+
+#[tauri::command]
+pub async fn cli_find(
+    state: State<'_, CloudState>,
+    template: String,
+) -> Result<Option<CliInfo>, CloudError> {
+    state.find_cli(&template).await
+}
+
+#[tauri::command]
+pub async fn cli_pick<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, CloudState>,
+    template: String,
+) -> Result<Option<CliInfo>, CloudError> {
+    CloudState::cli_adapter(&template)?;
+    let dialog = app.clone();
+    let picked = tokio::task::spawn_blocking(move || {
+        dialog
+            .dialog()
+            .file()
+            .set_title("Programm auswählen")
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|_| ErrorClass::CliMissing)?;
+    let Some(path) = picked.and_then(|file| file.into_path().ok()) else {
+        return Ok(None);
+    };
+    state.inspect_cli(&template, &path).await.map(Some)
 }
 
 #[tauri::command]

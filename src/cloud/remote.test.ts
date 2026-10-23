@@ -80,6 +80,7 @@ describe('cloudUsable', () => {
     expect(cloudUsable(step({ confirmed: false }))).toBe(false);
     expect(cloudUsable(step({ key: null }))).toBe(false);
     expect(cloudUsable(step({ template: 'server', key: null }))).toBe(true);
+    expect(cloudUsable(step({ template: 'claude-code', key: null }))).toBe(true);
   });
 
   it('never uses a recognition in the cloud while protection is on', () => {

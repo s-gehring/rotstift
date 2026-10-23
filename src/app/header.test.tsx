@@ -119,6 +119,25 @@ describe('Header', () => {
     expect(show).toHaveBeenCalledOnce();
   });
 
+  it('names a subscription through a CLI like any other provider', () => {
+    const step = {
+      template: 'claude-code',
+      label: 'Claude-Abo',
+      baseUrl: 'cli://claude',
+      host: 'claude',
+      model: 'sonnet',
+      loopback: false,
+      confirmed: true,
+      protection: true,
+      key: null,
+      cli: { path: '/usr/local/bin/claude', version: '2.1.299' },
+    } as const;
+    render({ models: { cloud: testCloud({ steps: { corrector: step } }) } });
+    expect(container.querySelector('.cloud-sign')?.getAttribute('aria-label')).toBe(
+      'Texterkennung lokal, Korrektur über Claude-Abo, pseudonymisiert, Inhalt und Form lokal',
+    );
+  });
+
   it('names the protection of a remote step in the cloud sign', () => {
     const step = {
       template: 'mistral',

@@ -6,6 +6,7 @@ const INPUT: CloudInput = {
   baseUrl: 'https://api.mistral.ai/v1',
   model: 'm',
   key: null,
+  cliPath: null,
   protection: false,
   protectionConfirmed: true,
 };
@@ -36,6 +37,16 @@ describe('createCloudClient', () => {
     await client.setProtection('reviewer', false, true);
     expect(calls).toEqual([
       ['cloud_set_protection', { step: 'reviewer', protection: false, confirmed: true }],
+    ]);
+  });
+
+  it('finds and picks a CLI per template', async () => {
+    const { calls, client } = recording();
+    await client.findCli('claude-code');
+    await client.pickCli('claude-code');
+    expect(calls).toEqual([
+      ['cli_find', { template: 'claude-code' }],
+      ['cli_pick', { template: 'claude-code' }],
     ]);
   });
 

@@ -885,6 +885,8 @@ async fn nothing_is_sent_to_anthropic_without_consent() {
             consent: None,
             protection: None,
             protection_consent: None,
+            cli_path: None,
+            cli_version: None,
         },
     );
     config.save(&cloud.config_path).unwrap();

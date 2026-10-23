@@ -1,4 +1,5 @@
 mod anthropic;
+mod cli;
 pub mod commands;
 mod config;
 mod endpoint;
@@ -63,6 +64,11 @@ pub enum ErrorClass {
     Cancelled,
     InvalidResponse,
     Storage,
+    CliMissing,
+    CliOutdated,
+    CliFailed,
+    NotLoggedIn,
+    QuotaExhausted,
 }
 
 impl ErrorClass {
@@ -88,6 +94,11 @@ impl ErrorClass {
             Self::Cancelled => "cancelled",
             Self::InvalidResponse => "invalidResponse",
             Self::Storage => "storage",
+            Self::CliMissing => "cliMissing",
+            Self::CliOutdated => "cliOutdated",
+            Self::CliFailed => "cliFailed",
+            Self::NotLoggedIn => "notLoggedIn",
+            Self::QuotaExhausted => "quotaExhausted",
         }
     }
 }
@@ -122,6 +133,8 @@ pub struct CloudState {
     config_path: PathBuf,
     keys: Keys,
     sender: send::Sender,
+    cli: cli::Runtime,
+    cli_lock: tokio::sync::Mutex<()>,
     config_lock: tokio::sync::Mutex<()>,
     requests: Mutex<Requests>,
 }
@@ -136,6 +149,8 @@ impl CloudState {
             config_path: data_dir.join(CONFIG_FILE),
             keys,
             sender,
+            cli: cli::Runtime::default(),
+            cli_lock: tokio::sync::Mutex::new(()),
             config_lock: tokio::sync::Mutex::new(()),
             requests: Mutex::new(Requests::default()),
         }

@@ -26,6 +26,10 @@ pub struct Choice {
     pub protection: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protection_consent: Option<Consent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_version: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -130,6 +134,8 @@ mod tests {
             consent,
             protection: None,
             protection_consent: None,
+            cli_path: None,
+            cli_version: None,
         }
     }
 
