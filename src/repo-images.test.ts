@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
-const IMAGE_FILE = /\.(png|jpe?g|webp|gif|tiff?|bmp|heic|avif|pdf|svg)$/iu;
+const IMAGE_FILE = /\.(png|jpe?g|webp|gif|tiff?|bmp|heic|heif|avif|pdf|svg)$/iu;
 const ALLOWED_PREFIXES = ['src-tauri/icons/'];
 const ALLOWED_FILES: readonly string[] = [];
 

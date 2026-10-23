@@ -21,7 +21,7 @@ Bis 0.2 war Rotstift eine lange Seite: Untertitel, ein Erklärabsatz zum Laden, 
 
 Das Fenster hat eine Kopfzeile und darunter genau eine von zwei Ansichten.
 
-- **Kopfzeile:** Links „Rotstift“, in der Mitte Fortschritt (nur während eines Laufs), rechts die Hauptaktion und ⚙. Im Entwicklungs- und Browsermodus ein kleines Etikett „Demo“.
+- **Kopfzeile:** Links „Rotstift“, in der Mitte Fortschritt (nur während eines Laufs), rechts die Hauptaktion und ⚙. Im Entwicklungs- und Browsermodus ein kleines Etikett „Vorschau“.
 - **Klasse:** Alle Arbeiten untereinander. Hier wird geladen, sortiert, gestartet und exportiert.
 - **Arbeit:** Eine Arbeit groß, mit Korrekturen, Fehlerliste und Text. Hier wird geprüft.
 

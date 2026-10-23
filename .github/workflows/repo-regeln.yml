@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Keine Bilder oder PDFs im Repo
         run: |
-          offending=$(git ls-files | grep -iE '\.(png|jpe?g|webp|gif|tiff?|bmp|heic|avif|pdf|svg)$' | grep -v '^src-tauri/icons/' || true)
+          offending=$(git ls-files | grep -iE '\.(png|jpe?g|webp|gif|tiff?|bmp|heic|heif|avif|pdf|svg)$' | grep -v '^src-tauri/icons/' || true)
           if [ -n "$offending" ]; then
             while IFS= read -r file; do
               echo "::error file=$file::Bilder und PDFs gehören nicht ins Repo (nur src-tauri/icons/ ist erlaubt)."
