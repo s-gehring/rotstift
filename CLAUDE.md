@@ -27,4 +27,5 @@ pnpm test           # vitest once
 - UI text, README, ADRs, commits and PRs in German; code, identifiers and comments in English.
 - Relative imports carry the extension (`./App.tsx`, `./count-words.ts`).
 - Never commit real student work. Tests and evaluation use self-written samples.
+- No images of handwriting (rendered or synthetic ones included) and no demo data in the repo, also not on asset branches for PR descriptions. Test images are generated at runtime or live in `~/.cache/rotstift/`; `src/repo-images.test.ts` enforces this for images and PDFs.
 - New network access or a looser CSP in `src-tauri/tauri.conf.json` needs an explicit reason in the PR.

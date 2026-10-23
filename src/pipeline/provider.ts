@@ -17,7 +17,7 @@ export interface ModelAvailability {
 export interface TranscriberEnvironment {
   readonly isDev: boolean;
   readonly isTauri: boolean;
-  readonly loadDemo: () => Promise<PageTranscriber>;
+  readonly loadPreview: () => Promise<PageTranscriber>;
   readonly createModelTranscriber: (
     model: ModelInfo,
     onUnavailable?: () => void,
@@ -48,8 +48,8 @@ export async function resolveTranscriber(
       availability.remote === true,
       availability.second ?? null,
     );
-    return { state: 'ready', transcriber, demo: false, engine: transcriber.engine };
+    return { state: 'ready', transcriber, preview: false, engine: transcriber.engine };
   }
-  if (env.isDev) return { state: 'ready', transcriber: await env.loadDemo(), demo: true };
+  if (env.isDev) return { state: 'ready', transcriber: await env.loadPreview(), preview: true };
   return { state: 'unavailable', message: DESKTOP_ONLY_MESSAGE };
 }

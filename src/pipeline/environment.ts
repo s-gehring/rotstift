@@ -17,12 +17,12 @@ function findStruckWords(png: Blob, lines: readonly string[]): Promise<number[][
   return struckLocator.struckWords(png, lines);
 }
 
-async function loadDemo(): Promise<PageTranscriber> {
+async function loadPreview(): Promise<PageTranscriber> {
   if (import.meta.env.DEV) {
-    const { createDemoTranscriber } = await import('./demo-transcriber.ts');
-    return createDemoTranscriber();
+    const { createPreviewTranscriber } = await import('./preview-transcriber.ts');
+    return createPreviewTranscriber();
   }
-  throw new Error('Der Demo-Transkribierer ist nur im Entwicklungsmodus verfügbar.');
+  throw new Error('Der Vorschau-Transkribierer ist nur im Entwicklungsmodus verfügbar.');
 }
 
 export function isTauri(): boolean {
@@ -37,7 +37,7 @@ export function browserEnvironment(): TranscriberEnvironment {
   return {
     isDev: import.meta.env.DEV,
     isTauri: isTauri(),
-    loadDemo,
+    loadPreview,
     createModelTranscriber: (
       model: ModelInfo,
       onUnavailable?: () => void,

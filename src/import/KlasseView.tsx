@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useApp } from '../app/app-context.tsx';
 import { privacyNote } from '../cloud/remote.ts';
-import { loadDemoClass } from '../pipeline/demo-class-load.ts';
 import { Button } from '../ui/Button.tsx';
 import { Icon } from '../ui/icons.tsx';
 import { Menu } from '../ui/Menu.tsx';
@@ -36,7 +35,7 @@ function sumFigures(figures: readonly (Figure | null)[]): Figure | null {
 }
 
 export function KlasseView() {
-  const { importState, run, work, navigation, toasts, models, demo } = useApp();
+  const { importState, run, work, navigation, toasts, models } = useApp();
   const { arbeiten, pages, dispatch, addFiles, busy, undo } = importState;
   const { show } = toasts;
   const locked = run.running;
@@ -84,13 +83,6 @@ export function KlasseView() {
   });
 
   const openPicker = () => input.current?.click();
-
-  const showDemoClass = import.meta.env.DEV && demo;
-  const addDemoClass = () => {
-    loadDemoClass().then(addFiles, (error: unknown) =>
-      show(error instanceof Error ? error.message : String(error)),
-    );
-  };
 
   const onPick = (event: ChangeEvent<HTMLInputElement>) => {
     addFiles(Array.from(event.target.files ?? []));
@@ -256,11 +248,6 @@ export function KlasseView() {
           <Icon name="upload" size={32} />
           <p className="klasse-drop-title">Arbeiten hierher ziehen</p>
           <Button onClick={openPicker}>Dateien auswählen</Button>
-          {showDemoClass && (
-            <Button variant="quiet" onClick={addDemoClass}>
-              Demo-Klasse laden
-            </Button>
-          )}
           <p className="klasse-drop-note" role={busy ? 'status' : undefined}>
             {busy ? 'Wird geladen …' : `PDF oder Bilder. ${privacyNote(models.cloud.steps)}`}
           </p>
@@ -283,16 +270,6 @@ export function KlasseView() {
                   disabled: locked,
                   onSelect: openPicker,
                 },
-                ...(showDemoClass
-                  ? [
-                      {
-                        label: 'Demo-Klasse hinzufügen',
-                        icon: 'plus' as const,
-                        disabled: locked,
-                        onSelect: addDemoClass,
-                      },
-                    ]
-                  : []),
                 {
                   label: 'Alle entfernen',
                   icon: 'trash',

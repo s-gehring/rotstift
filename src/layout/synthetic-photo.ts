@@ -1,6 +1,6 @@
 import { homographyFrom, project } from './homography.ts';
-import { renderPage, sampleLines } from './synthetic.ts';
-import type { Point, RgbaImage } from './types.ts';
+import { renderPage, sampleLines, type SyntheticPage } from './synthetic.ts';
+import type { BBox, Point, RgbaImage } from './types.ts';
 
 const TABLE = [70, 56, 44] as const;
 
@@ -14,6 +14,48 @@ export function ruledSheet(skewDegrees = 0): RgbaImage {
     margin: true,
     skewDegrees,
   }).image;
+}
+
+export function gridSheet(): SyntheticPage {
+  return renderPage({
+    width: 620,
+    height: 877,
+    pitch: 36,
+    lines: sampleLines(11, 18, 22, 32),
+    grid: true,
+    seed: 11,
+  });
+}
+
+export function photographBox(
+  box: BBox,
+  corners: readonly Point[],
+  sheet: { readonly width: number; readonly height: number },
+): BBox {
+  const toPhoto = homographyFrom(
+    [
+      { x: 0, y: 0 },
+      { x: sheet.width, y: 0 },
+      { x: sheet.width, y: sheet.height },
+      { x: 0, y: sheet.height },
+    ],
+    corners,
+  );
+  if (toPhoto === null) throw new Error('corners are degenerate');
+  const quad = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.width, y: box.y },
+    { x: box.x + box.width, y: box.y + box.height },
+    { x: box.x, y: box.y + box.height },
+  ].map((point) => project(toPhoto, point));
+  const left = Math.min(...quad.map((point) => point.x));
+  const top = Math.min(...quad.map((point) => point.y));
+  return {
+    x: left,
+    y: top,
+    width: Math.max(...quad.map((point) => point.x)) - left,
+    height: Math.max(...quad.map((point) => point.y)) - top,
+  };
 }
 
 export function photograph(

@@ -50,7 +50,7 @@ export type TranscriberStatus =
   | {
       readonly state: 'ready';
       readonly transcriber: PageTranscriber;
-      readonly demo: boolean;
+      readonly preview: boolean;
       readonly engine?: EngineMonitor;
     }
   | { readonly state: 'needs-model'; readonly problem: ModelProblem }

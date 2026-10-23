@@ -34,7 +34,7 @@ function readyStatus(): { status: TranscriberStatus; signals: AbortSignal[] } {
       return Promise.resolve({ ok: true, lines: ['Hallo Welt'] });
     },
   };
-  return { status: { state: 'ready', transcriber, demo: false }, signals };
+  return { status: { state: 'ready', transcriber, preview: false }, signals };
 }
 
 function hangingStatus(): { status: TranscriberStatus; signals: AbortSignal[] } {
@@ -46,7 +46,7 @@ function hangingStatus(): { status: TranscriberStatus; signals: AbortSignal[] } 
       return new Promise(() => undefined);
     },
   };
-  return { status: { state: 'ready', transcriber, demo: false }, signals };
+  return { status: { state: 'ready', transcriber, preview: false }, signals };
 }
 
 let container: HTMLElement;

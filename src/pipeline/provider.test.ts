@@ -7,7 +7,7 @@ import {
 } from './provider.ts';
 import type { PageTranscriber } from './transcriber.ts';
 
-const demo: PageTranscriber = { transcribe: () => Promise.reject(new Error('unused')) };
+const preview: PageTranscriber = { transcribe: () => Promise.reject(new Error('unused')) };
 const model = MODELS[0];
 if (model === undefined) throw new Error('registry is empty');
 
@@ -16,40 +16,40 @@ function env(isDev: boolean, isTauri: boolean) {
   return {
     isDev,
     isTauri,
-    loadDemo: vi.fn<() => Promise<PageTranscriber>>(() => Promise.resolve(demo)),
+    loadPreview: vi.fn<() => Promise<PageTranscriber>>(() => Promise.resolve(preview)),
     createModelTranscriber: vi.fn<TranscriberEnvironment['createModelTranscriber']>(() => ({
-      ...demo,
+      ...preview,
       engine,
     })),
   };
 }
 
 describe('resolveTranscriber', () => {
-  it('offers the demo transcriber only in dev outside Tauri', async () => {
+  it('offers the preview transcriber only in dev outside Tauri', async () => {
     const web = env(true, false);
     expect(await resolveTranscriber(web, null)).toEqual({
       state: 'ready',
-      transcriber: demo,
-      demo: true,
+      transcriber: preview,
+      preview: true,
     });
-    expect(web.loadDemo).toHaveBeenCalledOnce();
+    expect(web.loadPreview).toHaveBeenCalledOnce();
     expect(web.createModelTranscriber).not.toHaveBeenCalled();
   });
 
-  it('never loads the demo transcriber in a production web build', async () => {
+  it('never loads the preview transcriber in a production web build', async () => {
     const production = env(false, false);
     expect(await resolveTranscriber(production, null)).toEqual({
       state: 'unavailable',
       message: DESKTOP_ONLY_MESSAGE,
     });
-    expect(production.loadDemo).not.toHaveBeenCalled();
+    expect(production.loadPreview).not.toHaveBeenCalled();
   });
 
   it('waits for the model status in the desktop app, even in dev', async () => {
     for (const isDev of [true, false]) {
       const desktop = env(isDev, true);
       expect(await resolveTranscriber(desktop, null)).toBeNull();
-      expect(desktop.loadDemo).not.toHaveBeenCalled();
+      expect(desktop.loadPreview).not.toHaveBeenCalled();
     }
   });
 
@@ -108,9 +108,9 @@ describe('resolveTranscriber', () => {
   it('reports the real transcriber once the model is ready', async () => {
     const desktop = env(false, true);
     const status = await resolveTranscriber(desktop, { model, state: 'ready' });
-    expect(status).toMatchObject({ state: 'ready', demo: false });
+    expect(status).toMatchObject({ state: 'ready', preview: false });
     expect(desktop.createModelTranscriber).toHaveBeenCalledWith(model, undefined, false, null);
-    expect(desktop.loadDemo).not.toHaveBeenCalled();
+    expect(desktop.loadPreview).not.toHaveBeenCalled();
     expect(status?.state === 'ready' && status.engine?.getPhase()).toBe('idle');
   });
 });

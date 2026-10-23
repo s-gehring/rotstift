@@ -76,7 +76,7 @@ describe('Header', () => {
     });
     expect(container.querySelector('.app-title')?.textContent).toBe('Rotstift');
     expect(labels()).toEqual(['']);
-    expect(container.querySelector('.demo-tag')).toBeNull();
+    expect(container.querySelector('.preview-tag')).toBeNull();
     click(button('Einstellungen'));
     expect(show).toHaveBeenCalledOnce();
   });
@@ -109,9 +109,9 @@ describe('Header', () => {
     expect(show).toHaveBeenCalledOnce();
   });
 
-  it('marks the demo mode', () => {
-    render({ demo: true });
-    expect(container.querySelector('.demo-tag')?.textContent).toBe('Demo');
+  it('marks the preview mode', () => {
+    render({ preview: true });
+    expect(container.querySelector('.preview-tag')?.textContent).toBe('Vorschau');
   });
 
   it('offers the subject and Korrigieren, with word counting behind the arrow', () => {

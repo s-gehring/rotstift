@@ -1,22 +1,22 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createLlmTranscriber } from '../pipeline/llm-transcriber.ts';
 import truth from './fixtures/rendered-truth.json';
+import { analyzeDewarp, applyDewarp, toSourceBox } from './dewarp.ts';
 import { readJpeg } from './image-files.ts';
 import { locateLines } from './locate-lines.ts';
 import { CACHE, MODELS_DIR, model, RealSidecar } from './real-sidecar.ts';
 import { paintOver, scoreVariant, sumScores, variantsOf, type VariantScore } from './perturb.ts';
 import { iou } from './synthetic.ts';
-import type { BBox } from './types.ts';
+import type { BBox, RgbaImage } from './types.ts';
 
 const ENABLED = process.env['ROTSTIFT_INTEGRATION'] === '1';
 const DATASET =
   process.env['ROTSTIFT_DATASET'] ?? join(CACHE, 'datasets', 'scads-fullpage', 'extracted');
-const RENDERED =
-  process.env['ROTSTIFT_RENDERED'] ??
-  join(import.meta.dirname, '..', '..', 'eval', 'samples', 'rendered');
+const RENDERED = process.env['ROTSTIFT_RENDERED'] ?? join(CACHE, 'rendered');
+const RENDERED_HEFT = process.env['ROTSTIFT_RENDERED_HEFT'] ?? join(CACHE, 'rendered-heft');
 const PAGES = Number(process.env['ROTSTIFT_PAGES'] ?? '3');
 const MIN_IOU = 0.5;
 
@@ -70,7 +70,7 @@ describe.skipIf(!ENABLED || !existsSync(RENDERED))(
         `\n${rows.join('\n')}\nTreffer ${hits}/${total} (${((100 * hits) / total).toFixed(1)} %), mittlere IoU ${(sum / total).toFixed(3)}, ${(elapsed / count).toFixed(0)} ms je Seite\n`,
       );
       expect(hits / total).toBeGreaterThan(0.95);
-    });
+    }, 120_000);
 
     it('prefers null over a confident wrong box when the transcript differs from the page', () => {
       const perVariant = new Map<string, VariantScore[]>();
@@ -103,6 +103,74 @@ describe.skipIf(!ENABLED || !existsSync(RENDERED))(
     }, 120_000);
   },
 );
+
+const photoNames = existsSync(join(RENDERED_HEFT, 'lines'))
+  ? readdirSync(join(RENDERED_HEFT, 'lines'))
+      .filter((file) => file.includes('kariert-photo') && file.endsWith('.json'))
+      .map((file) => file.replace(/\.json$/u, ''))
+  : [];
+
+function photoTruth(name: string): { image: RgbaImage; lines: TruthLine[] } {
+  const meta: { lines: TruthLine[] } = JSON.parse(
+    readFileSync(join(RENDERED_HEFT, 'lines', `${name}.json`), 'utf8'),
+  );
+  return { image: readJpeg(join(RENDERED_HEFT, 'images', `${name}.jpg`)), lines: meta.lines };
+}
+
+describe.skipIf(!ENABLED || photoNames.length === 0)('rendered photos of grid paper', () => {
+  it('finds the grid and every line without a confident miss', () => {
+    const failures: string[] = [];
+    for (const name of photoNames) {
+      const { image, lines } = photoTruth(name);
+      const result = locateLines(
+        image,
+        lines.map((line) => line.text),
+      );
+      let hits = 0;
+      let total = 0;
+      let wrong = 0;
+      lines.forEach((line, index) => {
+        const box = boxOf(line.bbox);
+        if (box === null) return;
+        const found = result.lines[index];
+        const overlap = found == null ? 0 : iou(box, found.bbox);
+        total += 1;
+        if (overlap >= MIN_IOU) hits += 1;
+        if (found != null && found.rough !== true && overlap < 0.2) wrong += 1;
+      });
+      if (result.ruling?.kind !== 'grid' || hits < Math.ceil(total * 0.9) || wrong > 0) {
+        failures.push(`${name}: ${result.ruling?.kind}, ${hits}/${total} hits, ${wrong} wrong`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('straightens the sheet so that it needs no second pass and every line still hits', () => {
+    const failures: string[] = [];
+    for (const name of photoNames) {
+      const { image, lines } = photoTruth(name);
+      const plan = analyzeDewarp(image).plan;
+      if (plan === null) continue;
+      const straight = applyDewarp(image, plan);
+      const result = locateLines(
+        straight,
+        lines.map((line) => line.text),
+      );
+      const boxes = lines.flatMap((line, index) => {
+        const box = boxOf(line.bbox);
+        return box === null ? [] : [{ box, found: result.lines[index] }];
+      });
+      const hits = boxes.filter(
+        ({ box, found }) =>
+          found != null && iou(box, toSourceBox(plan, found.bbox, image)) >= MIN_IOU,
+      );
+      if (analyzeDewarp(straight).plan !== null || hits.length < Math.ceil(boxes.length * 0.9)) {
+        failures.push(`${name}: ${hits.length}/${boxes.length} hits`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+});
 
 const sidecar = new RealSidecar();
 afterAll(() => {

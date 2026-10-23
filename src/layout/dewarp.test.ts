@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   analyzeDewarp,
@@ -9,13 +8,18 @@ import {
   toSourceBox,
 } from './dewarp.ts';
 import type { DewarpPlan } from './dewarp.ts';
-import grid from './fixtures/heft-kariert-foto.json';
-import { readJpeg } from './image-files.ts';
 import { locateLines } from './locate-lines.ts';
-import { cameraCorners, photograph, ruledSheet } from './synthetic-photo.ts';
-import { iou } from './synthetic.ts';
+import {
+  cameraCorners,
+  gridSheet,
+  photograph,
+  photographBox,
+  ruledSheet,
+} from './synthetic-photo.ts';
+import { iou, sampleLines } from './synthetic.ts';
 
 const CORNERS = cameraCorners(620, 877);
+const LINES = sampleLines(11, 18, 22, 32);
 
 describe('planDewarp', () => {
   it('finds a photographed sheet on a table and maps the output corners onto it', () => {
@@ -61,11 +65,10 @@ describe('planDewarp', () => {
   });
 });
 
-describe('planDewarp on a rendered photo of grid paper', () => {
+describe('planDewarp on a photo of grid paper', () => {
   it('straightens the sheet so that it needs no second pass and every line still hits', () => {
-    const photo = readJpeg(
-      fileURLToPath(new URL('./fixtures/heft-kariert-foto.jpg', import.meta.url)),
-    );
+    const sheet = gridSheet();
+    const photo = photograph(sheet.image, CORNERS, 800, 1000);
     const report = analyzeDewarp(photo);
     expect(report.sheet).not.toBeNull();
     const plan = report.plan;
@@ -75,18 +78,17 @@ describe('planDewarp on a rendered photo of grid paper', () => {
     const again = analyzeDewarp(straight);
     expect(again.plan).toBeNull();
     expect(Math.abs(again.rotationDegrees)).toBeLessThan(0.5);
-    const result = locateLines(
-      straight,
-      grid.lines.map((line) => line.text),
-    );
+    const result = locateLines(straight, LINES);
     expect(result.ruling?.kind).toBe('grid');
-    const boxes = grid.lines.flatMap((line, index) =>
-      line.bbox === null ? [] : [{ truth: line.bbox, found: result.lines[index] }],
+    const boxes = sheet.truth.flatMap((box, index) =>
+      box === null
+        ? []
+        : [{ truth: photographBox(box, CORNERS, sheet.image), found: result.lines[index] }],
     );
-    const hits = boxes.filter(({ truth: [x = 0, y = 0, width = 0, height = 0], found }) => {
-      if (found == null) return false;
-      return iou({ x, y, width, height }, toSourceBox(plan, found.bbox, photo)) >= 0.5;
-    });
+    const hits = boxes.filter(
+      ({ truth, found }) =>
+        found != null && iou(truth, toSourceBox(plan, found.bbox, photo)) >= 0.5,
+    );
     expect(hits).toHaveLength(boxes.length);
   });
 });

@@ -477,6 +477,6 @@ export function useAppModel(): AppModel {
       },
     },
     toasts,
-    demo: import.meta.env.DEV || !isTauri(),
+    preview: import.meta.env.DEV || !isTauri(),
   };
 }

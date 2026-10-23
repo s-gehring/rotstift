@@ -107,12 +107,12 @@ function CloudSign() {
 }
 
 export function Header() {
-  const { demo, models } = useApp();
+  const { preview, models } = useApp();
   return (
     <header className="app-header">
       <div className="app-header-start">
         <span className="app-title">Rotstift</span>
-        {demo && <span className="demo-tag">Demo</span>}
+        {preview && <span className="preview-tag">Vorschau</span>}
       </div>
       <div className="app-header-center">
         <RunStatus />

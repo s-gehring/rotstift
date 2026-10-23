@@ -519,11 +519,11 @@ describe('the corrected PDF', () => {
     expect(lastShow()).toEqual(['Gespeichert als „Ada.pdf“.', { tone: 'info' }]);
   });
 
-  it('keeps demo corrections out of the PDFs', async () => {
+  it('keeps preview corrections out of the PDFs', async () => {
     await corrected(true);
     openMenu();
-    expect(hintOf('Diese Arbeit als PDF')).toBe('Nicht mit Demo-Korrekturen');
-    expect(hintOf('Klassen-PDF')).toBe('Nicht mit Demo-Korrekturen');
+    expect(hintOf('Diese Arbeit als PDF')).toBe('Nicht mit Vorschau-Korrekturen');
+    expect(hintOf('Klassen-PDF')).toBe('Nicht mit Vorschau-Korrekturen');
     expect(isDisabled('Tabelle (CSV)')).toBe(false);
   });
 
