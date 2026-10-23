@@ -1,0 +1,22 @@
+arbeit: klassenarbeit_3_seite1.pdf
+klasse: 10
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere, ob Hausaufgaben sinnvoll sind.
+---
+Hausaufgaben gehören seit vielen Jahren zum Schulalltag.
+Trotzdem wird immer wieder darüber diskutiert, ob sie
+wirklich sinnvoll sind oder ob man sie abschaffen sollte.
+Ein wichtiges Argument für Hausaufgaben ist, dass der
+Stoff dadurch wiederholt und gefestigt wird. Wer zu Hause
+selbstständig übt, merkt außerdem schneller, wo er noch
+Lücken hat. Zudem lernen die Schüler, sich ihre Zeit
+einzuteilen, was später im Beruf nützlich ist.
+Auf der anderen Seite haben viele Jugendliche nach
+dem Unterricht kaum noch Freizeit, besonders wenn sie
+noch ein Hobby haben. Außerdem hängt der Erfolg oft
+davon ab, ob die Eltern helfen können, wodurch
+Kinder aus bildungsfernen Familien benachteiligt sind.
+Ich komme daher zu dem Schluss, dass Hausaufgaben
+sinnvoll sein können, aber nur in kleinem Umfang
+und wenn sie wirklich zum Unterricht passen.

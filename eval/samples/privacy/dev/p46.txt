@@ -1,0 +1,18 @@
+arbeit: Woyzeck_Inhaltsangabe_Delal.pdf
+klasse: 10
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse den Inhalt von Georg Büchners Dramenfragment „Woyzeck“ zusammen.
+---
+Das Dramenfragment „[Woyzeck]{keep}“ von [Georg Büchner]{keep} entstand 1836
+und 1837 und wurde erst 1913 uraufgeführt. Der
+Soldat [Franz Woyzeck]{keep} ist arm und muss sich Geld dazu-
+verdienen, indem er den Hauptmann rasiert und sich vom
+Doktor für Versuche bezahlen lässt. Er ernährt nur noch
+Erbsen. [Marie]{keep}, seine Geliebte, hat ein Kind mit ihm und
+betrügt ihn mit dem Tambourmajor. [Woyzeck]{keep} wird immer
+misstrauischer und hört Stimmen. Am Ende ersticht er
+[Marie]{keep} am Teich. Besonders gut finde ich, dass das Stück
+offen endet. Meine Schwester [Marie]{person} hat es in der Schule
+auch gelesen und fand es zu düster, aber ich mag
+solche Stücke, genau wie meine Freundin [Berfin]{person}.

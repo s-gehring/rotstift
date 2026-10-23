@@ -1,0 +1,19 @@
+arbeit: Rico_Kapitel1-3_6b_Vogel.pdf
+klasse: 6
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die ersten Kapitel von „Rico, Oskar und die Tieferschatten“ zusammen.
+---
+Das Buch von [Andreas Steinhöfel]{keep} handelt von [Rico]{keep}, einem
+Jungen der in Berlin wohnt und nicht so schnell
+denken kann wie andere. Er lebt allein mit seiner
+Mutter und hat im Haus viele komische Nachbarn,
+zum Beispiel [Frau Dahling]{keep} und [Herr Fitzke]{keep}. Eines Tages
+liest [Rico]{keep} von einem Kindesentführer, der „Mister 2000“
+genannt wird. Dann lernt er [Oskar]{keep} kennen, der sehr
+schlau ist und immer einen Helm trägt. Die beiden
+werden Freunde und suchen zusammen nach dem Entführer.
+Meine Freundin [Lilly
+Jung]{person} hat das Buch zuerst gelesen, sie ist noch
+ziemlich jung, aber sie sagt es ist richtig lustig.
+Das Buch kam 2008 raus und ich finde es klasse.

@@ -1,0 +1,18 @@
+arbeit: IMG_5530.jpg
+klasse: 5
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle dich in einem Steckbrief deiner neuen Klasse vor.
+---
+Hallo, ich heiße [Kai Lorenz]{person} und bin zehn Jahre alt.
+Ich bin am [28.09.2014]{date} geboren, also bald elf. Ich wohne
+im [Birkenweg 14]{place} in [38100 Braunschweig]{place} mit Mama, Papa und
+meinem großen Bruder. Meine Freunde sagen [Lolo]{person} zu mir.
+Mein bester Freund heißt [Moritz Son-
+nenberg]{person}, aber alle nennen
+ihn nur [Sonne]{person}, weil er immer lacht wenn die
+Sonne scheint. Ich spiele Fußball beim [SV Veltenhof]{institution}
+und mein Lieblingsspieler ist [Manuel Neuer]{keep}. Instagram darf
+ich noch nicht, aber mein Bruder hat [@ben_lorenz_]{contact}.
+Meine Büchereiausweis Nummer ist [100482]{number}. Mein Lieblingsessen
+sind Nudeln und ich mag keine Pilze.

@@ -1,0 +1,22 @@
+arbeit: Brief_Verein_Kuendigung.pdf
+klasse: 10
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen formellen Brief an deinen Verein und kündige deine Mitgliedschaft.
+---
+[Marie-Luise von Treskow]{person}
+[Birkenallee 7]{place}
+[22457 Hamburg]{place}
+den [12.06.2025]{date}
+An den [Tennisclub Blau-Weiß Stellingen e. V.]{institution}
+Betreff: Kündigung der Mitgliedschaft, Nummer [20417]{number}
+Sehr geehrte Damen und Herren,
+hiermit kündige ich meine Mitgliedschaft zum Ende des
+Jahres. [Seit meiner Knie-OP am [05.06.2025]{date}]{health} kann ich leider nicht
+mehr regelmäßig spielen. Den Beitrag haben Sie bisher von
+meinem Konto [DE45 1203 0000 0098 7654 32]{number} eingezogen. Bitte stellen
+Sie das zum Vertragsende ein und bestätigen Sie mir
+die Kündigung schriftlich. Für Rückfragen erreichen Sie mich
+unter [m.vontreskow@gmx.de]{contact}.
+Mit freundlichen Grüßen
+[Marie-Luise von Treskow]{person}

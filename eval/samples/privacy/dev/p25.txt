@@ -1,0 +1,20 @@
+arbeit: Kovalenko_Oleksandr_6a_Aufsatz.pdf
+klasse: 6
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Erlebnis, bei dem du richtig Angst hattest.
+---
+Letztes Jahr waren wir mit der Klasse im Schullandheim
+im Harz. Unser Lehrer Herr [Fuchs]{person} hat gesagt, wir
+machen abends eine Nachtwanderung. Ich hatte voll Angst,
+weil ich mal im Wald einen Fuchs gesehen habe der hat
+mich angeknurrt. Ich und [denys]{person} sind ganz hinten
+gelaufen. Alle nennen mich [Sasha]{person}, deshalb hat [Denys]{person}
+auch geflüstert: „[Sasha]{person}, hörst du das?“ Auf einmal hat was
+geheult wie ein Wolf! Alle haben geschrien und Frau
+[Wolf]{person} hat angefangen zu lachen, weil es nur [Denys]{person}' Handy
+war mit einem Klingelton. Der Wolf war gar nicht echt.
+Ich hab mich trotzdem gefürchtet, denn [wir sind vor dem
+Krieg aus der Ukraine geflohen]{origin} und seitdem mag ich laute
+Geräusche nicht. Am Ende haben wir Marshmallows gegessen
+und es war doch noch schön.

@@ -1,0 +1,17 @@
+arbeit: Vorstellung Familie Rosenthal 6a.pdf
+klasse: 6
+form: Vorstellung
+fach: Deutsch
+aufgabe: Stelle deine Familie in einem kurzen Text vor.
+---
+Ich möchte meine Familie vorstellen. Mein Papa heißt
+[Daniel]{person} und arbeitet als Busfahrer. Meine Mama [Anja]{person}
+arbeitet in einer Apotheke. Wir sind [evangelisch]{religion} und gehen
+jeden Sonntag in die Kirche der [Gemeinde St. Johannes]{institution}.
+Meine Oma [Rose]{person} wohnt bei uns im Haus im
+[Lerchenweg 3]{place}. Im Garten blühen im Sommer ganz viele
+Rosen, und [Rose]{person}s Kuchen mit Kirschen ist der beste.
+Dann habe ich noch einen Bruder, der heißt [mark]{person}
+und ist erst vier. Er will immer mein
+Fahrrad haben, aber das ist zu groß für ihn.
+Unser Hund heißt Bello und schläft in meinem Bett.

@@ -1,0 +1,19 @@
+arbeit: Scan_Tagebuch_5a.pdf
+klasse: 5
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über deinen ersten Tag auf der neuen Schule.
+---
+Mittwoch, der [27.08.2025]{date}
+Liebes Tagebuch heute war mein erster Tag auf der neuen
+Schule in der [Peter-Rosegger-Schule]{institution} und ich hatte voll
+angst. Aber dann hab ich [emilia]{person} getroffen, die war
+auch neu und wir haben uns neben einander gesetzt.
+Unsere Lehrerin heißt Frau [Rabe]{person}, sie ist sehr nett.
+Auf dem Schulhof saß ein schwarzer Rabe und hat
+mir fast das Brot geklaut. [Lu]{person} hat gesagt das er
+das jeden Tag macht. In der Pause haben wir
+Fangen gespielt und [Tobias]{person}' Mütze ist aufs Dach
+geflogen. Er hat fast geweint, aber der Hausmeister
+hat sie wieder geholt. Nach der Schule hat Mama
+gefragt wie es war und ich hab gesagt gut.

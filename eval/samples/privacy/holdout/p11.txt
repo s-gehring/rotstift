@@ -1,0 +1,25 @@
+arbeit: Bewerbung Karaca 10b.pdf
+klasse: 10
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe eine Bewerbung um einen Ferienjob in einem Supermarkt.
+---
+[Selin Karaca]{person}
+[Gartenstraße 23]{place}
+[50674 Köln]{place}
+Telefon: [0221 8841376]{contact}
+E-Mail: [selin.karaca@gmx.net]{contact}
+[Köln]{place}, den [15.10.2025]{date}
+Sehr geehrte Frau [Hinrichs]{person},
+mit großem Interesse habe ich Ihre Anzeige für einen
+Ferienjob gelesen. Ich bin 16 Jahre alt, wurde am
+[12.09.2009]{date} geboren und besuche die zehnte Klasse der
+[Käthe-Kollwitz-Realschule]{institution}. Ich bin zuverlässig und
+arbeite gerne im Team, das habe ich schon im Praktikum
+bei der [Bäckerei Schröder]{institution} gezeigt. Gerne würde ich in
+den Weihnachtsferien an der Kasse oder im Lager
+arbeiten. Das Gehalt überweisen Sie bitte auf mein Konto,
+IBAN [DE45 1203 0000 0098 7654 32]{number}. Über eine Einladung zu
+einem Vorstellungsgespräch würde ich mich freuen.
+Mit freundlichen Grüßen
+[Selin Karaca]{person}

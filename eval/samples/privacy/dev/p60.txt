@@ -1,0 +1,19 @@
+arbeit: IMG_3307.jpg
+klasse: 9
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über einen schwierigen Tag in deinem Leben.
+---
+Dienstag, [18.11.2025]{date}
+Heute war einfach nur schlimm. Als ich heimkam,
+saß Mama am Küchentisch mit einem Brief vom
+Jobcenter. Seit Papa im Sommer [arbeitslos geworden ist]{circumstances},
+wird das Geld jeden Monat knapp. Ich hab
+beschlossen nichts von der Klassenfahrt nach Paris zu
+erzählen, weil wir das nicht bezahlen können. Meine
+Freundin [Paris]{person} hat gefragt warum ich so still bin
+und ich hab gesagt ich hätte Kopfschmerzen. Eigentlich
+heißt sie [Paris Kowalczyk]{person} und ihre Eltern fanden die Stadt
+so toll, deshalb der Name. Am Abend hab
+ich Musik von [Billie Eilish]{keep} gehört und versucht nicht
+zu weinen. Vielleicht kann Oma [Hildegard]{person} uns Geld leihen.

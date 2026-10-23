@@ -1,0 +1,20 @@
+arbeit: Inhaltsangabe_Kabale_Lennard_Voss.pdf
+klasse: 10
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse den Inhalt von Schillers Drama „Kabale und Liebe“ für deine Mitschülerin Merle zusammen.
+---
+Das bürgerliche Trauerspiel von [Friedrich Schiller]{keep} wurde
+1784 uraufgeführt und handelt von der unmöglichen Liebe zwischen
+[Ferdinand]{keep}, dem Sohn des Präsidenten [von Walter]{keep}, und der
+Musikertochter [Luise Miller]{keep}. Der Präsident will seinen Sohn mit
+der Mätresse [Lady Milford]{keep} verheiraten, um seine Macht zu
+sichern. Sein Sekretär [Wurm]{keep}, der schlau wie ein Fuchs vorgeht,
+lässt die Eltern von [Luise]{keep} verhaften und zwingt sie so,
+einen Liebesbrief an den Hofmarschall [Kalb]{keep} zu schreiben.
+[Ferdinand]{keep} glaubt an die Untreue und vergiftet am Ende
+die Limonade, woran beide sterben. Erst im Tod
+vergibt [Ferdinand]{keep} seinem Vater. Unser Lehrer Herr
+[Fuchs]{person} sagt, dass man das Stück nur versteht, wenn man die
+Ständegesellschaft kennt. [Merle]{keep}, ich hoffe, dass dir die
+Zusammenfassung hilft.

@@ -1,0 +1,20 @@
+arbeit: Unfallbericht_7a_Demir.pdf
+klasse: 7
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Unfallbericht über einen Unfall auf dem Schulweg.
+---
+Am [05.06.2025]{date} gegen 7:40 Uhr war ich mit meiner Freundin
+[Hana]{person} auf dem Schulweg zur [Gebrüder-Grimm-Schule]{institution}.
+An der Ampel vor dem Haus [Lindenallee 41]{place} sind wir bei
+Grün losgegangen. Plötzlich kam ein Auto mit dem Kennzeichen
+[HH-MK 2284]{number} und hat nicht gebremst. Ich bin noch zur Seite
+gesprungen, aber [Hana]{person} wurde am Arm erwischt. Der Fahrer,
+Herr [Klein]{person}, ist sofort ausgestiegen. Er war ganz klein
+geworden und hat sich tausendmal entschuldigt. Ich habe
+den Notruf gewählt, weil [Hana]{person} geblutet hat. Der
+Krankenwagen kam nach fünf Minuten. Ich selber habe
+[Asthma]{health} und musste mein Spray nehmen, weil ich so
+aufgeregt war. Zum Glück war nichts gebrochen.
+Die Polizei hat alles aufgeschrieben, auch von dem
+Zeugen [Kevin]{person}. Später hat [Kewin]{person} noch Fotos geschickt.

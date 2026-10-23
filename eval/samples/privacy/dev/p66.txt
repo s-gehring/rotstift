@@ -1,0 +1,18 @@
+arbeit: Verwandlung_Inhalt_Jonah_Klein.jpg
+klasse: 10
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Gib den Inhalt von Kafkas Erzählung „Die Verwandlung“ wieder.
+---
+In der Erzählung von [Franz Kafka]{keep}, die 1915 erschien,
+wacht der Handlungsreisende [Gregor Samsa]{keep} eines Morgens als
+riesiges Ungeziefer in seinem Bett auf. Seine Familie
+reagiert mit Entsetzen, nur seine Schwester [Grete]{keep} kümmert sich
+zuerst um ihn. Der Vater, der früher krank war, beginnt
+wieder zu arbeiten und wirft nach [Gregor]{keep} mit Äpfeln.
+Der Prokurist erscheint, weil [Gregor]{keep} nicht zur Arbeit gekommen
+ist, und flieht entsetzt. Mit der Zeit wird [Gregor]{keep}
+immer schwächer und stirbt. Danach sind alle erleichtert und
+fahren ins Grüne. Mein Banknachbar [Klein]{person} meint, dass das Buch
+eine Metapher für Einsamkeit ist, aber das Ungeziefer
+ist ja nicht klein, sondern riesig. Ich sehe das ähnlich.

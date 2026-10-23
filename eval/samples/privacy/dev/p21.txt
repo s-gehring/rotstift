@@ -1,0 +1,17 @@
+arbeit: Scan 2025-09-30.pdf
+klasse: 6
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Schreibe eine Inhaltsangabe zu „Emil und die Detektive“ von Erich Kästner.
+---
+In dem Kinderbuch „[Emil]{keep} und die Detektive“ von
+[Erich Kästner]{keep}, das 1929 erschien, fährt [Emil Tischbein]{keep} allein mit dem
+Zug nach Berlin zu seiner Oma. Seine Mutter hat ihm
+Geld mitgegeben. Im Zug schläft er ein und als er
+aufwacht ist das Geld weg. Der Dieb [Herr Grundeis]{keep} ist
+auch verschwunden. In Berlin lernt [Emil]{keep} den Jungen
+[Gustav mit der Hupe]{keep} kennen, der ganz viele Kinder
+zusammentrommelt. Die Kinder jagen den Dieb durch die
+Stadt. Seine Cousine [Pony Hütchen]{keep} hilft auch mit. Am Ende
+wird [Herr Grundeis]{keep} gefasst. Mein Bruder [jannik]{person} fand den
+Anfang am besten, aber [jannik]{person}s Lieblingsfigur ist [Gustav]{keep}.

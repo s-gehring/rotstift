@@ -1,0 +1,20 @@
+arbeit: 7c Zeynep Y. Brief.jpg
+klasse: 7
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Brief an deine Cousine Ayşe und erzähle ihr von deiner Woche.
+---
+[Stuttgart-Weilimdorf]{place}, den [03.04.2025]{date}
+Liebe [Ayşe]{keep},
+wie geht es dir? Bei mir ist gerade viel los. Seit einer
+Woche [fasten wir im Ramadan]{religion}, am Anfang war es echt schwer
+aber jetzt geht es. Abends kocht Mama so viel das wir
+es gar nicht schaffen. Gestern waren [Hatice]{person} Teyze und
+Onkel [mehmet]{person} zum Iftar da, und [Mehmet]{person} hat wieder
+Witze gemacht bis alle gelacht haben. In der Schule hat
+mir meine beste Freundin [Rose]{person} eine rote Rose mitgebracht
+weil ich Geburtstag hatte. In der Klasse nennen mich
+alle [Zey]{person}, das finde ich lustig. Meine neue Adresse
+ist [Gartenstraße 14]{place}, [70499 Stuttgart]{place}. Schreib mir doch mal
+auf [@zey.yildiz07]{contact} oder ruf an: [0711 5503846]{contact}.
+Deine [Zeynep]{person}

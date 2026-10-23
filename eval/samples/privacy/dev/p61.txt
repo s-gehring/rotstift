@@ -1,0 +1,19 @@
+arbeit: Erlebniserzählung_Ben_Hahn_8e.pdf
+klasse: 8
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Erlebnis, bei dem du Mut zeigen musstest.
+---
+Ich war noch nie gut darin, vor der Klasse
+zu reden, weil ich [ADHS]{health} habe und dann alles
+durcheinander komme. Letzte Woche musste ich in der
+[Gesamtschule Weststadt]{institution} ein Referat halten. Mein Freund [Kai]{person}, den
+alle nur [Dschey]{person} nennen, hat mir vorher gesagt, dass ich
+einfach tief atmen soll. Ich stand vorne, und
+der Hahn auf meinem Plakat, es ging um
+Bauernhöfe, wackelte, weil meine Hände zitterten. Frau [Tabea
+Lindqvist]{person} hat mir zugenickt. Dann habe ich einfach angefangen
+und plötzlich klappte es. Selbst [Lukas von Hohenfels]{person}, der
+sonst immer lacht, hat zugehört. Danach hat mich
+meine Mutter vom Parkplatz abgeholt, ihr Auto mit
+dem Kennzeichen [KS-AB 2208]{number} stand schon da und ich war stolz.

@@ -1,0 +1,21 @@
+arbeit: Praktikumsbericht Winkler Jan 9b.pdf
+klasse: 9
+form: Bericht
+fach: Deutsch
+aufgabe: Berichte über dein einwöchiges Betriebspraktikum.
+---
+Vom [10.03.]{date} bis zum [21.03.2025]{date} habe ich mein Praktikum in
+der Kita [St. Martin]{institution} gemacht. Meine Betreuerin war Frau
+[Engel]{person}, sie arbeitet dort schon sehr lange und kennt
+jedes Kind. Morgens habe ich beim Frühstück geholfen und
+danach mit den Kindern gespielt. Die Gruppe hat für
+den Basar Engel aus Papier gebastelt, und ich durfte
+die Flügel ankleben. Frau [Engel]{person} hat mir erzählt, dass sie
+[in der Gewerkschaft ver.di]{union} ist und sich für mehr Personal
+einsetzt, weil die Erzieher oft überlastet sind. Mit der
+anderen Praktikantin [Sophie
+Brandt]{person} aus der 10a habe ich mich gut verstanden.
+Am anstrengendsten fand ich das Aufräumen am Nachmittag,
+am schönsten das Vorlesen. Insgesamt war das Praktikum
+eine gute Erfahrung, auch wenn ich später wohl lieber
+einen anderen Beruf wähle.

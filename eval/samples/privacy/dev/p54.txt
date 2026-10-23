@@ -1,0 +1,19 @@
+arbeit: Aufsatz_Erlebnis_Tom_Berger.jpg
+klasse: 6
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Schreibe eine spannende Geschichte über ein Fußballspiel.
+---
+Am Sonntag hatten wir das wichtigste Spiel der
+Saison. Der [SV Eintracht Lindenau]{institution} war Tabellenführer und wir
+brauchten unbedingt einen Sieg. Unser Trainer Herr [Mahler]{person}
+hat uns in der Kabine ganz laut angefeuert.
+Ich wollte spielen wie [Manuel Neuer]{keep}, aber ich stand
+im Tor und hab zuerst ein Eigentor kassiert.
+Zum Glück hat [Dschey]{person} kurz vor der Pause noch
+ausgeglichen und [Dschei]{person} hat gejubelt. Als es dunkel wurde, sah
+man den ersten Stern am Himmel und es stand immer
+noch unentschieden. In der letzten Minute hat [Tim]{person}
+den Ball ins Netz geschossen. Frau [Stern]{person}, die Mutter
+von [Tim]{person}, hat vor Freude geweint. Danach gab es
+für alle Eis und wir sind nach Hause gefahren.

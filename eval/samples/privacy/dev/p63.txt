@@ -1,0 +1,18 @@
+arbeit: Klassenausflug 5b Bericht.pdf
+klasse: 5
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Bericht über euren Klassenausflug in den Zoo.
+---
+Letzten Donnerstag waren wir mit der 5b im Zoo.
+Unser Klassenlehrer Herr [Fuchs]{person} hat uns am Eingang gezählt,
+weil immer einer fehlt. Zuerst haben wir die Affen
+gesehen, die waren sehr laut. [Zeynep]{person} und [dawit]{person} haben
+Brötchen gefüttert, aber das ist verboten. Danach waren
+wir bei den Füchsen, ein Fuchs hat sich ganz
+nah an den Zaun getraut und [Nguyen Thi Lan]{person} hat
+ihn fotografiert. Herr [Fuchs]{person} sagt das er selber auch
+schlau wie ein Fuchs ist. Mittags gab es ein
+Picknick auf der Wiese. [Oleksandr]{person} hat seine Mütze verloren
+und wir haben sie bei den Pinguinen wiedergefunden. Am
+Ende waren alle müde aber glücklich.

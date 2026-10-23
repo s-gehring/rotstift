@@ -1,0 +1,22 @@
+arbeit: E-Mail Skikurs von Wettstein.pdf
+klasse: 9
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine E-Mail an Herrn Albrecht und melde dich für den Skikurs an.
+---
+Von: [max.vonwettstein@t-online.de]{contact}
+An: Herr Albrecht
+Betreff: Anmeldung zum Skikurs
+Sehr geehrter Herr [Albrecht]{keep},
+hiermit melde ich mich verbindlich für den Skikurs im
+Januar an. Ich bin in der 9a des [Humboldt-Gymnasium]{institution}s
+und meine Schülerausweisnummer ist [SA-2024-08815]{number}. Meine
+Mutter, Frau [von Wettstein]{person}, überweist die 340 Euro von
+ihrem Konto, IBAN [DE12 3005 0110 0034 5678
+91]{number}. Wir wohnen in der [Ahornstraße 7]{place} in
+[61348 Bad Homburg]{place}. Falls es Rückfragen gibt, erreichen
+Sie meine Mutter unter [0176 44120987]{contact}. Ich bedanke mich
+im Voraus für Ihre Mühe und bitte um eine kurze
+Bestätigung, damit ich den Platz sicher habe.
+Mit freundlichen Grüßen
+[Max von Wettstein]{person}

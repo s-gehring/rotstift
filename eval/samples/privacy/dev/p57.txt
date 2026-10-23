@@ -1,0 +1,19 @@
+arbeit: Eoerterung_Wahlalter_Clara_Mayer.pdf
+klasse: 9
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere, ob das Wahlalter in Deutschland auf 16 Jahre gesenkt werden sollte.
+---
+Immer wieder reden Politiker wie [Olaf Scholz]{keep} darüber, ob
+schon Sechzehnjährige wählen dürfen. Dafür spricht, dass junge
+Menschen von den Entscheidungen am längsten betroffen sind, zum
+Beispiel beim Klima. [Greta Thunberg]{keep} hat gezeigt, dass
+Jugendliche sich sehr wohl für Politik interessieren. Meine
+Mutter ist [in der SPD]{politics} und nimmt mich manchmal mit zu Treffen.
+Dagegen sagt mein Onkel [Rüdiger]{person}, der [immer die AfD wählt]{politics}, dass
+Jugendliche noch zu leicht beeinflusst werden. Unser Lehrer Herr
+[Jung]{person} meint, das stimmt nicht, weil auch Erwachsene viel auf
+Social Media glauben. Er sagt, man muss die jungen
+Leute vorher in der Schule gut informieren. Ich finde
+deshalb, dass man das Wahlalter senken sollte, wenn
+dafür mehr Politikunterricht gemacht wird.

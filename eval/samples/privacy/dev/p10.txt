@@ -1,0 +1,18 @@
+arbeit: Erlebnis_Kemal_6a.pdf
+klasse: 6
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Erlebnis mit deinen Freunden Rose und Tim.
+---
+Letzten Samstag waren [Rose]{keep}, [Tim]{keep} und ich bei meinem
+Opa [Hannes]{person} im Garten am [Rosenweg 4]{place}. Er hat dort ganz
+viele rote Rosen und eine alte Schaukel. Opa hat gesagt
+wir dürfen im Gartenhaus Pizza backen, wenn wir ihm
+beim Unkraut helfen. [Tim]{keep} hat aber nur Quatsch gemacht
+und [Rose]{keep} hat ihn mit dem Wasserschlauch nass gespritzt.
+Dann ist der Schlauch geplatzt und alles war überschwemmt.
+Opa hat erst geschimpft, dann musste er selber lachen.
+Wir haben trotzdem die Pizza gemacht, nur war sie
+ein bisschen schwarz. Meine Schwester [Aylin]{person} hat gesagt
+das schmeckt wie Kohle. Trotzdem war es der beste
+Tag der Ferien und wir wollen das bald wiederholen.

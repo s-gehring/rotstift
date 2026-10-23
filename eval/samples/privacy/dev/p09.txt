@@ -1,0 +1,18 @@
+arbeit: IMG_5530.jpg
+klasse: 8
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über einen schwierigen Tag.
+---
+Freitag, [07.02.2025]{date}
+Liebes Tagebuch, heute war echt ein mieser Tag. In Mathe
+hat Herr [Kramer]{person} die Arbeit zurück gegeben und ich hab
+nur eine 4 minus. [Dschey]{person} hat gelacht, obwohl er selber
+eine 5 hat. Nach der Schule bin ich mit [nils]{person} zum
+Kiosk gegangen, aber [Nils]{person}' Handy war kaputt und wir
+konnten nicht mal Musik hören. Zuhause hat Mama
+wieder gefragt wie es war. Ich hab nichts gesagt, weil
+[Papa seit drei Monaten arbeitslos ist]{circumstances} und sie dann
+immer traurig guckt. Er sitzt nur noch vor dem Fernseher.
+Abends hab ich mit [Dschey]{person} gezockt und wir haben gewonnen.
+Das war das Beste am ganzen Tag. Jetzt bin ich müde.

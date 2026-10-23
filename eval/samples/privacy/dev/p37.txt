@@ -1,0 +1,19 @@
+arbeit: Vorstellung Taras M. 10a.pdf
+klasse: 10
+form: Vorstellung
+fach: Deutsch
+aufgabe: Stelle dich deiner Gastfamilie in Irland in einem kurzen Text vor.
+---
+Liebe Gastfamilie, ich möchte mich euch kurz vorstellen.
+Ich heiße [Taras Melnyk]{person}, aber meine Freunde sagen [Tarry]{person} zu mir.
+Ich bin 16 Jahre alt, am [4. September]{date} habe ich Geburtstag,
+und ich gehe auf das [Käthe-Kollwitz-Gymnasium]{institution} in
+[Leipzig-Gohlis]{place}. In meiner Freizeit spiele ich Gitarre und
+klettere im Verein [DAV Leipzig]{institution}. Mein Lieblingsmusiker ist
+[Ed Sheeran]{keep}, ich hoffe, ihr hört auch gerne Musik.
+Ich sage es lieber gleich: [Ich bin seit einem Jahr mit
+[Ilya]{person} zusammen]{sexuality}, er wird mich vielleicht per Videoanruf
+besuchen. Ich esse fast alles, nur keinen Fisch. Meine
+Handynummer ist [0151 77203958]{contact} und meine E-Mail ist
+[taras.melnyk@gmail.com]{contact}. Ich freue mich sehr auf Irland
+und auf euch.

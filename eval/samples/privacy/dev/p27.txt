@@ -1,0 +1,19 @@
+arbeit: Unfallbericht_8b_Karim.pdf
+klasse: 8
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Unfallbericht für die Schulleitung.
+---
+Am Dienstag, den [11.03.2025]{date} gegen 7.45 Uhr ist mein Mitschüler
+[Mohammed Al-Rashid]{person} auf dem Weg zur [Goethe-Realschule]{institution}
+mit dem Fahrrad gestürzt. Ich bin direkt hinter ihm gefahren
+und habe alles gesehen. Ein Auto mit dem Kennzeichen
+[K-AB 4821]{number} hat ihn beim abbiegen geschnitten. [Mohamad]{person} ist
+auf die Straße gefallen und hat sich das Knie aufgeschlagen.
+Zufällig kam ein Bauer mit seinem Traktor vorbei und
+hat sofort angehalten. Er hat den Krankenwagen gerufen.
+Weil [Mohammed]{person} [Diabetes hat]{health}, brauchte er noch Traubenzucker.
+Unsere Sportlehrerin Frau [Bauer]{person} kam kurz danach dazu und
+ist mit ins [St.-Marien-Krankenhaus]{institution} gefahren. Die Polizei hat
+den Fahrer später gefunden. Ich habe alles so aufgeschrieben
+wie ich es gesehen habe.

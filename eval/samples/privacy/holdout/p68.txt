@@ -1,0 +1,20 @@
+arbeit: Tagebuch_Elif_Bach_7d.pdf
+klasse: 7
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über ein Konzert oder ein anderes besonderes Ereignis.
+---
+Samstag, den [29.11.2025]{date}
+Liebes Tagebuch, heute war das Konzert von [Helene Fischer]{keep}
+und ich war mit Mama und meiner Cousine [ayse]{person}
+da. Am Anfang hab ich noch meinen Schülerausweis, die
+Nummer [440912]{number}, im Bus verloren, aber der Fahrer hat
+ihn zum Glück gefunden. Die Halle war so
+laut, dass man Mamas Stimme gar nicht gehört hat.
+Als [Helene Fischer]{keep} ihr bekanntestes Lied gesungen hat, haben
+alle mitgesungen. Neben uns saß Herr [Bach]{person}, er hat die
+ganze Zeit gefilmt. Das Video gibts bei [@elif.bach07]{contact}.
+Meine Oma sagt, Musik ist wie ein Bach, der
+immer weiterfließt. Nach dem
+Konzert sind wir nach Hause gefahren, es war schon
+spät und ich bin sofort eingeschlafen.

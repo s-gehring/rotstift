@@ -1,0 +1,18 @@
+arbeit: Unfallbericht Marie Kluge 7c.pdf
+klasse: 7
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Unfallbericht über einen Vorfall auf einem Schulausflug.
+---
+Am Mittwoch, den [12.11.2025]{date} waren wir mit der Klasse 7c auf
+dem Bauernhof. Unsere Lehrerin Frau [Bauer]{person} hat gesagt, dass
+wir nicht auf den Heuboden klettern dürfen. Der Bauer
+hat uns die Kühe gezeigt und dann das Mittagessen
+gebracht. Plötzlich ist [Jannik
+Pohl]{person} doch auf die Leiter gestiegen und von
+der dritten Sprosse abgerutscht. Er ist auf den Rücken
+gefallen und hat laut geschrien. Frau [Bauer]{person} hat sofort
+den Notruf gewählt. Der Krankenwagen mit dem Kennzeichen
+[K-RD 3471]{number} kam nach zehn Minuten. [Janick]{person}s Arm war gebrochen
+und er wurde ins [Klinikum Süd]{institution} gebracht. Der Hofbesitzer
+hat danach die Leiter weggestellt, damit nichts mehr passiert.

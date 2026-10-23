@@ -1,0 +1,19 @@
+arbeit: Pfeiffer_Jule_5c.pdf
+klasse: 5
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle ein spannendes Erlebnis aus deinen Ferien.
+---
+Letzten Sommer waren wir im Bayrischen Wald in einem
+Tierpark. Wir sind von [Hürth]{place} aus ganz lange gefahren
+und mein Bruder [kilian]{person} hat die ganze Zeit gemeckert.
+Im Tierpark hat uns der Förster Herr [Wolf]{person} die
+Wölfe gezeigt. Er hat gesagt das ein Wolf gar nicht
+so gefährlich ist wie man immer denkt. Auf einmal ist
+[kilian]{person}s Rucksack ins Gehege gefallen. Alle haben
+geschrien. Herr [Wolf]{person} ist sofort rein gegangen und der
+große graue Wolf hat nur dran geschnuppert. Dann hat er
+den Rucksack mit der Schnauze zurück geschoben. Meine
+Mama hat fast geweint. Am Abend habe ich meiner
+Freundin [Sofie]{person} alles erzählt und sie hat gesagt
+das sie sowas auch mal erleben will.

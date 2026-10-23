@@ -1,0 +1,20 @@
+arbeit: Erlebniserzählung Nils Rabe 5c.pdf
+klasse: 5
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Ausflug, bei dem etwas Unerwartetes passiert ist.
+---
+Letzten Samstag war ich mit meinem Opa und meinem
+Freund [ole]{person} im Wildpark. Wir sind früh los gefahren
+weil Opa sagt das man die Tiere morgens am
+besten sieht. Bei den Wölfen stand ein riesen
+Schild, da stand drauf Vorsicht der Wolf ist
+nicht zam. [ole]{person} hat gelacht weil unser Sportlehrer
+Herr [Wolf]{person} auch so heißt und der brült auch
+immer wie ein Raupdier. Dann ist plötzlich ein
+Rabe auf meinen Kopf gelandet und hat mir
+das ganze Brötchen geklaut. Mein Opa [Heinz Ra-
+be]{person} hat so doll gelacht das er fast in den
+Teich gefallen ist. Zum Glück hatte Oma noch
+ein zweites Brötchen ein gepackt. Das war der
+schönste Ausflug in diesem Jahr.

@@ -1,0 +1,18 @@
+arbeit: Nguyen_Minh_Anh_6b.pdf
+klasse: 6
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Schreibe für deine Freundin Hana eine Inhaltsangabe zum ersten Band von Harry Potter.
+---
+Hallo [Hana]{keep}, hier ist die Inhaltsangabe zu dem Buch
+„[Harry Potter]{keep} und der Stein der Weisen“ von [J. K. Rowling]{keep},
+das 1997 erschienen ist. [Harry]{keep} lebt bei seinen gemeinen
+Verwanten, den [Dursleys]{keep}, und muss unter der Treppe
+schlafen. An seinem 11. Geburtstag kommt [Hagrid]{keep} und
+sagt, dass [Harry]{keep} ein Zauberer ist. Er darf nach Hogwarts
+gehen und findet dort die Freunde [Ron Weasley]{keep} und [Hermine]{keep}.
+Zusammen wollen sie den Stein der Weisen beschützen, den
+[Voldemort]{keep} klauen will. Am Ende besiegt [Harry]{keep} ihn. Das Buch
+habe ich zu meinem Geburtstag am [9. Juni]{date} bekommen. Mein
+Bruder [kai]{person} hat es auch gelesen, aber der findet es
+zu lang. Ich finde es richtig spannend.

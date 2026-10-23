@@ -1,0 +1,20 @@
+arbeit: Scan 2025-02-18 0815.pdf
+klasse: 8
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über deinen ersten Tag in der neuen Klasse.
+---
+Dienstag, den [18.02.2025]{date}
+Liebes Tagebuch, heute war mein erster Tag in der 8a. Ich
+war so nervös, dass ich nichts frühstücken konnte. Meine
+Pflegemutter [Hei-
+ke]{person} hat mich bis zur Tür gebracht. [Ich lebe seit
+zwei Jahren in einer Pflegefamilie]{circumstances}, davor war ich in einer
+Wohngruppe. Ich komme aus [Eritrea]{origin}, das weiß hier
+gleich jeder. Der Lehrer Herr [Rabe]{person} hat mich vorgestellt,
+und draußen auf dem Zaun saß ein Rabe, der hat laut
+gekrächzt. Alle haben gelacht. Neben mir sitzt [Natnael
+Tesfay]{person}, er spricht auch [Tigrinya]{origin}. Er nennt mich [Dawi]{person},
+weil mein Name [Dawit]{person} ihm zu lang ist. Seinen Snapchat
+hat er mir auch gegeben: [@natnael.tesfay_8a]{contact}. Ich glaube, hier
+kann es gut werden.

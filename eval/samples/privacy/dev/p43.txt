@@ -1,0 +1,19 @@
+arbeit: IMG_5502.jpg
+klasse: 10
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Handlung des Dramas „Die Physiker“ von Friedrich Dürrenmatt zusammen.
+---
+Das Drama „Die Physiker“ von [Friedrich Dürrenmatt]{keep} wurde
+1962 uraufgeführt und spielt in einem Sanatorium. Dort
+leben drei Physiker, die sich für [Newton]{keep}, [Einstein]{keep} und
+[Möbius]{keep} halten. Als Krankenschwestern ermordet werden, stellt sich
+heraus, dass die Männer gar nicht verrückt sind.
+[Möbius]{keep} hat eine Formel entdeckt, die die Welt zerstören
+könnte, und versteckt sich deshalb in der Anstalt. Die
+Ärztin [Mathilde von Zahnd]{keep} hat aber alles abgehört und
+kopiert. Am Ende sind alle drei wirklich gefangen und
+die Ärztin beherrscht die Welt. Unser Lehrer Herr
+[Winter]{person} hat uns das Stück im Winter gelesen, und
+mein Cousin [Tim]{person} meinte, es sei das beste Drama,
+das er kennt. Mir hat besonders die Ironie gefallen.

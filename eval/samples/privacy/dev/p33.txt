@@ -1,0 +1,23 @@
+arbeit: Aufgabe_E-Mail_9d_KW.pdf
+klasse: 9
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine E-Mail an Herrn Dr. Hoffmann und bewirb dich um einen Praktikumsplatz in seiner Praxis.
+---
+Von: [katarzyna.wisniewska@web.de]{contact}
+Betreff: Bewerbung um einen Praktikumsplatz
+Sehr geehrter Herr Dr. [Hoffmann]{keep},
+mein Name ist [Katarzyna
+Wiśniewska]{person} und ich gehe in die 9d des
+[Albert-Schweitzer-Gymnasium]{institution}s in [Hamm]{place}. Im Mai möchte ich
+gerne ein zweiwöchiges Praktikum machen, weil ich mich für
+den Beruf der Tierärztin interessiere. Meine Klassenlehrerin
+Frau [Klein]{person} hat mir Ihre Praxis empfohlen. Ich mag besonders
+kleine Tiere, und ich bin am [17.02.2010]{date} geboren, also alt
+genug. Bei meinem Onkel auf dem Hof habe ich schon
+geholfen, wenn eine Kuh krank war. Falls Sie mir
+einen Platz geben können, wäre ich dankbar. Ich bin
+unter [0172 4491807]{contact} erreichbar. Vielen Dank, Herr Dr.
+[Hoffmann]{keep}, für Ihre Mühe.
+Mit freundlichen Grüßen
+[Katarzyna Wiśniewska]{person}

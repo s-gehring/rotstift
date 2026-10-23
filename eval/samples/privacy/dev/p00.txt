@@ -1,0 +1,21 @@
+arbeit: Schulz Mia 7b Brief.pdf
+klasse: 7
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Brief an deine Brieffreundin Clara und erzähle von deinen Sommerferien.
+---
+[Mühlheim]{place}, den [14.08.2025]{date}
+Liebe [Clara]{keep},
+wie gets dir? Mir gehts gut, nur meine [Oma liegt
+seit Juli im Krankenhaus wegen ihrem Herz]{health}. In den
+Ferien waren wir mit Onkel [Bernd]{person} in Kroatien, das war
+voll schön. Mein Cousin [Leo]{person} hat die ganze Zeit
+genervt, aber am Strand war es toll. [Leo]{person}s Freund [Ma-
+rek]{person} kam auch mit, der ist voll nett.
+Nächste Woche fängt die Schule wieder an, ich komme
+in die 8c von Frau [Wolf]{person}. Mein Handball Verein
+[TSV Mühlheim]{institution} hat auch wieder Training, immer
+Dienstags in der Halle am [Sonnenweg]{place}.
+Schreib mir doch mal an [mia.schulz09@gmx.de]{contact}
+oder ruf an: [0171 2238491]{contact}.
+Viele Grüße deine [Mia]{person}
