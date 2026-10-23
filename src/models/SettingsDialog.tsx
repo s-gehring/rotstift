@@ -3,7 +3,10 @@ import packageInfo from '../../package.json';
 import { useApp } from '../app/app-context.tsx';
 import type { ModelRole } from '../app/types.ts';
 import { CloudKeyForm, CloudModelForm } from '../cloud/CloudModelForm.tsx';
+import { PROTECTED_RECOGNITION_NOTE, stepProtectionDefault } from '../cloud/protection.ts';
+import { ProtectionSwitch } from '../cloud/ProtectionSwitch.tsx';
 import { privacyNote } from '../cloud/remote.ts';
+import { describeCloudError, type CloudErrorClass } from '../cloud/errors.ts';
 import { findTemplate } from '../cloud/templates.ts';
 import type { CloudModel } from '../cloud/use-cloud.ts';
 import { Button } from '../ui/Button.tsx';
@@ -220,8 +223,10 @@ function CloudRow({
   readonly cloud: CloudModel;
   readonly locked: boolean;
 }) {
+  const [protectionError, setProtectionError] = useState<CloudErrorClass | null>(null);
   const step = cloud.steps[role];
   if (step === undefined) return null;
+  const blocked = role === 'transcriber' && step.protection;
   const needsKey = step.key === null && findTemplate(step.template)?.key === 'required';
   return (
     <>
@@ -241,12 +246,33 @@ function CloudRow({
             {step.key === 'session' && (
               <span className="settings-model-note">Schlüssel gilt nur bis zum Beenden.</span>
             )}
+            {blocked && (
+              <span className="settings-model-note" data-warn="true">
+                {PROTECTED_RECOGNITION_NOTE} Diese Cloud-Erkennung ist gesperrt und wird nicht
+                benutzt, bis der Schutz ausgeschaltet ist.
+              </span>
+            )}
           </span>
         </label>
         <Button variant="quiet" disabled={locked} onClick={() => void cloud.clear(role)}>
           Ausschalten
         </Button>
       </div>
+      <ProtectionSwitch
+        role={role}
+        on={step.protection}
+        askBeforeOff={stepProtectionDefault(step)}
+        disabled={locked}
+        onChange={(on, confirmed) => {
+          setProtectionError(null);
+          void cloud.setProtection(role, on, confirmed).then(setProtectionError);
+        }}
+      />
+      {protectionError !== null && (
+        <p className="settings-error" role="alert">
+          {describeCloudError(protectionError)}.
+        </p>
+      )}
       {needsKey && <CloudKeyForm role={role} cloud={cloud} />}
     </>
   );

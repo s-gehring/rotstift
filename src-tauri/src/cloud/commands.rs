@@ -7,12 +7,14 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::oneshot;
 
 use super::anthropic::{self, RemoteModel};
-use super::config::{Choice, Config, Consent};
+use super::config::{Choice, Config, Consent, protection_consent_valid, protection_default};
 use super::endpoint::{self, pinned_addresses};
 use super::keys::{self, KeyStore, Keys};
 use super::send::Job;
 use super::templates::{self, Api, KeyNeed, TokenField};
-use super::{CONSENT_VERSION, CloudError, CloudState, ErrorClass, Step};
+use super::{
+    CONSENT_VERSION, CloudError, CloudState, ErrorClass, PROTECTION_CONSENT_VERSION, Step,
+};
 use crate::diagnostics;
 use crate::llm::ChatRequest;
 
@@ -30,6 +32,7 @@ pub struct StepView {
     pub(super) model: String,
     pub(super) loopback: bool,
     pub(super) confirmed: bool,
+    pub(super) protection: bool,
     pub(super) key: Option<KeyStore>,
 }
 
@@ -144,6 +147,7 @@ impl CloudState {
             model: choice.model.clone(),
             loopback: resolved.endpoint.loopback,
             confirmed: resolved.confirmed(),
+            protection: resolved.protected(),
             key,
         })
     }
@@ -174,10 +178,17 @@ impl CloudState {
         model: &str,
         key: Option<String>,
         confirmed: bool,
+        protection: Option<bool>,
+        protection_confirmed: bool,
     ) -> Result<CloudView, CloudError> {
         let template = templates::find(template_id).ok_or(ErrorClass::NotConfigured)?;
         let base_url = endpoint::normalize(base_url);
         let endpoint = endpoint::parse(template, &base_url)?;
+        let default_protection = protection_default(template, &endpoint);
+        let protection = protection.unwrap_or(default_protection);
+        if protection && step == Step::Transcriber {
+            return Err(ErrorClass::ProtectionActive.into());
+        }
         let model = model.trim();
         if !valid_model(model) {
             return Err(ErrorClass::InvalidRequest.into());
@@ -213,6 +224,21 @@ impl CloudState {
         } else {
             Some(kept.ok_or(ErrorClass::ConsentMissing)?)
         };
+        let protection_consent = if protection || !default_protection {
+            None
+        } else if protection_confirmed {
+            Some(Consent {
+                host: endpoint.host.clone(),
+                version: PROTECTION_CONSENT_VERSION,
+                at_ms: now_ms(),
+            })
+        } else {
+            let kept = previous
+                .as_ref()
+                .and_then(|choice| choice.protection_consent.clone())
+                .filter(|consent| protection_consent_valid(consent, &endpoint.host));
+            Some(kept.ok_or(ErrorClass::ProtectionConsentMissing)?)
+        };
         if let Some(key) = &key {
             self.keys.set(&account, key).await;
         }
@@ -223,9 +249,17 @@ impl CloudState {
                 base_url: base_url.clone(),
                 model: model.to_owned(),
                 consent,
+                protection: Some(protection),
+                protection_consent: protection_consent.clone(),
             },
         );
         config.save(&self.config_path)?;
+        if previous.as_ref().and_then(|choice| choice.protection) != Some(protection) {
+            diagnostics::record(
+                "cloud_protection",
+                json!({ "template": template.id, "step": step.name(), "on": protection }),
+            );
+        }
         if confirmed && !endpoint.loopback {
             diagnostics::record(
                 "cloud_consent",
@@ -251,6 +285,55 @@ impl CloudState {
         self.keys
             .set(&keys::account(&endpoint::normalize(&choice.base_url)), &key)
             .await;
+        Ok(self.view().await)
+    }
+
+    pub async fn set_protection(
+        &self,
+        step: Step,
+        protection: bool,
+        confirmed: bool,
+    ) -> Result<CloudView, CloudError> {
+        let _guard = self.config_lock.lock().await;
+        let mut config = self.load();
+        let choice = config
+            .steps
+            .get(&step)
+            .cloned()
+            .ok_or(ErrorClass::NotConfigured)?;
+        let resolved = choice.resolve()?;
+        let host = resolved.endpoint.host.clone();
+        let default = resolved.protection_default();
+        let protection_consent = if protection || !default {
+            None
+        } else if confirmed {
+            Some(Consent {
+                host: host.clone(),
+                version: PROTECTION_CONSENT_VERSION,
+                at_ms: now_ms(),
+            })
+        } else {
+            let kept = choice
+                .protection_consent
+                .clone()
+                .filter(|consent| protection_consent_valid(consent, &host));
+            Some(kept.ok_or(ErrorClass::ProtectionConsentMissing)?)
+        };
+        let template = resolved.template.id.clone();
+        config.steps.insert(
+            step,
+            Choice {
+                protection: Some(protection),
+                protection_consent,
+                ..choice
+            },
+        );
+        config.save(&self.config_path)?;
+        diagnostics::record(
+            "cloud_protection",
+            json!({ "template": template, "step": step.name(), "on": protection }),
+        );
+        drop(_guard);
         Ok(self.view().await)
     }
 
@@ -316,12 +399,21 @@ impl CloudState {
         request_id: Option<String>,
         step: Step,
         request: Value,
+        pseudonymized: bool,
     ) -> Result<Value, CloudError> {
         let config = self.load();
         let choice = config.steps.get(&step).ok_or(ErrorClass::NotConfigured)?;
         let resolved = choice.resolve()?;
         if !resolved.confirmed() {
             return Err(ErrorClass::ConsentMissing.into());
+        }
+        if resolved.protected() {
+            if step == Step::Transcriber {
+                return Err(ErrorClass::ProtectionActive.into());
+            }
+            if !pseudonymized {
+                return Err(ErrorClass::NotPseudonymized.into());
+            }
         }
         let request = with_default_tokens(request, step, resolved.template.api);
         let parsed = ChatRequest::parse(request).map_err(|_| ErrorClass::InvalidRequest)?;
@@ -456,7 +548,7 @@ impl CloudState {
     }
 
     pub async fn check(&self, step: Step) -> Result<(), CloudError> {
-        let response = self.chat(None, step, probe(step)).await?;
+        let response = self.chat(None, step, probe(step), true).await?;
         if probe_answer_valid(step, &response) {
             Ok(())
         } else {
@@ -477,6 +569,7 @@ pub async fn cloud_config(state: State<'_, CloudState>) -> Result<CloudView, Clo
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn cloud_use(
     state: State<'_, CloudState>,
     step: Step,
@@ -485,10 +578,31 @@ pub async fn cloud_use(
     model: String,
     key: Option<String>,
     confirmed: bool,
+    protection: Option<bool>,
+    protection_confirmed: Option<bool>,
 ) -> Result<CloudView, CloudError> {
     state
-        .use_step(step, &template, &base_url, &model, key, confirmed)
+        .use_step(
+            step,
+            &template,
+            &base_url,
+            &model,
+            key,
+            confirmed,
+            protection,
+            protection_confirmed.unwrap_or(false),
+        )
         .await
+}
+
+#[tauri::command]
+pub async fn cloud_set_protection(
+    state: State<'_, CloudState>,
+    step: Step,
+    protection: bool,
+    confirmed: bool,
+) -> Result<CloudView, CloudError> {
+    state.set_protection(step, protection, confirmed).await
 }
 
 #[tauri::command]
@@ -529,8 +643,11 @@ pub async fn cloud_chat(
     request_id: Option<String>,
     step: Step,
     request: Value,
+    pseudonymized: Option<bool>,
 ) -> Result<Value, CloudError> {
-    state.chat(request_id, step, request).await
+    state
+        .chat(request_id, step, request, pseudonymized.unwrap_or(false))
+        .await
 }
 
 #[tauri::command]

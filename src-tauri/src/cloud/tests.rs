@@ -175,28 +175,58 @@ async fn nothing_is_sent_without_a_confirmed_choice() {
     let cloud = state("consent", &mock, fast());
 
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::NotConfigured
     );
     assert_eq!(
         cloud
-            .use_step(Step::Corrector, "server", LAN, "m", None, false)
+            .use_step(
+                Step::Corrector,
+                "server",
+                LAN,
+                "m",
+                None,
+                false,
+                None,
+                false
+            )
             .await
             .unwrap_err()
             .class(),
         ErrorClass::ConsentMissing
     );
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::NotConfigured
     );
 
     cloud
-        .use_step(Step::Transcriber, "server", LAN, "m", None, true)
+        .use_step(
+            Step::Transcriber,
+            "server",
+            LAN,
+            "m",
+            None,
+            true,
+            None,
+            false,
+        )
         .await
         .unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::NotConfigured
     );
 
@@ -206,13 +236,21 @@ async fn nothing_is_sent_without_a_confirmed_choice() {
     config.steps.insert(Step::Corrector, moved);
     config.save(&cloud.config_path).unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::ConsentMissing
     );
 
     cloud.clear(Step::Transcriber).await.unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Transcriber, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Transcriber, text_request(), true)
+                .await
+        ),
         ErrorClass::NotConfigured
     );
     assert_eq!(mock.hits.load(Ordering::SeqCst), 0);
@@ -223,7 +261,16 @@ async fn a_confirmed_step_sends_only_the_allowed_fields() {
     let mock = mock(vec![ok_reply()]).await;
     let cloud = state("send", &mock, fast());
     let view = cloud
-        .use_step(Step::Corrector, "server", LAN, "llama", None, true)
+        .use_step(
+            Step::Corrector,
+            "server",
+            LAN,
+            "llama",
+            None,
+            true,
+            None,
+            false,
+        )
         .await
         .unwrap();
     let step = &view.steps[&Step::Corrector];
@@ -232,7 +279,7 @@ async fn a_confirmed_step_sends_only_the_allowed_fields() {
     assert_eq!(step.label, "10.255.255.1");
 
     cloud
-        .chat(None, Step::Corrector, text_request())
+        .chat(None, Step::Corrector, text_request(), true)
         .await
         .unwrap();
     let bodies = mock.bodies.lock().unwrap();
@@ -252,7 +299,16 @@ async fn loopback_needs_no_consent() {
     let cloud = state("loopback", &mock, fast());
     let url = format!("http://localhost:{}/v1", mock.address.port());
     let view = cloud
-        .use_step(Step::Reviewer, "server", &url, "m", None, false)
+        .use_step(
+            Step::Reviewer,
+            "server",
+            &url,
+            "m",
+            None,
+            false,
+            None,
+            false,
+        )
         .await
         .unwrap();
     assert!(view.steps[&Step::Reviewer].loopback);
@@ -266,7 +322,7 @@ async fn images_only_go_out_for_the_transcriber_and_keys_never_over_http() {
     let mock = mock(vec![ok_reply()]).await;
     let cloud = state("images", &mock, fast());
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     let image = json!({ "messages": [{ "role": "user", "content": [
@@ -274,7 +330,7 @@ async fn images_only_go_out_for_the_transcriber_and_keys_never_over_http() {
         { "type": "text", "text": "Lies." },
     ] }] });
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, image).await),
+        class(cloud.chat(None, Step::Corrector, image, true).await),
         ErrorClass::InvalidRequest
     );
     assert_eq!(
@@ -285,7 +341,9 @@ async fn images_only_go_out_for_the_transcriber_and_keys_never_over_http() {
                 LAN,
                 "m",
                 Some("sk-fake".into()),
-                true
+                true,
+                None,
+                false,
             )
             .await
             .unwrap_err()
@@ -300,7 +358,9 @@ async fn images_only_go_out_for_the_transcriber_and_keys_never_over_http() {
                 "https://evil.example/v1",
                 "m",
                 Some("k".into()),
-                true
+                true,
+                None,
+                false,
             )
             .await
             .unwrap_err()
@@ -315,7 +375,9 @@ async fn images_only_go_out_for_the_transcriber_and_keys_never_over_http() {
                 "https://api.mistral.ai/v1",
                 "m",
                 None,
-                true
+                true,
+                None,
+                false
             )
             .await
             .unwrap_err()
@@ -330,11 +392,11 @@ async fn retries_only_transient_failures() {
     let transient = mock(vec![status_reply(503), status_reply(502), ok_reply()]).await;
     let cloud = state("retry", &transient, fast());
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     cloud
-        .chat(None, Step::Corrector, text_request())
+        .chat(None, Step::Corrector, text_request(), true)
         .await
         .unwrap();
     assert_eq!(transient.hits.load(Ordering::SeqCst), 3);
@@ -342,11 +404,15 @@ async fn retries_only_transient_failures() {
     let rejected = mock(vec![status_reply(401)]).await;
     let cloud = state("retry-auth", &rejected, fast());
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::Auth
     );
     assert_eq!(rejected.hits.load(Ordering::SeqCst), 1);
@@ -358,11 +424,15 @@ async fn retries_only_transient_failures() {
     .await;
     let cloud = state("retry-after", &long_wait, fast());
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::RateLimited
     );
     assert_eq!(long_wait.hits.load(Ordering::SeqCst), 1);
@@ -381,11 +451,15 @@ async fn redirects_are_not_followed() {
     .await;
     let cloud = state("redirect", &redirecting, fast());
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::Server
     );
     assert_eq!(target.hits.load(Ordering::SeqCst), 0);
@@ -400,11 +474,15 @@ async fn oversized_slow_and_cancelled_answers_fail_cleanly() {
     .await;
     let cloud = state("huge", &huge, fast());
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::InvalidResponse
     );
 
@@ -422,11 +500,15 @@ async fn oversized_slow_and_cancelled_answers_fail_cleanly() {
         },
     ));
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::Timeout
     );
 
@@ -437,13 +519,13 @@ async fn oversized_slow_and_cancelled_answers_fail_cleanly() {
     .await;
     let cloud = Arc::new(state("cancel", &waiting, fast()));
     cloud
-        .use_step(Step::Corrector, "server", LAN, "m", None, true)
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
         .await
         .unwrap();
     let running = cloud.clone();
     let call = tokio::spawn(async move {
         running
-            .chat(Some("r1".into()), Step::Corrector, text_request())
+            .chat(Some("r1".into()), Step::Corrector, text_request(), true)
             .await
     });
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -453,7 +535,7 @@ async fn oversized_slow_and_cancelled_answers_fail_cleanly() {
     assert_eq!(
         class(
             cloud
-                .chat(Some("r2".into()), Step::Corrector, text_request())
+                .chat(Some("r2".into()), Step::Corrector, text_request(), true)
                 .await
         ),
         ErrorClass::Cancelled
@@ -477,11 +559,13 @@ async fn clearing_the_last_step_of_an_address_forgets_its_key() {
             "m",
             Some(" sk-fake ".into()),
             true,
+            None,
+            false,
         )
         .await
         .unwrap();
     let view = cloud
-        .use_step(Step::Reviewer, "mistral", url, "m", None, true)
+        .use_step(Step::Reviewer, "mistral", url, "m", None, true, None, false)
         .await
         .unwrap();
     assert_eq!(
@@ -535,6 +619,8 @@ async fn anthropic_state(name: &str, mock: &Mock, step: Step) -> CloudState {
             "claude-test",
             Some("sk-ant-fake".into()),
             true,
+            Some(false),
+            true,
         )
         .await
         .unwrap();
@@ -555,7 +641,10 @@ async fn anthropic_text_goes_through_the_messages_api() {
         "stop": ["###"],
         "max_tokens": 50,
     });
-    let answer = cloud.chat(None, Step::Corrector, request).await.unwrap();
+    let answer = cloud
+        .chat(None, Step::Corrector, request, true)
+        .await
+        .unwrap();
     assert_eq!(
         answer,
         json!({
@@ -592,7 +681,10 @@ async fn anthropic_images_and_schemas_are_translated_and_tokens_default_per_step
         { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,/9j/AAAA" } },
         { "type": "text", "text": "Lies." },
     ] }] });
-    cloud.chat(None, Step::Transcriber, image).await.unwrap();
+    cloud
+        .chat(None, Step::Transcriber, image, true)
+        .await
+        .unwrap();
     assert_eq!(
         mock.bodies.lock().unwrap()[0],
         json!({
@@ -619,7 +711,10 @@ async fn anthropic_images_and_schemas_are_translated_and_tokens_default_per_step
             },
         } },
     });
-    let answer = cloud.chat(None, Step::Reviewer, request).await.unwrap();
+    let answer = cloud
+        .chat(None, Step::Reviewer, request, true)
+        .await
+        .unwrap();
     assert_eq!(
         answer
             .pointer("/choices/0/message/content")
@@ -663,7 +758,11 @@ async fn anthropic_failures_map_to_the_shared_error_classes() {
     let rejected = mock(vec![status_reply(401)]).await;
     let cloud = anthropic_state("ant-401", &rejected, Step::Corrector).await;
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::Auth
     );
     assert_eq!(rejected.hits.load(Ordering::SeqCst), 1);
@@ -678,7 +777,7 @@ async fn anthropic_failures_map_to_the_shared_error_classes() {
     .await;
     let cloud = anthropic_state("ant-429", &limited, Step::Corrector).await;
     cloud
-        .chat(None, Step::Corrector, text_request())
+        .chat(None, Step::Corrector, text_request(), true)
         .await
         .unwrap();
     assert_eq!(limited.hits.load(Ordering::SeqCst), 2);
@@ -690,7 +789,11 @@ async fn anthropic_failures_map_to_the_shared_error_classes() {
     .await;
     let cloud = anthropic_state("ant-429-long", &long_wait, Step::Corrector).await;
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::RateLimited
     );
     assert_eq!(long_wait.hits.load(Ordering::SeqCst), 1);
@@ -698,7 +801,7 @@ async fn anthropic_failures_map_to_the_shared_error_classes() {
     let overloaded = mock(vec![status_reply(529), anthropic_reply("ok")]).await;
     let cloud = anthropic_state("ant-529", &overloaded, Step::Corrector).await;
     cloud
-        .chat(None, Step::Corrector, text_request())
+        .chat(None, Step::Corrector, text_request(), true)
         .await
         .unwrap();
     assert_eq!(overloaded.hits.load(Ordering::SeqCst), 2);
@@ -706,7 +809,11 @@ async fn anthropic_failures_map_to_the_shared_error_classes() {
     let broken = mock(vec![status_reply(500)]).await;
     let cloud = anthropic_state("ant-500", &broken, Step::Corrector).await;
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::Server
     );
     assert_eq!(broken.hits.load(Ordering::SeqCst), 3);
@@ -714,7 +821,11 @@ async fn anthropic_failures_map_to_the_shared_error_classes() {
     let garbled = mock(vec![ok_reply()]).await;
     let cloud = anthropic_state("ant-garbled", &garbled, Step::Corrector).await;
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::InvalidResponse
     );
 }
@@ -730,7 +841,7 @@ async fn an_anthropic_request_can_be_cancelled() {
     let running = cloud.clone();
     let call = tokio::spawn(async move {
         running
-            .chat(Some("a1".into()), Step::Corrector, text_request())
+            .chat(Some("a1".into()), Step::Corrector, text_request(), true)
             .await
     });
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -750,11 +861,17 @@ async fn nothing_is_sent_to_anthropic_without_consent() {
             "claude-test",
             Some("sk-ant-fake".into()),
             false,
+            None,
+            false,
         )
         .await;
     assert_eq!(attempt.unwrap_err().class(), ErrorClass::ConsentMissing);
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::NotConfigured
     );
 
@@ -766,6 +883,8 @@ async fn nothing_is_sent_to_anthropic_without_consent() {
             base_url: ANTHROPIC.into(),
             model: "claude-test".into(),
             consent: None,
+            protection: None,
+            protection_consent: None,
         },
     );
     config.save(&cloud.config_path).unwrap();
@@ -774,7 +893,11 @@ async fn nothing_is_sent_to_anthropic_without_consent() {
         .set(&keys::account(ANTHROPIC), "sk-ant-fake")
         .await;
     assert_eq!(
-        class(cloud.chat(None, Step::Corrector, text_request()).await),
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
         ErrorClass::ConsentMissing
     );
     assert_eq!(mock.hits.load(Ordering::SeqCst), 0);
@@ -862,4 +985,324 @@ async fn the_model_list_reports_errors_and_is_limited_to_anthropic() {
         ErrorClass::InvalidAddress
     );
     assert_eq!(rejected.hits.load(Ordering::SeqCst), 1);
+}
+
+const MISTRAL: &str = "https://api.mistral.ai/v1";
+
+async fn mistral(cloud: &CloudState, step: Step, protection: Option<bool>, confirmed: bool) {
+    cloud
+        .use_step(
+            step,
+            "mistral",
+            MISTRAL,
+            "m",
+            Some("sk-fake".into()),
+            true,
+            protection,
+            confirmed,
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn text_steps_need_the_pseudonymized_flag_while_protection_is_on() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("flag", &mock, fast());
+    mistral(&cloud, Step::Corrector, None, false).await;
+    assert!(cloud.view().await.steps[&Step::Corrector].protection);
+
+    assert_eq!(
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), false)
+                .await
+        ),
+        ErrorClass::NotPseudonymized
+    );
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 0);
+    cloud
+        .chat(None, Step::Corrector, text_request(), true)
+        .await
+        .unwrap();
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn the_transcriber_is_refused_while_protection_is_on() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("transcriber", &mock, fast());
+    for protection in [None, Some(true)] {
+        let refused = cloud
+            .use_step(
+                Step::Transcriber,
+                "mistral",
+                MISTRAL,
+                "m",
+                Some("sk-fake".into()),
+                true,
+                protection,
+                true,
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(refused.class(), ErrorClass::ProtectionActive);
+    }
+    assert!(cloud.view().await.steps.is_empty());
+
+    let missing = cloud
+        .use_step(
+            Step::Transcriber,
+            "mistral",
+            MISTRAL,
+            "m",
+            Some("sk-fake".into()),
+            true,
+            Some(false),
+            false,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(missing.class(), ErrorClass::ProtectionConsentMissing);
+    assert!(cloud.view().await.steps.is_empty());
+
+    mistral(&cloud, Step::Transcriber, Some(false), true).await;
+    assert!(!cloud.view().await.steps[&Step::Transcriber].protection);
+    let image = json!({ "messages": [{ "role": "user", "content": [
+        { "type": "image_url", "image_url": { "url": "data:image/png;base64,iVBORw0KGgo=" } },
+        { "type": "text", "text": "Lies." },
+    ] }] });
+    cloud
+        .chat(None, Step::Transcriber, image.clone(), false)
+        .await
+        .unwrap();
+
+    cloud
+        .set_protection(Step::Transcriber, true, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        class(cloud.chat(None, Step::Transcriber, image, true).await),
+        ErrorClass::ProtectionActive
+    );
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn switching_protection_off_needs_its_own_confirmation_every_time() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("switch", &mock, fast());
+    mistral(&cloud, Step::Corrector, None, false).await;
+
+    assert_eq!(
+        cloud
+            .set_protection(Step::Corrector, false, false)
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::ProtectionConsentMissing
+    );
+    assert!(cloud.view().await.steps[&Step::Corrector].protection);
+
+    let view = cloud
+        .set_protection(Step::Corrector, false, true)
+        .await
+        .unwrap();
+    assert!(!view.steps[&Step::Corrector].protection);
+    cloud
+        .chat(None, Step::Corrector, text_request(), false)
+        .await
+        .unwrap();
+
+    let view = cloud
+        .set_protection(Step::Corrector, true, false)
+        .await
+        .unwrap();
+    assert!(view.steps[&Step::Corrector].protection);
+    assert_eq!(
+        cloud
+            .set_protection(Step::Corrector, false, false)
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::ProtectionConsentMissing
+    );
+
+    assert_eq!(
+        cloud
+            .set_protection(Step::Reviewer, false, true)
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::NotConfigured
+    );
+}
+
+#[tokio::test]
+async fn reselecting_the_same_host_keeps_a_valid_protection_consent() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("reselect", &mock, fast());
+    mistral(&cloud, Step::Corrector, Some(false), true).await;
+    mistral(&cloud, Step::Corrector, Some(false), false).await;
+    assert!(!cloud.view().await.steps[&Step::Corrector].protection);
+    mistral(&cloud, Step::Corrector, Some(true), false).await;
+    assert_eq!(
+        cloud
+            .use_step(
+                Step::Corrector,
+                "mistral",
+                MISTRAL,
+                "m",
+                None,
+                false,
+                Some(false),
+                false,
+            )
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::ProtectionConsentMissing
+    );
+}
+
+#[tokio::test]
+async fn an_outdated_or_foreign_protection_consent_counts_as_protected() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("outdated", &mock, fast());
+    mistral(&cloud, Step::Corrector, Some(false), true).await;
+    let stored = std::fs::read_to_string(&cloud.config_path).unwrap();
+    assert!(stored.contains("\"protection\": false"));
+
+    let tamper: [fn(&mut config::Consent); 2] = [
+        |consent| consent.version = 0,
+        |consent| consent.host = "other.example".into(),
+    ];
+    for tamper in tamper {
+        let mut config = Config::load(&cloud.config_path);
+        let choice = config.steps.get_mut(&Step::Corrector).unwrap();
+        tamper(choice.protection_consent.as_mut().unwrap());
+        config.save(&cloud.config_path).unwrap();
+        assert!(cloud.view().await.steps[&Step::Corrector].protection);
+        assert_eq!(
+            class(
+                cloud
+                    .chat(None, Step::Corrector, text_request(), false)
+                    .await
+            ),
+            ErrorClass::NotPseudonymized
+        );
+        mistral(&cloud, Step::Corrector, Some(false), true).await;
+    }
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn own_servers_and_loopback_run_without_protection_by_default() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("server-default", &mock, fast());
+    let local = format!("http://localhost:{}/v1", mock.address.port());
+    cloud
+        .use_step(Step::Corrector, "server", LAN, "m", None, true, None, false)
+        .await
+        .unwrap();
+    cloud
+        .use_step(
+            Step::Reviewer,
+            "custom",
+            &local,
+            "m",
+            None,
+            false,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    cloud
+        .use_step(
+            Step::Transcriber,
+            "server",
+            LAN,
+            "m",
+            None,
+            true,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let view = cloud.view().await;
+    assert!(view.steps.values().all(|step| !step.protection));
+    for step in [Step::Corrector, Step::Reviewer, Step::Transcriber] {
+        cloud.chat(None, step, text_request(), false).await.unwrap();
+    }
+
+    let view = cloud
+        .set_protection(Step::Corrector, true, false)
+        .await
+        .unwrap();
+    assert!(view.steps[&Step::Corrector].protection);
+    assert_eq!(
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), false)
+                .await
+        ),
+        ErrorClass::NotPseudonymized
+    );
+    let view = cloud
+        .set_protection(Step::Corrector, false, false)
+        .await
+        .unwrap();
+    assert!(!view.steps[&Step::Corrector].protection);
+}
+
+#[tokio::test]
+async fn a_cloud_json_without_the_field_migrates_to_protection_on() {
+    let mock = mock(vec![ok_reply()]).await;
+    let cloud = state("migrate", &mock, fast());
+    let consent = |host: &str| json!({ "host": host, "version": 1, "atMs": 1 });
+    let local = format!("http://127.0.0.1:{}/v1", mock.address.port());
+    let old = json!({ "steps": {
+        "transcriber": { "template": "mistral", "baseUrl": MISTRAL, "model": "m", "consent": consent("api.mistral.ai") },
+        "corrector": { "template": "custom", "baseUrl": "https://ki.example/v1", "model": "m", "consent": consent("ki.example") },
+        "reviewer": { "template": "server", "baseUrl": LAN, "model": "m", "consent": consent("10.255.255.1") },
+    } });
+    std::fs::write(&cloud.config_path, old.to_string()).unwrap();
+    cloud.keys.set(&keys::account(MISTRAL), "sk-fake").await;
+    cloud
+        .keys
+        .set(&keys::account("https://ki.example/v1"), "sk-fake")
+        .await;
+
+    let view = cloud.view().await;
+    assert!(view.steps[&Step::Transcriber].protection);
+    assert!(view.steps[&Step::Corrector].protection);
+    assert!(!view.steps[&Step::Reviewer].protection);
+    let image = json!({ "messages": [{ "role": "user", "content": [
+        { "type": "image_url", "image_url": { "url": "data:image/png;base64,iVBORw0KGgo=" } },
+    ] }] });
+    assert_eq!(
+        class(cloud.chat(None, Step::Transcriber, image, true).await),
+        ErrorClass::ProtectionActive
+    );
+    assert_eq!(
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), false)
+                .await
+        ),
+        ErrorClass::NotPseudonymized
+    );
+    cloud
+        .chat(None, Step::Reviewer, text_request(), false)
+        .await
+        .unwrap();
+    assert_eq!(mock.hits.load(Ordering::SeqCst), 1);
+
+    let loopback = json!({ "steps": { "corrector": {
+        "template": "custom", "baseUrl": local, "model": "m", "consent": null,
+    } } });
+    std::fs::write(&cloud.config_path, loopback.to_string()).unwrap();
+    assert!(!cloud.view().await.steps[&Step::Corrector].protection);
 }

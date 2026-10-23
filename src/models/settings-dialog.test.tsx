@@ -427,6 +427,7 @@ describe('SettingsDialog with live model state', () => {
           model: 'gemma',
           loopback: true,
           confirmed: true,
+          protection: false,
           key: null,
         },
       },
@@ -449,6 +450,73 @@ describe('SettingsDialog with live model state', () => {
     await vi.waitFor(() => expect(fake.selectCorrector).toHaveBeenCalledExactlyOnceWith(E4B_ID));
   });
 
+  it('switches protection of a cloud step after a warning that Abbrechen starts on', async () => {
+    const setProtection = vi.fn<Models['cloud']['setProtection']>(() => Promise.resolve(null));
+    const cloud = testCloud({
+      available: true,
+      setProtection,
+      steps: {
+        corrector: {
+          template: 'mistral',
+          label: 'Mistral AI',
+          baseUrl: 'https://api.mistral.ai/v1',
+          host: 'api.mistral.ai',
+          model: 'm',
+          loopback: false,
+          confirmed: true,
+          protection: true,
+          key: 'system',
+        },
+      },
+    });
+    await mountLive({ cloud }, { hardware: BIG });
+    const toggle = () =>
+      section('corrector').querySelector<HTMLInputElement>('input[role="switch"]') ?? undefined;
+    expect(toggle()?.checked).toBe(true);
+    await click(toggle());
+    const dialog = section('corrector').querySelector('[role="alertdialog"]');
+    expect(dialog?.textContent).toContain('Personenbezug nicht entfernen?');
+    expect(document.activeElement?.textContent).toBe('Abbrechen');
+    await click(
+      [...(dialog?.querySelectorAll('button') ?? [])].find(
+        (candidate) => candidate.textContent === 'Abbrechen',
+      ),
+    );
+    expect(setProtection).not.toHaveBeenCalled();
+    await click(toggle());
+    await click(
+      [
+        ...(section('corrector')
+          .querySelector('[role="alertdialog"]')
+          ?.querySelectorAll('button') ?? []),
+      ].find((candidate) => candidate.textContent === 'Schutz ausschalten'),
+    );
+    expect(setProtection).toHaveBeenCalledExactlyOnceWith('corrector', false, true);
+  });
+
+  it('reports a cloud recognition that the protection blocks', async () => {
+    const cloud = testCloud({
+      available: true,
+      steps: {
+        transcriber: {
+          template: 'mistral',
+          label: 'Mistral AI',
+          baseUrl: 'https://api.mistral.ai/v1',
+          host: 'api.mistral.ai',
+          model: 'm',
+          loopback: false,
+          confirmed: true,
+          protection: true,
+          key: 'system',
+        },
+      },
+    });
+    await mountLive({ cloud }, { hardware: BIG });
+    expect(section('transcriber').textContent).toContain(
+      'Bei eingeschaltetem Schutz läuft die Erkennung lokal. Diese Cloud-Erkennung ist gesperrt',
+    );
+  });
+
   it('says where the key of a cloud step lives and asks for a missing one', async () => {
     const step = {
       template: 'mistral',
@@ -458,6 +526,7 @@ describe('SettingsDialog with live model state', () => {
       model: 'mistral-small-latest',
       loopback: false,
       confirmed: true,
+      protection: false,
     } as const;
     const cloud = testCloud({
       available: true,
@@ -907,6 +976,7 @@ describe('SettingsDialog thoroughness', () => {
             model: 'gemma',
             loopback: true,
             confirmed: true,
+            protection: false,
             key: null,
           },
         },
@@ -1012,6 +1082,7 @@ describe('SettingsDialog second reading', () => {
             model: 'vision',
             loopback: true,
             confirmed: true,
+            protection: false,
             key: null,
           },
         },

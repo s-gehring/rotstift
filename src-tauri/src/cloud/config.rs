@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::endpoint::{self, Endpoint};
 use super::templates::{self, Template};
-use super::{CONSENT_VERSION, ErrorClass, Step};
+use super::{CONSENT_VERSION, ErrorClass, PROTECTION_CONSENT_VERSION, Step};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -22,6 +22,10 @@ pub struct Choice {
     pub base_url: String,
     pub model: String,
     pub consent: Option<Consent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protection: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protection_consent: Option<Consent>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -35,6 +39,14 @@ pub struct Resolved<'a> {
     pub choice: &'a Choice,
     pub template: &'static Template,
     pub endpoint: Endpoint,
+}
+
+pub fn protection_default(template: &Template, endpoint: &Endpoint) -> bool {
+    template.id != "server" && !endpoint.loopback
+}
+
+pub fn protection_consent_valid(consent: &Consent, host: &str) -> bool {
+    consent.host == host && consent.version == PROTECTION_CONSENT_VERSION
 }
 
 impl Choice {
@@ -55,6 +67,29 @@ impl Resolved<'_> {
             || self.choice.consent.as_ref().is_some_and(|consent| {
                 consent.host == self.endpoint.host && consent.version == CONSENT_VERSION
             })
+    }
+}
+
+impl Resolved<'_> {
+    pub fn protection_default(&self) -> bool {
+        protection_default(self.template, &self.endpoint)
+    }
+
+    pub fn protected(&self) -> bool {
+        match self.choice.protection {
+            Some(true) => true,
+            None => self.protection_default(),
+            Some(false) => {
+                self.protection_default()
+                    && !self
+                        .choice
+                        .protection_consent
+                        .as_ref()
+                        .is_some_and(|consent| {
+                            protection_consent_valid(consent, &self.endpoint.host)
+                        })
+            }
+        }
     }
 }
 
@@ -93,6 +128,8 @@ mod tests {
             base_url: base_url.into(),
             model: "m".into(),
             consent,
+            protection: None,
+            protection_consent: None,
         }
     }
 
@@ -152,5 +189,39 @@ mod tests {
         config.save(&path).unwrap();
         assert_eq!(Config::load(&path).steps, config.steps);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn protection_defaults_follow_the_template_and_the_address() {
+        let parse = |template: &str, url: &str| -> Choice {
+            serde_json::from_value(serde_json::json!({
+                "template": template, "baseUrl": url, "model": "m", "consent": null,
+            }))
+            .unwrap()
+        };
+        let protected = |choice: &Choice| choice.resolve().unwrap().protected();
+        assert!(protected(&parse("mistral", "https://api.mistral.ai/v1")));
+        assert!(protected(&parse("custom", "https://ki.example/v1")));
+        assert!(!protected(&parse("server", "https://ki.example/v1")));
+        assert!(!protected(&parse("custom", "http://localhost:8080/v1")));
+        assert!(!protected(&parse("server", "http://127.0.0.1:8080/v1")));
+    }
+
+    #[test]
+    fn protection_counts_as_off_only_with_a_matching_consent() {
+        let mut choice = choice("https://ki.schule.example/v1", None);
+        choice.template = "custom".into();
+        let at = |choice: &Choice| choice.resolve().unwrap().protected();
+        choice.protection = Some(false);
+        assert!(at(&choice));
+        choice.protection_consent = consent("ki.schule.example", PROTECTION_CONSENT_VERSION);
+        assert!(!at(&choice));
+        choice.protection_consent = consent("other.example", PROTECTION_CONSENT_VERSION);
+        assert!(at(&choice));
+        choice.protection_consent = consent("ki.schule.example", PROTECTION_CONSENT_VERSION + 1);
+        assert!(at(&choice));
+        choice.protection = Some(true);
+        choice.protection_consent = consent("ki.schule.example", PROTECTION_CONSENT_VERSION);
+        assert!(at(&choice));
     }
 }

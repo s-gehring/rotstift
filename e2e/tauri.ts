@@ -132,10 +132,26 @@ function install(options: TauriOptions): void {
     diag_read: () => ['{"event":"app_start","version":"0.2.0"}'],
     diag_clear: () => null,
     cloud_config: () => view(),
-    cloud_use: ({ step, template, baseUrl, model, key, confirmed }) => {
+    cloud_use: ({
+      step,
+      template,
+      baseUrl,
+      model,
+      key,
+      confirmed,
+      protection,
+      protectionConfirmed,
+    }) => {
       const url = String(baseUrl);
-      if (confirmed !== true && !LOOPBACK.test(url))
+      const loopback = LOOPBACK.test(url);
+      const defaultProtection = template !== 'server' && !loopback;
+      const protect = typeof protection === 'boolean' ? protection : defaultProtection;
+      if (protect && step === 'transcriber')
+        return Promise.reject({ kind: 'cloud', detail: 'protectionActive' });
+      if (confirmed !== true && !loopback)
         return Promise.reject({ kind: 'cloud', detail: 'consentMissing' });
+      if (!protect && defaultProtection && protectionConfirmed !== true)
+        return Promise.reject({ kind: 'cloud', detail: 'protectionConsentMissing' });
       cloudSteps = {
         ...cloudSteps,
         [String(step)]: {
@@ -144,10 +160,23 @@ function install(options: TauriOptions): void {
           baseUrl: url,
           host: new URL(url).host,
           model,
-          loopback: LOOPBACK.test(url),
-          confirmed: confirmed === true,
+          loopback,
+          confirmed: confirmed === true || loopback,
+          protection: protect,
           key: key === null ? null : 'session',
         },
+      };
+      return view();
+    },
+    cloud_set_protection: ({ step, protection, confirmed }) => {
+      const current = cloudSteps[String(step)];
+      if (current === undefined) return Promise.reject({ kind: 'cloud', detail: 'notConfigured' });
+      const defaultProtection = current['template'] !== 'server' && current['loopback'] !== true;
+      if (protection !== true && defaultProtection && confirmed !== true)
+        return Promise.reject({ kind: 'cloud', detail: 'protectionConsentMissing' });
+      cloudSteps = {
+        ...cloudSteps,
+        [String(step)]: { ...current, protection: protection === true },
       };
       return view();
     },

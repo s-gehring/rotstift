@@ -192,6 +192,7 @@ describe('empty Klasse', () => {
               model: 'pixtral-12b',
               loopback: false,
               confirmed: true,
+              protection: false,
               key: 'system',
             },
           },

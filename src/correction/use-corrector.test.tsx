@@ -136,6 +136,7 @@ describe('useCorrector', () => {
       model: 'mistral-small-latest',
       loopback: false,
       confirmed: true,
+      protection: false,
       key: 'system',
     };
     const create = await render(fakeClient('ready'), Probe, step);

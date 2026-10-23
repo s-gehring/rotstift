@@ -8,6 +8,7 @@ import {
   type RemoteModel,
 } from './client.ts';
 import type { CloudErrorClass } from './errors.ts';
+import { protectionApplies } from './protection.ts';
 
 export type CloudOutcome =
   | { readonly state: 'ok' }
@@ -21,9 +22,15 @@ export type ModelsOutcome =
 export interface CloudModel {
   readonly available: boolean;
   readonly steps: CloudView['steps'];
+  readonly protects: (role: ModelRole) => boolean;
   readonly use: (role: ModelRole, input: CloudInput, confirmed: boolean) => Promise<CloudOutcome>;
   readonly models: (input: CloudInput) => Promise<ModelsOutcome>;
   readonly setKey: (role: ModelRole, key: string) => Promise<CloudErrorClass | null>;
+  readonly setProtection: (
+    role: ModelRole,
+    protection: boolean,
+    confirmed: boolean,
+  ) => Promise<CloudErrorClass | null>;
   readonly clear: (role: ModelRole) => Promise<void>;
 }
 
@@ -100,6 +107,28 @@ export function useCloud(client: CloudClient | null): CloudModel {
     [client],
   );
 
+  const setProtection = useCallback(
+    async (
+      role: ModelRole,
+      protection: boolean,
+      confirmed: boolean,
+    ): Promise<CloudErrorClass | null> => {
+      if (client === null) return 'notConfigured';
+      try {
+        setView(await client.setProtection(role, protection, confirmed));
+        return null;
+      } catch (error) {
+        return errorClass(error);
+      }
+    },
+    [client],
+  );
+
+  const protects = useCallback(
+    (role: ModelRole) => protectionApplies(view.steps, role),
+    [view.steps],
+  );
+
   const clear = useCallback(
     async (role: ModelRole) => {
       if (client === null) return;
@@ -113,7 +142,16 @@ export function useCloud(client: CloudClient | null): CloudModel {
   );
 
   return useMemo(
-    () => ({ available: client !== null, steps: view.steps, use, models, setKey, clear }),
-    [client, view.steps, use, models, setKey, clear],
+    () => ({
+      available: client !== null,
+      steps: view.steps,
+      protects,
+      use,
+      models,
+      setKey,
+      setProtection,
+      clear,
+    }),
+    [client, view.steps, protects, use, models, setKey, setProtection, clear],
   );
 }
