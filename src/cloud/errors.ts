@@ -1,6 +1,9 @@
 export type CloudErrorClass =
   | 'notConfigured'
   | 'consentMissing'
+  | 'protectionActive'
+  | 'notPseudonymized'
+  | 'protectionConsentMissing'
   | 'keyMissing'
   | 'invalidAddress'
   | 'insecure'
@@ -36,6 +39,9 @@ export function isCloudError(value: unknown): value is CloudError {
 const TEXT: Readonly<Record<CloudErrorClass, string>> = {
   notConfigured: 'Das Cloud-Modell ist nicht eingerichtet',
   consentMissing: 'Das Cloud-Modell ist nicht freigegeben',
+  protectionActive: 'Bei eingeschaltetem Schutz läuft die Erkennung lokal',
+  notPseudonymized: 'Der Text wurde nicht pseudonymisiert und wird nicht gesendet',
+  protectionConsentMissing: 'Das Ausschalten des Schutzes ist nicht bestätigt',
   keyMissing: 'Für das Cloud-Modell fehlt der Schlüssel',
   invalidAddress: 'Die Adresse ist ungültig',
   insecure: 'Schlüssel und Daten gehen nur verschlüsselt (https) oder an ein lokales Netz',
@@ -60,6 +66,7 @@ export function describeCloudError(error: CloudErrorClass): string {
 const UNAVAILABLE: ReadonlySet<CloudErrorClass> = new Set([
   'notConfigured',
   'consentMissing',
+  'protectionActive',
   'keyMissing',
   'auth',
 ]);

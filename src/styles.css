@@ -770,3 +770,7 @@ thead th {
 .cloud-warning-title {
   font-weight: 600;
 }
+
+.cloud-protection {
+  margin-top: var(--space-2);
+}

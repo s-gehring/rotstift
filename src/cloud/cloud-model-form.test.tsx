@@ -45,6 +45,22 @@ const field = (name: string) =>
 const button = (label: string) =>
   [...container.querySelectorAll('button')].find((candidate) => candidate.textContent === label);
 
+const protectionSwitch = () => container.querySelector<HTMLInputElement>('input[role="switch"]');
+
+const toggle = () => act(() => protectionSwitch()?.click());
+
+const recognitionField = (name: string) =>
+  container.querySelector<HTMLInputElement | HTMLSelectElement>(`#cloud-${name}-transcriber`);
+
+function openRecognition(cloud: CloudModel) {
+  act(() =>
+    root.render(<CloudModelForm role="transcriber" cloud={cloud} onDone={vi.fn<() => void>()} />),
+  );
+  change(recognitionField('template'), 'mistral');
+  change(recognitionField('key'), 'fake-test-key');
+  change(recognitionField('model'), 'pixtral-12b');
+}
+
 async function submit() {
   await act(async () => {
     button('Verwenden')?.click();
@@ -83,6 +99,8 @@ describe('CloudModelForm', () => {
         baseUrl: 'https://api.mistral.ai/v1',
         model: 'mistral-small-latest',
         key: 'fake-test-key',
+        protection: null,
+        protectionConfirmed: false,
       },
       false,
     );
@@ -138,6 +156,86 @@ describe('CloudModelForm', () => {
     expect(button('Verwenden')?.disabled).toBe(true);
   });
 
+  describe('protection', () => {
+    it('starts on for cloud providers and off for an own server and loopback', () => {
+      render(testCloud({ available: true }));
+      expect(protectionSwitch()).toBeNull();
+      change(field('template'), 'mistral');
+      expect(protectionSwitch()?.checked).toBe(true);
+      expect(container.textContent).toContain('Personenbezug vor dem Senden entfernen');
+      change(field('template'), 'server');
+      expect(protectionSwitch()?.checked).toBe(false);
+      change(field('template'), 'custom');
+      expect(protectionSwitch()?.checked).toBe(true);
+      change(field('address'), 'http://localhost:8080/v1');
+      expect(protectionSwitch()?.checked).toBe(false);
+    });
+
+    it('keeps protection on when the warning is cancelled', async () => {
+      const use = sequence({ state: 'ok' });
+      render(testCloud({ available: true, use }));
+      fill('mistral');
+      toggle();
+      const dialog = container.querySelector('[role="alertdialog"]');
+      expect(dialog?.textContent).toContain('Personenbezug nicht entfernen?');
+      expect(dialog?.textContent).toContain('Namen und andere persönliche Angaben');
+      expect(dialog?.textContent).toContain('Für die Einhaltung der DSGVO');
+      expect(dialog?.textContent).not.toContain('Handschrift');
+      expect(document.activeElement?.textContent).toBe('Abbrechen');
+      act(() => button('Abbrechen')?.click());
+      expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(protectionSwitch()?.checked).toBe(true);
+      await submit();
+      expect(use).toHaveBeenCalledWith(
+        'corrector',
+        expect.objectContaining({ protection: null, protectionConfirmed: false }),
+        false,
+      );
+    });
+
+    it('sends the confirmed switch-off with the choice', async () => {
+      const use = sequence({ state: 'ok' });
+      render(testCloud({ available: true, use }));
+      fill('mistral');
+      toggle();
+      act(() => button('Schutz ausschalten')?.click());
+      expect(protectionSwitch()?.checked).toBe(false);
+      await submit();
+      expect(use).toHaveBeenCalledExactlyOnceWith(
+        'corrector',
+        expect.objectContaining({ protection: false, protectionConfirmed: true }),
+        false,
+      );
+    });
+
+    it('forgets the confirmed switch-off when the provider changes', () => {
+      render(testCloud({ available: true }));
+      change(field('template'), 'mistral');
+      toggle();
+      act(() => button('Schutz ausschalten')?.click());
+      expect(protectionSwitch()?.checked).toBe(false);
+      change(field('template'), 'openai');
+      expect(protectionSwitch()?.checked).toBe(true);
+    });
+
+    it('needs no warning for an own server', async () => {
+      const use = sequence({ state: 'ok' });
+      render(testCloud({ available: true, use }));
+      fill('server', 'https://ki.schule.example/v1');
+      toggle();
+      expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(protectionSwitch()?.checked).toBe(true);
+      toggle();
+      expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+      await submit();
+      expect(use).toHaveBeenCalledWith(
+        'corrector',
+        expect.objectContaining({ protection: false, protectionConfirmed: false }),
+        false,
+      );
+    });
+  });
+
   describe('with a provider that lists its models', () => {
     const listed = [
       { id: 'claude-a', displayName: 'Claude A' },
@@ -160,6 +258,8 @@ describe('CloudModelForm', () => {
         baseUrl: 'https://api.anthropic.com/v1',
         model: '',
         key: 'fake-test-key',
+        protection: null,
+        protectionConfirmed: false,
       });
       const select = field('model');
       expect(select).toBeInstanceOf(HTMLSelectElement);
@@ -206,6 +306,38 @@ describe('CloudModelForm', () => {
       change(field('template'), 'mistral');
       expect(field('model')).toBeInstanceOf(HTMLInputElement);
       expect(field('model')?.value).toBe('');
+    });
+  });
+
+  describe('CloudModelForm for the recognition', () => {
+    it('cannot be used while protection is on and says why', () => {
+      openRecognition(testCloud({ available: true }));
+      expect(container.textContent).toContain(
+        'Bei eingeschaltetem Schutz läuft die Erkennung lokal.',
+      );
+      expect(button('Verwenden')?.disabled).toBe(true);
+    });
+
+    it('can be used after switching protection off and confirming, naming the handwriting', async () => {
+      const use = vi.fn<CloudModel['use']>(() => Promise.resolve({ state: 'ok' }));
+      openRecognition(testCloud({ available: true, use }));
+      toggle();
+      const dialog = container.querySelector('[role="alertdialog"]');
+      expect(dialog?.textContent).toContain('Handschrift');
+      act(() => button('Abbrechen')?.click());
+      expect(button('Verwenden')?.disabled).toBe(true);
+      toggle();
+      act(() => button('Schutz ausschalten')?.click());
+      expect(button('Verwenden')?.disabled).toBe(false);
+      await act(async () => {
+        button('Verwenden')?.click();
+        await Promise.resolve();
+      });
+      expect(use).toHaveBeenCalledExactlyOnceWith(
+        'transcriber',
+        expect.objectContaining({ protection: false, protectionConfirmed: true }),
+        false,
+      );
     });
   });
 });

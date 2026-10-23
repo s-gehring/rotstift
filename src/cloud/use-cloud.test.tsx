@@ -30,6 +30,7 @@ const CONFIGURED: CloudView = {
       model: 'mistral-small-latest',
       loopback: false,
       confirmed: true,
+      protection: false,
       key: 'system',
     },
   },
@@ -39,6 +40,8 @@ const INPUT: CloudInput = {
   baseUrl: 'https://api.mistral.ai/v1',
   model: 'mistral-small-latest',
   key: 'fake-test-key',
+  protection: null,
+  protectionConfirmed: false,
 };
 
 function fakeClient(overrides: Partial<CloudClient> = {}): CloudClient {
@@ -46,6 +49,7 @@ function fakeClient(overrides: Partial<CloudClient> = {}): CloudClient {
     config: vi.fn<CloudClient['config']>(() => Promise.resolve(EMPTY)),
     use: vi.fn<CloudClient['use']>(() => Promise.resolve(CONFIGURED)),
     setKey: vi.fn<CloudClient['setKey']>(() => Promise.resolve(CONFIGURED)),
+    setProtection: vi.fn<CloudClient['setProtection']>(() => Promise.resolve(CONFIGURED)),
     clear: vi.fn<CloudClient['clear']>(() => Promise.resolve(EMPTY)),
     check: vi.fn<CloudClient['check']>(() => Promise.resolve(undefined)),
     models: vi.fn<CloudClient['models']>(() => Promise.resolve([])),
@@ -119,6 +123,32 @@ describe('useCloud', () => {
     expect(outcome).toEqual({ state: 'error', error: 'auth' });
     expect(client.clear).toHaveBeenCalledWith('corrector');
     expect(cloud.current?.steps).toEqual({});
+  });
+
+  it('switches protection and reports which steps it protects', async () => {
+    const protectedView: CloudView = {
+      steps: { corrector: { ...CONFIGURED.steps.corrector!, protection: true } },
+    };
+    const client = fakeClient({
+      config: vi.fn<CloudClient['config']>(() => Promise.resolve(protectedView)),
+      setProtection: vi
+        .fn<CloudClient['setProtection']>()
+        .mockResolvedValueOnce(CONFIGURED)
+        .mockRejectedValueOnce(new CloudCallError('protectionConsentMissing')),
+    });
+    const cloud = await mount(client);
+    expect(cloud.current?.protects('corrector')).toBe(true);
+    expect(cloud.current?.protects('reviewer')).toBe(false);
+    await act(async () => {
+      expect(await cloud.current?.setProtection('corrector', false, true)).toBeNull();
+    });
+    expect(client.setProtection).toHaveBeenCalledWith('corrector', false, true);
+    expect(cloud.current?.protects('corrector')).toBe(false);
+    await act(async () => {
+      expect(await cloud.current?.setProtection('corrector', false, false)).toBe(
+        'protectionConsentMissing',
+      );
+    });
   });
 
   it('lists models without storing anything and reports errors by class', async () => {

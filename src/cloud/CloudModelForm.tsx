@@ -3,6 +3,8 @@ import type { ModelRole } from '../app/types.ts';
 import { Button } from '../ui/Button.tsx';
 import type { CloudInput, RemoteModel } from './client.ts';
 import { describeCloudError, type CloudErrorClass } from './errors.ts';
+import { protectionDefault } from './protection.ts';
+import { ProtectionSwitch } from './ProtectionSwitch.tsx';
 import { CLOUD_TEMPLATES, findTemplate } from './templates.ts';
 import type { CloudModel } from './use-cloud.ts';
 
@@ -81,6 +83,10 @@ export function CloudModelForm({
   const [error, setError] = useState<CloudErrorClass | null>(null);
   const [busy, setBusy] = useState(false);
   const [warning, setWarning] = useState(false);
+  const [protectionOverride, setProtectionOverride] = useState<{
+    readonly on: boolean;
+    readonly confirmed: boolean;
+  } | null>(null);
   const [models, setModels] = useState<readonly RemoteModel[] | null>(null);
   const [modelsError, setModelsError] = useState<CloudErrorClass | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -89,15 +95,23 @@ export function CloudModelForm({
   const listed = template?.api === 'anthropic';
   const id = (name: string) => `cloud-${name}-${role}`;
 
+  const baseUrl = fixed ?? address.trim();
+  const defaultProtection = protectionDefault(templateId, baseUrl);
+  const protection = protectionOverride?.on ?? defaultProtection;
+  const blockedByProtection = role === 'transcriber' && protection;
+
   const input = (): CloudInput => ({
     template: templateId,
-    baseUrl: fixed ?? address.trim(),
+    baseUrl,
     model: model.trim(),
     key: key.trim() === '' ? null : key.trim(),
+    protection: protectionOverride?.on ?? null,
+    protectionConfirmed: protectionOverride?.confirmed ?? false,
   });
 
   const complete =
     template !== undefined &&
+    !blockedByProtection &&
     model.trim() !== '' &&
     (fixed !== null || address.trim() !== '') &&
     (template.key === 'optional' || key.trim() !== '');
@@ -144,6 +158,7 @@ export function CloudModelForm({
         value={templateId}
         onChange={(event) => {
           setTemplateId(event.target.value);
+          setProtectionOverride(null);
           setModel('');
           setModels(null);
           setModelsError(null);
@@ -168,7 +183,10 @@ export function CloudModelForm({
             value={address}
             placeholder="https://…/v1"
             spellCheck={false}
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={(event) => {
+              setAddress(event.target.value);
+              setProtectionOverride(null);
+            }}
           />
           <FieldError error={error} field="address" />
         </>
@@ -230,6 +248,14 @@ export function CloudModelForm({
           )}
           <FieldError error={error} field="model" />
         </>
+      )}
+      {template !== undefined && (
+        <ProtectionSwitch
+          role={role}
+          on={protection}
+          askBeforeOff={defaultProtection}
+          onChange={(on, confirmed) => setProtectionOverride({ on, confirmed })}
+        />
       )}
       <FieldError error={error} field="form" />
       <div className="settings-actions">

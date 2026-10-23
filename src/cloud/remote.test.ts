@@ -18,6 +18,7 @@ const step = (overrides: Partial<CloudStep> = {}): CloudStep => ({
   model: 'pixtral-12b',
   loopback: false,
   confirmed: true,
+  protection: false,
   key: 'system',
   ...overrides,
 });
@@ -44,6 +45,13 @@ describe('cloudLlmClient', () => {
     expect(chat?.[1]).toMatchObject({ step: 'corrector', request: { messages: [] } });
     expect(cancel).toEqual(['cloud_cancel', { requestId: chat?.[1]?.['requestId'] }]);
     expect(calls.some(([command]) => command.startsWith('llm_'))).toBe(false);
+  });
+
+  it('marks a request as pseudonymized only when asked to', () => {
+    const { calls, invoke } = recording();
+    void cloudLlmClient('corrector', invoke).chat({ messages: [] });
+    void cloudLlmClient('corrector', invoke, { pseudonymized: true }).chat({ messages: [] });
+    expect(calls.map(([, args]) => args?.['pseudonymized'])).toEqual([false, true]);
   });
 });
 
@@ -72,6 +80,21 @@ describe('cloudUsable', () => {
     expect(cloudUsable(step({ confirmed: false }))).toBe(false);
     expect(cloudUsable(step({ key: null }))).toBe(false);
     expect(cloudUsable(step({ template: 'server', key: null }))).toBe(true);
+  });
+
+  it('never uses a recognition in the cloud while protection is on', () => {
+    expect(cloudUsable(step({ protection: true }), 'transcriber')).toBe(false);
+    expect(cloudUsable(step({ protection: false }), 'transcriber')).toBe(true);
+    expect(cloudUsable(step({ protection: true }), 'corrector')).toBe(true);
+  });
+
+  it('explains a recognition that the protection blocks', () => {
+    const message = cloudBlockedMessage(step({ protection: true }), 'transcriber');
+    expect(message).toContain('Bei eingeschaltetem Schutz läuft die Erkennung lokal.');
+    expect(message).toContain('Mistral AI');
+    expect(cloudBlockedMessage(step({ protection: true, key: null }), 'corrector')).toContain(
+      'fehlt der Schlüssel',
+    );
   });
 
   it('explains why a step is blocked', () => {

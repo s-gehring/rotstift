@@ -11,6 +11,8 @@ Das widerspricht dem bisherigen Grundsatz, dass Schülerdaten den Rechner nie ve
 
 Die Modellwahl je Schritt kommt aus [0008](0008-modellwahl-je-schritt.md). Dieses ADR legt neben die lokale Wahl eines Schritts eine entfernte, die sie überdeckt.
 
+Nachtrag: [0011](0011-personenbezug-entfernen.md) legt fest, dass vor dem Senden standardmäßig der Personenbezug entfernt wird und die Erkennung dann lokal bleibt. Wo dieses ADR „gesendet“ sagt, gilt es ohne Schutz oder nach dem Schwärzen, wie die Tabelle unten zeigt.
+
 ## Entscheidung
 
 ### Begriffe
@@ -37,11 +39,11 @@ Die Freigabe gilt je Anbieter und Schritt, gebunden an den Host der Basis-URL un
 
 ### Was je Schritt gesendet wird
 
-| Schritt                       | Inhalt                                                                                                            | Größe                                                                                 |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Erkennung                     | jede Seite als JPEG (Qualität 0,9), so wie importiert und gedreht, plus fester Prompt                             | lange Kante 1536 px, gemessen etwa 0,2–0,5 MB je Seite, als Data-URL ein Drittel mehr |
-| Rechtschreibung und Grammatik | erkannter Text der Arbeit mit Zeilennummern, Fach, Sprache, gewählte Fehlerarten, Aufgabenstellung                | wenige KB je Arbeit, eine Anfrage                                                     |
-| Inhalt und Form               | erkannter Text mit Zeilennummern, Fach, Textform, Aufgabenstellung, je Merkmal eine Ja-Nein-Frage mit JSON-Schema | wenige KB je Anfrage, etwa 5–12 Anfragen je Arbeit                                    |
+| Schritt                       | Inhalt ohne Schutz                                                                                                | Mit Schutz (Standard bei Cloud-Anbietern, siehe [0011](0011-personenbezug-entfernen.md))                         | Größe                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Erkennung                     | jede Seite als JPEG (Qualität 0,9), so wie importiert und gedreht, plus fester Prompt                             | nichts: Die Erkennung läuft lokal, Cloud-Anfragen der Erkennung lehnt Rust ab                                    | lange Kante 1536 px, gemessen etwa 0,2–0,5 MB je Seite, als Data-URL ein Drittel mehr |
+| Rechtschreibung und Grammatik | erkannter Text der Arbeit mit Zeilennummern, Fach, Sprache, gewählte Fehlerarten, Aufgabenstellung                | derselbe Text nach dem Schwärzen: Kennungen sind durch Platzhalter ersetzt, die Antwort wird lokal zurückgesetzt | wenige KB je Arbeit, eine Anfrage                                                     |
+| Inhalt und Form               | erkannter Text mit Zeilennummern, Fach, Textform, Aufgabenstellung, je Merkmal eine Ja-Nein-Frage mit JSON-Schema | derselbe Text nach dem Schwärzen, sonst unverändert                                                              | wenige KB je Anfrage, etwa 5–12 Anfragen je Arbeit                                    |
 
 Nie gesendet werden Dateinamen, Klassen- oder Schülerlisten, Statistiken, Gewichtungen, Exporte und Bilder bei den Textschritten. Rust prüft das: Anfragen eines Textschritts mit Bildteilen werden abgewiesen. Text und Bild können trotzdem Namen und persönliche Angaben enthalten, die Schülerinnen und Schüler selbst geschrieben haben. Der Hinweis spricht deshalb allgemein von Daten aus den Schülerarbeiten.
 

@@ -1,3 +1,4 @@
+import { protectionSuffix } from '../cloud/protection.ts';
 import { ExportMenu } from '../export/ExportMenu.tsx';
 import { hasResults } from '../export/has-results.ts';
 import { Button } from '../ui/Button.tsx';
@@ -93,7 +94,7 @@ function CloudSign() {
     const step = steps[role];
     return step === undefined
       ? `${ROLE_NAME[role]} lokal`
-      : `${ROLE_NAME[role]} über ${step.label}`;
+      : `${ROLE_NAME[role]} über ${step.label}${protectionSuffix(step, role)}`;
   }).join(', ');
   return (
     <IconButton
