@@ -44,7 +44,7 @@ describe('start value', () => {
     const estimator = createEstimator();
     const snapshot: Snapshot = {
       step: 'read',
-      left: { read: 20, confirm: 0, correct: 20, review: 10 },
+      left: { read: 20, confirm: 0, correct: 20, review: 10, detect: 0 },
     };
     expect(totalSeconds(estimator.rates, snapshot.left)).toBe(1100);
     expect(remainingSeconds(estimator, snapshot, 0)).toBe(1100);
@@ -186,6 +186,7 @@ const COSTS: StepCosts = {
   confirm: { key: 'none', factor: 1 },
   correct: { key: 'gemma-4-e2b-q4', factor: 1 },
   review: { key: 'gemma-4-e2b-q4', factor: 1 },
+  detect: { key: 'none', factor: 1 },
 };
 
 const LARGER: StepCosts = {
@@ -193,21 +194,46 @@ const LARGER: StepCosts = {
   confirm: { key: 'lightonocr-3-08b-q8', factor: 0.65 },
   correct: { key: 'gemma-4-26b-a4b-q4', factor: 25 },
   review: { key: 'gemma-4-26b-a4b-q4', factor: 25 },
+  detect: { key: 'gemma-4-e2b-q4', factor: 2 },
 };
 
 describe('rates per model', () => {
   it('starts from the rule of thumb scaled by the models of each step', () => {
     expect(ratesFor({}, COSTS)).toEqual(DEFAULT_RATES);
-    expect(ratesFor({}, LARGER)).toEqual({ read: 93, confirm: 19.5, correct: 375, review: 500 });
+    expect(ratesFor({}, LARGER)).toEqual({
+      read: 93,
+      confirm: 19.5,
+      detect: 30,
+      correct: 375,
+      review: 500,
+    });
   });
 
   it('keeps what was learned for a model apart from the other models', () => {
-    const learned = learn({}, COSTS, { read: 40, confirm: 30, correct: 15, review: 20 });
+    const learned = learn({}, COSTS, {
+      read: 40,
+      confirm: 30,
+      detect: 15,
+      correct: 15,
+      review: 20,
+    });
     expect(learned).toEqual({ 'read:glm-ocr-q8': 40 });
-    expect(ratesFor(learned, COSTS)).toEqual({ read: 40, confirm: 30, correct: 15, review: 20 });
+    expect(ratesFor(learned, COSTS)).toEqual({
+      read: 40,
+      confirm: 30,
+      detect: 15,
+      correct: 15,
+      review: 20,
+    });
     expect(ratesFor(learned, LARGER)).toEqual(ratesFor({}, LARGER));
 
-    const both = learn(learned, LARGER, { read: 70, confirm: 25, correct: 375, review: 300 });
+    const both = learn(learned, LARGER, {
+      read: 70,
+      confirm: 25,
+      detect: 30,
+      correct: 375,
+      review: 300,
+    });
     expect(both).toEqual({
       'read:glm-ocr-q8': 40,
       'read:qwen3-vl-4b-q4': 70,

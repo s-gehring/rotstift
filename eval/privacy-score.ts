@@ -8,14 +8,8 @@ import { leaks, scoreWork } from './privacy-metrics.ts';
 import type { WorkScore } from './privacy-metrics.ts';
 import { propagate } from './privacy-rules.ts';
 import { cleanItems, locate } from './privacy-llm.ts';
-import {
-  IDENTIFIER_CATEGORIES,
-  SENSITIVE_CATEGORIES,
-  isIdentifier,
-  isSensitive,
-} from './privacy-sample.ts';
-import { propagateSpans } from '../src/privacy/propagate.ts';
-import type { PrivacySpan as AppSpan } from '../src/privacy/types.ts';
+import { IDENTIFIER_CATEGORIES, SENSITIVE_CATEGORIES } from './privacy-sample.ts';
+import { candidateForms, E2B, E4B, runChain, spellbook } from './privacy-chain.ts';
 import type { PrivacySpan } from './privacy-sample.ts';
 import type { PrivacyRun, RunItem } from './privacy-run.ts';
 
@@ -64,42 +58,48 @@ interface Combined {
   seconds: number;
 }
 
-function propagateLikeApp(lines: readonly string[], spans: readonly PrivacySpan[]): PrivacySpan[] {
-  const appSpans = spans.flatMap((span): AppSpan[] => {
-    const { category } = span;
-    if (span.kind === 'identifier' && isIdentifier(category))
-      return [{ ...span, kind: 'identifier', category }];
-    if (span.kind === 'sensitive' && isSensitive(category))
-      return [{ ...span, kind: 'sensitive', category }];
-    return [];
-  });
-  try {
-    return (propagateSpans([{ lines, spans: appSpans }])[0] ?? []).map((span) => ({ ...span }));
-  } catch {
-    appCrashes++;
-    const hyphenated = (span: AppSpan) =>
-      (lines[span.line - 1] ?? '').slice(span.offset, span.offset + span.length).includes('-');
-    const rest = propagateSpans([
-      { lines, spans: appSpans.filter((span) => !hyphenated(span)) },
-    ])[0];
-    return [...(rest ?? []), ...appSpans.filter(hyphenated)].map((span) => ({ ...span }));
-  }
-}
-
-let appCrashes = 0;
-
 function find(run: PrivacyRun, input: WorkInput): RunItem | undefined {
   return run.items.find((item) => item.id === input.id && item.condition === input.condition);
 }
 
-function combine(spec: DetectorSpec, inputs: readonly WorkInput[]) {
+function modelOf(run: PrivacyRun): string | null {
+  return [E2B, E4B].find((model) => run.detector.startsWith(`${model}:`)) ?? null;
+}
+
+async function chainSpans(
+  runs: readonly PrivacyRun[],
+  input: WorkInput,
+  isWord: (word: string) => boolean,
+): Promise<PrivacySpan[]> {
+  const answers = new Map<string, string[]>();
+  for (const run of runs) {
+    const model = modelOf(run);
+    const raw = find(run, input)?.raw;
+    if (model === null || raw === undefined) continue;
+    answers.set(model, run.detector.endsWith(':app') ? [...raw] : raw.slice(0, 1));
+  }
+  return runChain(input, {
+    models: [...answers.keys()],
+    ask: async (model) => answers.get(model)?.shift() ?? '{}',
+    isWord,
+  });
+}
+
+async function combine(spec: DetectorSpec, inputs: readonly WorkInput[]) {
   const runs: PrivacyRun[] = spec.files.map((file) => JSON.parse(readFileSync(file, 'utf8')));
   const sensitiveRuns: PrivacyRun[] = (spec.sensitiveFrom ?? []).map((file) =>
     JSON.parse(readFileSync(file, 'utf8')),
   );
-  const combined: Combined[] = inputs.flatMap((input) => {
+  const isWord = spec.propagate === 'app' ? spellbook(candidateForms(inputs)) : () => true;
+  const combined: Combined[] = [];
+  for (const input of inputs) {
     const items = runs.map((run) => find(run, input));
-    if (items.some((item) => item === undefined)) return [];
+    if (items.some((item) => item === undefined)) continue;
+    if (spec.propagate === 'app') {
+      const seconds = items.reduce((sum, item) => sum + (item?.seconds ?? 0), 0);
+      combined.push({ input, spans: await chainSpans(runs, input, isWord), seconds });
+      continue;
+    }
     let spans = items.flatMap((item) => spansOf(item, input, spec.clean));
     if (spec.sensitiveFrom) {
       spans = [
@@ -109,16 +109,15 @@ function combine(spec: DetectorSpec, inputs: readonly WorkInput[]) {
         ),
       ];
     }
-    if (spec.propagate === 'app') spans = propagateLikeApp(input.lines, spans);
-    else if (spec.propagate !== 'none') {
+    if (spec.propagate !== 'none') {
       spans = propagate(input.lines, spans, spec.propagate === 'fuzzy');
     }
     const seconds = [...items, ...sensitiveRuns.map((run) => find(run, input))].reduce(
       (sum, item) => sum + (item?.seconds ?? 0),
       0,
     );
-    return [{ input, spans, seconds }];
-  });
+    combined.push({ input, spans, seconds });
+  }
   const peak = Math.max(0, ...[...runs, ...sensitiveRuns].map((run) => run.peakRssBytes));
   return { combined, peak };
 }
@@ -173,7 +172,7 @@ const percent = (part: number, whole: number) =>
   whole === 0 ? '–' : `${((100 * part) / whole).toFixed(0)} %`;
 const decimal = (value: number, digits = 1) => value.toFixed(digits).replace('.', ',');
 
-function main() {
+async function main() {
   const { values } = parseArgs({
     options: {
       detector: { type: 'string', multiple: true, default: [] },
@@ -187,7 +186,7 @@ function main() {
   const rows: string[] = [];
   const categoryRows: string[] = [];
   for (const spec of specs) {
-    const { combined, peak } = combine(spec, inputs);
+    const { combined, peak } = await combine(spec, inputs);
     for (const [group, conditions] of Object.entries(GROUPS)) {
       const subset = combined.filter((entry) => conditions.includes(entry.input.condition));
       if (subset.length === 0) continue;
@@ -234,7 +233,6 @@ function main() {
   );
   console.log('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
   for (const row of rows) console.log(row);
-  if (appCrashes > 0) console.log(`\npropagateSpans abgestürzt: ${appCrashes}×`);
   if (values.categories) {
     console.log(`\n| Detektor | Text | ${IDENTIFIER_CATEGORIES.join(' | ')} |`);
     console.log(`| --- | --- |${' ---: |'.repeat(IDENTIFIER_CATEGORIES.length)}`);
@@ -243,10 +241,8 @@ function main() {
 }
 
 if (import.meta.main) {
-  try {
-    main();
-  } catch (error: unknown) {
+  main().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
-  }
+  });
 }

@@ -35,11 +35,11 @@ describe('propagateSpans', () => {
     expect(texts(second, two ?? [])).toEqual([[1, 'Léna', 'person', 'model']]);
   });
 
-  it('adds single name parts of a person but not common words', () => {
+  it('adds single name parts of a person, common words only where capitalized', () => {
     const lines = [
       'Gruß von Mia Schulz.',
       'Mia und Schulz und mia schulz.',
-      'Frau Klein und Mia Klein',
+      'Frau Klein und Mia Klein, ein klein wenig.',
     ];
     const [spans] = propagateSpans([
       { lines, spans: [at(1, 9, 10, 'person', 'teacher'), at(3, 15, 9, 'person', 'name-list')] },
@@ -49,7 +49,28 @@ describe('propagateSpans', () => {
       [3, 'Mia Klein', 'person', 'name-list'],
       [2, 'mia schulz', 'person', 'teacher'],
       [2, 'Schulz', 'person', 'teacher'],
+      [3, 'Klein', 'person', 'name-list'],
       [2, 'Mia', 'person', 'teacher'],
+    ]);
+  });
+
+  it('passes a name on with one typo from five letters and the same first letter', () => {
+    const lines = ['Johanna kam.', 'Dann Johana, Johannas Rad, Kohanna und Jona.'];
+    const [spans] = propagateSpans([{ lines, spans: [at(1, 0, 7)] }]);
+    expect(texts(lines, spans ?? []).map(([line, text]) => [line, text])).toEqual([
+      [1, 'Johanna'],
+      [2, 'Johanna'],
+      [2, 'Johana'],
+    ]);
+  });
+
+  it('replaces a hyphenated place or name as a whole', () => {
+    const lines = ['Wir wohnen in Münster-Hiltrup.', 'Anne-Sophie und Hiltrup.'];
+    const [spans] = propagateSpans([{ lines, spans: [at(1, 22, 7, 'place'), at(2, 0, 4)] }]);
+    expect(texts(lines, spans ?? []).map(([line, text]) => [line, text])).toEqual([
+      [1, 'Münster-Hiltrup'],
+      [2, 'Anne-Sophie'],
+      [2, 'Hiltrup'],
     ]);
   });
 
@@ -65,12 +86,27 @@ describe('propagateSpans', () => {
     ]);
   });
 
-  it('propagates only the full form of other categories', () => {
-    const lines = ['Wir wohnen in 34127 Kassel.', 'In Kassel und 34127 Kassel ist es schön.'];
-    const [spans] = propagateSpans([{ lines, spans: [at(1, 14, 12, 'place', 'rule')] }]);
+  it('passes on the name parts of places but not generic words or other categories', () => {
+    const lines = [
+      'Wir wohnen in 34127 Kassel, ich gehe auf die Schule am Park.',
+      'In Kassel und 34127 Kassel, Schule und Park, Tel. 0561 12345.',
+    ];
+    const [spans] = propagateSpans([
+      {
+        lines,
+        spans: [
+          at(1, 14, 12, 'place', 'rule'),
+          at(1, 45, 14, 'institution', 'rule'),
+          at(2, 50, 10, 'contact', 'rule'),
+        ],
+      },
+    ]);
     expect(texts(lines, spans ?? [])).toEqual([
       [1, '34127 Kassel', 'place', 'rule'],
+      [1, 'Schule am Park', 'institution', 'rule'],
+      [2, '0561 12345', 'contact', 'rule'],
       [2, '34127 Kassel', 'place', 'rule'],
+      [2, 'Kassel', 'place', 'rule'],
     ]);
   });
 

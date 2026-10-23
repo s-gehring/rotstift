@@ -50,7 +50,7 @@ function setup(options: { readonly detect?: DetectWork } = {}) {
     ok: true,
     lines: ['Ich heiße Lena Schmidt.', 'Lena war im Schwimbad.'],
   };
-  review.h.transcripts.b = { ok: true, lines: ['Paul ging mit Tom heim.'] };
+  review.h.transcripts.b = { ok: true, lines: ['Paul ging mit Udo heim.'] };
   const cloud = remote(review.h.log);
   const shields: Shields = { corrector: (pages) => withPseudonymization(cloud, pages) };
   review.flow.setShields(shields);
@@ -100,7 +100,7 @@ describe('review flow with protection', () => {
 
     expect(cloud.sent).toEqual([
       'Ich heiße [Person 1].\n[Person 2] war im Schwimbad.',
-      '[Person 1] ging mit Tom heim.',
+      '[Person 1] ging mit Udo heim.',
     ]);
     for (const text of cloud.sent) {
       expect(text).not.toMatch(/Lena|Schmidt|Paul/u);
@@ -122,7 +122,7 @@ describe('review flow with protection', () => {
     flow.release('w2');
     await waitFor(() => flow.getState().pages.b?.status === 'done');
 
-    expect(cloud.sent).toEqual(['[Person 1] ging mit Tom heim.']);
+    expect(cloud.sent).toEqual(['[Person 1] ging mit Udo heim.']);
     expect(flow.getState().pages.a?.status).toBe('waiting');
     expect(flow.getState().run?.phase).toBe('awaiting');
     expect(flow.getState().run?.pending).toMatchObject({ confirm: 1, correct: 1 });
@@ -141,7 +141,7 @@ describe('review flow with protection', () => {
     flow.cancel();
     await run;
 
-    expect(cloud.sent).toEqual(['[Person 1] ging mit Tom heim.']);
+    expect(cloud.sent).toEqual(['[Person 1] ging mit Udo heim.']);
     expect(flow.getState().pages.a?.status).toBe('cancelled');
     expect(flow.getState().outcome).toBe('cancelled');
     expect(flow.getState().privacy).toBeNull();
@@ -195,7 +195,7 @@ describe('review flow with protection', () => {
     flow.release('w1');
     flow.release('w2');
     await run;
-    expect(cloud.sent[1]).toBe('[Person 1] ging mit Tom heim.');
+    expect(cloud.sent[1]).toBe('[Person 1] ging mit Udo heim.');
     expect(h.log.some((entry) => entry.startsWith('C:'))).toBe(false);
   });
 
@@ -208,7 +208,7 @@ describe('review flow with protection', () => {
     expect(h.log.some((entry) => entry.startsWith('D:'))).toBe(false);
     expect(h.log.filter((entry) => entry.startsWith('C:'))).toEqual([
       'C:Ich heiße Lena Schmidt.',
-      'C:Paul ging mit Tom heim.',
+      'C:Paul ging mit Udo heim.',
     ]);
     expect(flow.getState().privacy).toBeNull();
   });
@@ -309,7 +309,7 @@ describe('review flow with protection', () => {
     await run;
     expect(cloud.sent).toEqual([
       'Ich heiße [Person 1].\n[Person 2] war im Schwimbad.',
-      '[Person 1] ging mit Tom heim.',
+      '[Person 1] ging mit Udo heim.',
     ]);
     expect(flow.getState().works.w1?.status).toBe('done');
   });

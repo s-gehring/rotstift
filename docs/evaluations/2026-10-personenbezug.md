@@ -2,7 +2,7 @@
 
 Frage: Wie zuverlässig findet eine lokale Erkennung Kennungen und sensible Angaben in Schülertexten, auch wenn die Texterkennung falsch gelesen hat, und welche Kombination aus Regeln, Namensliste, Wörterbuch und lokalem Modell soll Rotstift nach [ADR 0011](../adr/0011-personenbezug-entfernen.md) einbauen?
 
-Gemessen ist nur die Erkennung, nichts davon ist eingebaut. Hauptmaß ist der Anteil der Arbeiten, in denen **kein einziges Vorkommen** einer Kennung durchrutscht. Ein Vorkommen gilt nur dann als gefunden, wenn alle seine Buchstaben und Ziffern abgedeckt sind („Tom Beck[er]“ ist ein Leck).
+Gemessen ist nur die Erkennung. Eingebaut ist sie inzwischen, die Gegenprobe steht im [Nachtrag](#nachtrag-gegenprobe-der-eingebauten-kette). Hauptmaß ist der Anteil der Arbeiten, in denen **kein einziges Vorkommen** einer Kennung durchrutscht. Ein Vorkommen gilt nur dann als gefunden, wenn alle seine Buchstaben und Ziffern abgedeckt sind („Tom Beck[er]“ ist ein Leck).
 
 ## Ergebnis
 
@@ -159,6 +159,34 @@ Kein Lauf hatte einen freien Rechner: Auf simon-pc (Ryzen 7 5700X, 4 Threads je 
 - **Der Holdout ist kein unberührter Test für alles.** Prompt und Nachbearbeitung sind auf dev entwickelt und auf dem Holdout nur einmal gemessen. Die Vornamenliste und die Regeln entstanden aber mit Blick auf typische Fälle, die auch im Holdout vorkommen.
 - **Überersetzung ist gegen Gold gemessen.** Ob ein ersetztes Wort die Korrektur oder die Bewertung verschlechtert, ist nicht gemessen.
 - **Zeiten unter Last.** Eine Messung auf einem freien 4-Kern-Rechner fehlt, siehe [Zeit und Speicher](#zeit-und-speicher).
+
+## Nachtrag: Gegenprobe der eingebauten Kette
+
+Die Empfehlungen sind eingebaut (siehe [ADR 0011, Erkennung](../adr/0011-personenbezug-entfernen.md#erkennung)). Die Gegenprobe lässt die Kette der App selbst laufen, nicht die Bausteine der Messung: `eval/privacy-chain-run.ts` fragt E2B und E4B so, wie die App fragt (ganze Arbeit, Stücke bis 3000 Zeichen, Prompt `beispiele`), und `privacy-score.ts` mit der Option `app` spielt aus den gespeicherten Antworten `createDetectWork` mit allen Schichten nach, das Wörterbuch über `spellbook`. Lauf auf simon-pc, 4 Threads, nur CPU, ohne fremde Last.
+
+**Holdout, 23 Arbeiten, Arbeiten ohne Leck (95-%-Intervall):**
+
+| Kette                      | sauber                 | erkannt                | rauschen             | Vorkommen gefunden (sauber) | Überersetzung (sauber) | Figuren ersetzt | sensibel gefunden | Fehlalarme je Arbeit |
+| -------------------------- | ---------------------- | ---------------------- | -------------------- | --------------------------: | ---------------------: | --------------: | ----------------: | -------------------: |
+| Messung: E2B mit Schichten | 87 % (68 bis 95)       | 96 % (79 bis 99)       | 74 % (54 bis 87)     |                        98 % |                  5,4 % |           k. A. |              50 % |                 0,09 |
+| **App: E2B**               | **100 % (86 bis 100)** | **100 % (86 bis 100)** | **78 % (58 bis 90)** |                       100 % |                  4,7 % |           24/32 |              50 % |                 0,09 |
+| App: E2B und E4B           | 100 % (86 bis 100)     | 100 % (86 bis 100)     | 83 % (63 bis 93)     |                       100 % |                  4,9 % |           24/32 |             100 % |                 0,30 |
+
+Auf dev (46 Arbeiten, sauber, nachgespielt aus den Antworten der ursprünglichen Läufe) erreicht die App mit E2B 98 % (89 bis 100), mit E2B und E4B 100 % (92 bis 100).
+
+**Die App liegt über der Messung, aber der Holdout ist dafür nicht mehr unberührt.** Die Ergänzungen der Regelschicht zielen auf genau die Lecks, die dieser Bericht aus dem Holdout nennt („Bau-⏎er“, „Münster-Hiltrup“, „Gemeinde St. Johannes“), und die Kette wurde während der Arbeit mehrfach auf dem Holdout nachgespielt. Die 100 % sind deshalb eine Obergrenze. Belastbarer ist, dass dev nicht schlechter wurde und dass auf Text mit Lesefehlern dieselben zerlesenen Namen durchrutschen wie in der Messung.
+
+**Zeit je Arbeit** (sauber, Median und 90-%-Quantil, simon-pc ohne fremde Last, 4 Threads): E2B 9 s und 14 s, E4B 14 s und 20 s, also das 1,5-Fache. Die erste Arbeit dauert länger (20 bzw. 35 s), weil der Prompt noch nicht im Cache liegt. Peak-RSS 3,4 GB (E2B) und 5,3 GB (E4B). Die Restdauer der App rechnet mit 15 s je Arbeit für E2B als Startwert, mit Luft für schwächere Rechner, und lernt danach.
+
+Nachstellen:
+
+```bash
+node --experimental-transform-types eval/privacy-chain-run.ts --set holdout --conditions clean,ocr,noise1 --threads 4 --out ~/.cache/rotstift/eval/privacy/runs/chain-holdout
+R=~/.cache/rotstift/eval/privacy/runs
+node --experimental-transform-types eval/privacy-score.ts --set holdout --categories \
+  --detector "App E2B=$R/chain-holdout-e2b.json:app" \
+  --detector "App E2B und E4B=$R/chain-holdout-e2b.json+$R/chain-holdout-e4b.json:app"
+```
 
 ## Nachstellen
 

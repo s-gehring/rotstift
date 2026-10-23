@@ -81,7 +81,7 @@ async function opened() {
     },
   });
   harness.h.transcripts.a = { ok: true, lines: ['Ich bin Lena.', 'Lena hat eine Allergie.'] };
-  harness.h.transcripts.b = { ok: true, lines: ['Tom spielt mit Tom.'] };
+  harness.h.transcripts.b = { ok: true, lines: ['Udo spielt mit Udo.'] };
   harness.flow.setShields({ corrector: (pages) => withPseudonymization(cloud, pages) });
   const [a, b] = harness.pages;
   if (a === undefined || b === undefined) throw new Error('missing pages');
@@ -166,9 +166,9 @@ describe('PrivacyReviewDialog', () => {
       button('Aufsatz 2zu prüfen').click();
       await Promise.resolve();
     });
-    expect(text()).toBe('Seite 1Tom spielt mit Tom.');
-    await addPlace('Tom');
-    expect(text()).toBe('Seite 1Tom [Person 1] spielt mit Tom [Person 1].');
+    expect(text()).toBe('Seite 1Udo spielt mit Udo.');
+    await addPlace('Udo');
+    expect(text()).toBe('Seite 1Udo [Person 1] spielt mit Udo [Person 1].');
     expect(field('Stelle').value).toBe('');
     flow.cancel();
     await run;
