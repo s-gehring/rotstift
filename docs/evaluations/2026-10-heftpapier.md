@@ -292,7 +292,7 @@ Die Prüfung greift nur, wenn eine Seite mindestens vier sichere Zeilen hat. Sie
 
 ### Testbild und Regressionstest
 
-`src/layout/fixtures/heft-kariert-foto.jpg` ist `brief--kariert-photo` aus `render.py --heft` mit dem Standard-Seed, wie für die Messung auf 1152 px verkleinert, dann auf 900 px Kantenlänge und JPEG-Qualität 35 gebracht (50 KB). `heft-kariert-foto.json` enthält Text und Wahrheitsboxen im selben Maßstab. Auf dieser Seite stürzte `locateLines` in Phase 1 ab, der alte Stand wirft auf dem Testbild weiter die `RangeError`. `src/layout/ruling.test.ts` prüft darauf Karoraster, mindestens 90 % Treffer und keine sicher falsche Box. `src/layout/flow.test.ts` hält die Ursache fest: Verliert eine Zeile beim Zusammensetzen ihre einzige Kandidatenzeile an die Nachbarzeile, wird sie grob platziert, statt eine leere Liste auszuwerten.
+Auf `brief--kariert-photo` aus `render.py --heft` mit dem Standard-Seed stürzte `locateLines` in Phase 1 ab, der alte Stand warf dort die `RangeError`. Das Bild liegt nicht im Repo. `src/layout/ruling.test.ts` und `src/layout/dewarp.test.ts` erzeugen zur Testzeit ein Foto von Karopapier (`gridSheet()` und `photograph()` in `synthetic-photo.ts`) und prüfen darauf Karoraster, mindestens 90 % Treffer und keine sicher falsche Box. Mit echter gerenderter Schrift prüft das der Integrationstest `layout.integration.test.ts` auf den Seiten aus `render.py --heft kariert --out ~/.cache/rotstift/rendered-heft` (`ROTSTIFT_INTEGRATION=1`, übersprungen, wenn sie fehlen). `src/layout/flow.test.ts` hält die Ursache fest: Verliert eine Zeile beim Zusammensetzen ihre einzige Kandidatenzeile an die Nachbarzeile, wird sie grob platziert, statt eine leere Liste auszuwerten.
 
 ### Offen
 
@@ -481,7 +481,7 @@ Ziel: Randzeichen stehen im Heftrand, wenn die Seite einen hat, und nie über de
 - Auf allen Papieren mit gezeichnetem Rand (`liniert`, `kariert`, Scan und begradigtes Foto) stehen die Randzeichen jetzt im Heftrand: **99,5 % statt 41,6 %** (634 Randzeichen, 96 Seiten, vier Zufallssätze). Auf den Scans von 6,0 bis 26,6 % auf 98,3 bis 100 %.
 - Über dem Text steht kein Randzeichen mehr (0,0 % statt 7,9 %), gemessen mit der groben Breite aus Phase 1, die Breite der Schrift überschätzt. Mit dem Breitenmodell der Schrift (`estimateTextWidth`) waren es vorher schon 0,0 %.
 - Papier ohne Rand (`liniert-eng`) und Seiten, auf denen keine Randlinie erkannt wird, bleiben unverändert. Die 2,2 bis 4,3 % „über Text“ bei `liniert-eng` sind das alte Verhalten.
-- Die Demo-Klasse im e2e-Test prüft jetzt, dass jedes Randzeichen rechts von der Randlinie der Seite steht und keine Zeilenbox überdeckt. Ohne die Randlinien schlägt der Test fehl.
+- Der e2e-Test `e2e/marken.spec.ts` prüft jetzt an zur Laufzeit gezeichneten Heftseiten, dass jedes Randzeichen rechts von der Randlinie der Seite steht und keine Zeilenbox überdeckt. Ohne die Randlinien schlägt der Test fehl.
 
 ### Methode
 
@@ -519,7 +519,7 @@ Je Satz (Papiere mit gezeichnetem Rand, grobe Breite):
 
 - Die Messung nimmt ideale Transkripte. Mit echter Erkennung ändert sich nur, welche Marken es gibt, nicht die Platzierung.
 - Ausgewichen wird den Zeilenboxen, nicht der Tinte. Eine Handschrift, die weit über die Zeilenbox hinausragt, kann ein Randzeichen trotzdem berühren.
-- Schmale Ränder (rund eine Zeilenhöhe, wie auf den Demo-Karoseiten) nehmen nur kurze Kürzel in kleiner Schrift. Lange Korrekturen wandern dort als „R: dass“ in dieselbe Spalte und werden klein.
+- Schmale Ränder (rund eine Zeilenhöhe, wie auf den gerenderten Karoseiten) nehmen nur kurze Kürzel in kleiner Schrift. Lange Korrekturen wandern dort als „R: dass“ in dieselbe Spalte und werden klein.
 - Liegen Text und Randlinie so, dass auch die kleinste Schrift nicht passt, gilt wieder das alte Verhalten. Das kam auf den Messseiten bei 0,5 % der Randzeichen vor.
 - Die Seite wird nicht je Arbeit gewählt. Wer links korrigiert, sieht die Zeichen rechts.
 
@@ -649,9 +649,9 @@ node --experimental-transform-types eval/strike-learn.ts --ideal --images <Ordne
   --lines <Ordner>/lines --dewarp --dump <Kandidaten.json>
 ```
 
-## Demo-Daten
+## Vorschau-Daten
 
-`pnpm dev:web` bietet „Demo-Klasse laden“ (leere Klasse und „…“-Menü). Die Klasse besteht aus vier Arbeiten mit fünf selbst gerenderten Scans (`eval/samples/demo-class.py`, fester Seed, rund 1 MB) auf liniertem und kariertem Papier, mit gestrichenen Wörtern und eingebauten Fehlern. Der Demo-Transkribierer erkennt diese Seiten und liefert ihr Transkript, die Demo-Korrektur den passenden korrigierten Text, sodass Text, Zeilen, Marken und Randzeichen zum Bild passen. Andere Bilder behalten den bisherigen Platzhaltertext. Die Foto-Seiten fehlen noch, weil ihre Zeilenzuordnung nicht gelöst ist. Die e2e-Suite prüft, dass jede Marke auf ihrer Zeile liegt (`e2e/demo-klasse.spec.ts`). Im Produktions-Build ist nichts davon enthalten.
+`pnpm dev:web` und die e2e-Suite laufen ohne Tauri mit einem Platzhalter-Transkribierer (`preview-transcriber.ts`), der für jede Seite fünf erzeugte Zeilen liefert, und der Vorschau-Korrektur. Beispieltexte oder Bilder von Schrift liegen nicht im Repo. Die e2e-Suite zeichnet ihre Seiten zur Laufzeit (`e2e/ruled-page.ts`: Linien, Randlinie rechts, gedruckte Zeilen an bekannten Positionen) und prüft, dass jede Marke auf ihrer Zeile liegt und jedes Randzeichen rechts der Randlinie steht (`e2e/marken.spec.ts`). Im Produktions-Build ist nichts davon enthalten.
 
 ## Grenzen
 

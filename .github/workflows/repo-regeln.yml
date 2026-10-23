@@ -1,0 +1,29 @@
+name: Repo-Regeln
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  bilder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+      - name: Keine Bilder oder PDFs im Repo
+        run: |
+          offending=$(git ls-files | grep -iE '\.(png|jpe?g|webp|gif|tiff?|bmp|heic|heif|avif|pdf|svg)$' | grep -v '^src-tauri/icons/' || true)
+          if [ -n "$offending" ]; then
+            while IFS= read -r file; do
+              echo "::error file=$file::Bilder und PDFs gehören nicht ins Repo (nur src-tauri/icons/ ist erlaubt)."
+            done <<< "$offending"
+            exit 1
+          fi

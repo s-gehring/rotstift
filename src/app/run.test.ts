@@ -94,7 +94,7 @@ describe('readiness', () => {
         {
           state: 'ready',
           transcriber: { transcribe: () => Promise.reject(new Error()) },
-          demo: true,
+          preview: true,
         },
         null,
       ),

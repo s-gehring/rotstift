@@ -5,17 +5,17 @@ import { correctPage } from './correct-page.ts';
 import { createPreviewCorrector, previewCorrection, previewReview } from './preview-corrector.ts';
 import { DEFAULT_SCOPE } from './scope.ts';
 
-const DEMO = [
-  'Demo-Text: Dieser Text stammt nicht aus einer echten Erkennung.',
-  'Am Montag sind wir mit der Klasse in den Wald ge-',
-  'gangen und haben Blätter gesammelt.',
+const LINES = [
+  'Vorschautext Platzhalter dieser Zeile 1',
+  'Vorschautext Platzhalter dieser Zeile 2',
+  'Vorschautext Platzhalter dieser Zeile 3',
 ];
 
 describe('previewCorrection', () => {
-  it('changes the demo text so that marks appear', async () => {
-    expect(previewCorrection(DEMO)).not.toBe(DEMO.join('\n'));
+  it('changes the placeholder text so that marks appear', async () => {
+    expect(previewCorrection(LINES)).not.toBe(LINES.join('\n'));
     const result = await correctPage({
-      lines: DEMO,
+      lines: LINES,
       profile: DEUTSCH,
       corrector: createPreviewCorrector({ delayMs: 0 }),
     });
@@ -28,7 +28,7 @@ describe('createPreviewCorrector', () => {
   it('stops when cancelled', async () => {
     const abort = new AbortController();
     const pending = createPreviewCorrector({ delayMs: 10_000 }).correct(
-      DEMO,
+      LINES,
       DEUTSCH,
       abort.signal,
     );

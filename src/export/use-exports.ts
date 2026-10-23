@@ -33,7 +33,7 @@ export const EXPORT_HINT = {
   arbeitNotCounted: 'Diese Arbeit ist noch nicht gezählt',
   incomplete: 'Noch nicht alle Seiten korrigiert',
   noneComplete: 'Noch keine Arbeit vollständig korrigiert',
-  preview: 'Nicht mit Demo-Korrekturen',
+  preview: 'Nicht mit Vorschau-Korrekturen',
 } as const;
 
 const TOAST_KEY = 'export';

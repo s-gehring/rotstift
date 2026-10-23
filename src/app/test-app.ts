@@ -135,7 +135,7 @@ export interface TestAppParts {
   readonly work?: Work;
   readonly models?: Partial<Models>;
   readonly toasts?: Toasts;
-  readonly demo?: boolean;
+  readonly preview?: boolean;
 }
 
 export function testAppModel(parts: TestAppParts = {}): AppModel {
@@ -209,6 +209,6 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       ...parts.models,
     },
     toasts: parts.toasts ?? testToasts(),
-    demo: parts.demo ?? false,
+    preview: parts.preview ?? false,
   };
 }

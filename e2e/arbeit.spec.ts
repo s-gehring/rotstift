@@ -30,7 +30,7 @@ test('jumps from the error list to the mark on the page', async ({ page }) => {
   const side = page.getByRole('complementary', { name: 'Fehler' });
   const entry = side.locator('[data-mark-key]').last();
   const key = await entry.getAttribute('data-mark-key');
-  const mark = page.locator(`.annotated-page__mark[data-mark-key="${key}"]`);
+  const mark = page.locator(`.annotated-page__mark[data-mark-key="${key}"]`).last();
 
   await entry.click();
   await expect(mark).toHaveClass(/is-active/u);
@@ -43,12 +43,12 @@ test('edits a page with a struck word and corrects only that page again', async 
   const editor = page.getByRole('textbox', { name: 'Text von Seite 1' });
   await editor.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(0, 0));
   await editor.pressSequentially('Ich ~~hab~~ habe Hunger. ');
-  await expect(editor).toHaveValue(/^Ich h̶a̶b̶ habe Hunger\. Demo-Text/u);
+  await expect(editor).toHaveValue(/^Ich h̶a̶b̶ habe Hunger\. Vorschautext/u);
   await page.getByRole('button', { name: 'Fertig' }).click();
 
   await page.getByRole('button', { name: 'Seite 1: Weitere Aktionen' }).click();
   await menuItem(page, 'Text bearbeiten').click();
-  await expect(editor).toHaveValue(/^Ich h̶a̶b̶ habe Hunger\. Demo-Text/u);
+  await expect(editor).toHaveValue(/^Ich h̶a̶b̶ habe Hunger\. Vorschautext/u);
   await page.getByRole('button', { name: 'Fertig' }).click();
 
   const errors = page

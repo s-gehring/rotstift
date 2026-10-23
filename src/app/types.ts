@@ -126,5 +126,5 @@ export interface AppModel {
   readonly work: Work;
   readonly models: Models;
   readonly toasts: Toasts;
-  readonly demo: boolean;
+  readonly preview: boolean;
 }

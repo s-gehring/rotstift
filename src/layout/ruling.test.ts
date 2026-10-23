@@ -1,10 +1,8 @@
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import grid from './fixtures/heft-kariert-foto.json';
 import { toWorkingGray } from './gray.ts';
-import { readJpeg } from './image-files.ts';
 import { locateLines } from './locate-lines.ts';
 import { findRuling, scaleRuling } from './ruling.ts';
+import { gridSheet, photograph, photographBox } from './synthetic-photo.ts';
 import { iou, renderPage, sampleLines, type PageSpec } from './synthetic.ts';
 import type { RuleLine, Ruling } from './types.ts';
 
@@ -97,25 +95,27 @@ describe('findRuling', () => {
   });
 });
 
-describe('locateLines on a rendered photo of grid paper', () => {
+describe('locateLines on a photo of grid paper', () => {
   it('finds the grid and every line without a confident miss', () => {
-    const image = readJpeg(
-      fileURLToPath(new URL('./fixtures/heft-kariert-foto.jpg', import.meta.url)),
-    );
-    const result = locateLines(
-      image,
-      grid.lines.map((line) => line.text),
-    );
+    const corners = [
+      { x: 50, y: 70 },
+      { x: 745, y: 40 },
+      { x: 770, y: 950 },
+      { x: 25, y: 935 },
+    ];
+    const sheet = gridSheet();
+    const image = photograph(sheet.image, corners, 800, 1000);
+    const result = locateLines(image, sampleLines(11, 18, 22, 32));
     expect(result.ruling?.kind).toBe('grid');
     let hits = 0;
     let total = 0;
     let wrong = 0;
-    grid.lines.forEach((line, index) => {
-      if (line.bbox === null) return;
-      const [x = 0, y = 0, width = 0, height = 0] = line.bbox;
+    sheet.truth.forEach((box, index) => {
+      if (box === null) return;
+      const truth = photographBox(box, corners, sheet.image);
       const found = result.lines[index];
       total += 1;
-      const overlap = found == null ? 0 : iou({ x, y, width, height }, found.bbox);
+      const overlap = found == null ? 0 : iou(truth, found.bbox);
       if (overlap >= 0.5) hits += 1;
       if (found != null && found.rough !== true && overlap < 0.2) wrong += 1;
     });

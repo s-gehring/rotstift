@@ -2,13 +2,7 @@ import process from 'node:process';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
-const MODULE_MARKERS = [
-  'Simulierter Fehler zum Testen',
-  'Platzhalter für die Entwicklung',
-  'Lena Ferien',
-  'ferien-liniert-1',
-  'Demo-Klasse hinzufügen',
-];
+const MODULE_MARKERS = ['Simulierter Fehler zum Testen', 'Vorschautext'];
 
 async function bundleCode(nodeEnv: 'production' | 'development'): Promise<string> {
   const previous = process.env['NODE_ENV'];
@@ -30,7 +24,7 @@ async function bundleCode(nodeEnv: 'production' | 'development'): Promise<string
   }
 }
 
-describe('demo transcriber in builds', () => {
+describe('preview transcriber in builds', () => {
   it('is absent from the production bundle', async () => {
     const code = await bundleCode('production');
     for (const marker of MODULE_MARKERS) expect(code).not.toContain(marker);
