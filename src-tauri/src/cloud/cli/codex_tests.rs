@@ -7,12 +7,14 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use super::codex::{self, Codex, MIN_VERSION};
-use super::tests::{beside, runtime, world};
+use super::tests::{beside, runtime, state, world};
 use super::*;
+use crate::cloud::{CloudError, Step};
 
 const PREAMBLE: &str = r#"#!/bin/sh
 dir=$(dirname "$0")
 if [ "$1" = "--version" ]; then echo "codex-cli 0.164.0"; exit 0; fi
+echo run >> "$dir/runs.txt"
 printf '%s\n' "$@" > "$dir/args.txt"
 env > "$dir/env.txt"
 ls -l > "$dir/ls.txt"
@@ -50,8 +52,10 @@ echo '{{"type":"turn.completed","usage":{{}}}}'
 fn failed(message: &str) -> String {
     format!(
         r#"echo '{{"type":"turn.started"}}'
-echo '{{"type":"error","message":"{message}"}}'
-echo '{{"type":"turn.failed","error":{{"message":"{message}"}}}}'
+cat <<'EOF'
+{{"type":"error","message":"{message}"}}
+{{"type":"turn.failed","error":{{"message":"{message}"}}}}
+EOF
 exit 1
 "#
     )
@@ -129,6 +133,7 @@ fn the_codex_arguments_shield_the_cli_and_carry_no_student_data() {
             "--skip-git-repo-check",
             "--ignore-user-config",
             "--ignore-rules",
+            "--strict-config",
             "--sandbox",
             "read-only",
             "--json",
@@ -148,6 +153,12 @@ fn the_codex_arguments_shield_the_cli_and_carry_no_student_data() {
             "features.memories=false",
             "-c",
             "features.multi_agent=false",
+            "-c",
+            "features.view_image=false",
+            "-c",
+            "features.sleep_tool=false",
+            "-c",
+            "features.image_generation=false",
             "-c",
             "mcp_servers={}",
             "-c",
@@ -356,7 +367,9 @@ async fn any_tool_item_makes_the_request_fail_even_with_an_answer() {
         "command_execution",
         "file_change",
         "mcp_tool_call",
+        "collab_tool_call",
         "web_search",
+        "something_new",
     ] {
         let cli = fake_codex(&format!("tool-{kind}"), &tool(kind));
         assert_eq!(
@@ -372,53 +385,99 @@ async fn codex_failures_map_to_their_classes() {
     for (name, body, expected) in [
         (
             "quota",
-            failed("You’ve hit your usage limit. Try again later."),
+            failed(
+                "You’ve hit your usage limit. To get more access now, send a request to your admin or try again later.",
+            ),
+            ErrorClass::QuotaExhausted,
+        ),
+        (
+            "quota-billing",
+            failed("Quota exceeded. Check your plan and billing details."),
             ErrorClass::QuotaExhausted,
         ),
         (
             "plan",
-            failed("To use Codex with your ChatGPT plan, upgrade to Plus"),
+            failed(
+                "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+            ),
             ErrorClass::QuotaExhausted,
         ),
         (
-            "login",
-            failed("Not logged in. Please run codex login"),
+            "refresh",
+            failed(
+                "Your access token could not be refreshed because your refresh token was revoked. Please log out and sign in again.",
+            ),
             ErrorClass::NotLoggedIn,
         ),
         (
             "unauthorized",
-            failed("unexpected status 401 Unauthorized"),
+            failed(
+                "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://chatgpt.com/backend-api/codex/responses",
+            ),
             ErrorClass::NotLoggedIn,
         ),
         (
-            "rate",
-            failed("We’re currently experiencing high demand"),
+            "forbidden",
+            failed("unexpected status 403 Forbidden: blocked"),
+            ErrorClass::NotLoggedIn,
+        ),
+        (
+            "demand",
+            failed("We’re currently experiencing high demand, which may cause temporary errors."),
             ErrorClass::RateLimited,
         ),
         (
-            "model",
-            failed("The 'gpt-x' model is not supported when using Codex with a ChatGPT account"),
+            "capacity",
+            failed("Selected model is at capacity. Please try a different model."),
+            ErrorClass::RateLimited,
+        ),
+        (
+            "too-many",
+            failed("unexpected status 429 Too Many Requests: slow down"),
+            ErrorClass::RateLimited,
+        ),
+        (
+            "model-404",
+            failed("unexpected status 404 Not Found: no such model"),
             ErrorClass::NotFound,
         ),
         (
-            "large",
-            failed("Codex ran out of room in the model’s context window"),
+            "model-400",
+            failed("unexpected status 400 Bad Request: some body"),
+            ErrorClass::BadRequest,
+        ),
+        (
+            "context",
+            failed(
+                "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying.",
+            ),
             ErrorClass::TooLarge,
         ),
         (
             "network",
-            failed("stream disconnected before completion"),
+            failed("stream disconnected before completion: error sending request for url"),
             ErrorClass::Network,
         ),
         (
-            "unknown",
-            failed("etwas ganz anderes"),
-            ErrorClass::CliFailed,
+            "server",
+            failed("unexpected status 502 Bad Gateway: upstream"),
+            ErrorClass::Server,
+        ),
+        (
+            "strict",
+            "echo 'unknown configuration field `features.view_image` in -c/--config override' >&2\nexit 1\n"
+                .to_owned(),
+            ErrorClass::CliOutdated,
         ),
         (
             "outdated",
             "echo \"error: unexpected argument '--ignore-rules' found\" >&2\nexit 2\n".to_owned(),
             ErrorClass::CliOutdated,
+        ),
+        (
+            "unknown",
+            failed("etwas ganz anderes"),
+            ErrorClass::CliFailed,
         ),
         ("silent", "exit 0\n".to_owned(), ErrorClass::InvalidResponse),
         (
@@ -434,4 +493,188 @@ async fn codex_failures_map_to_their_classes() {
             "{name}"
         );
     }
+}
+
+#[tokio::test]
+async fn a_global_agents_file_is_reported_as_a_note() {
+    let cli = fake_codex("notes", "");
+    let home = world().join("home").join(".codex");
+    let _ = std::fs::remove_dir_all(&home);
+    let runtime = runtime(Duration::from_secs(10));
+    assert!(
+        inspect(&runtime, &Codex, &cli)
+            .await
+            .unwrap()
+            .notes
+            .is_empty()
+    );
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("AGENTS.md"), "").unwrap();
+    assert!(
+        inspect(&runtime, &Codex, &cli)
+            .await
+            .unwrap()
+            .notes
+            .is_empty()
+    );
+    std::fs::write(home.join("AGENTS.md"), "Antworte auf Englisch.").unwrap();
+    assert_eq!(
+        inspect(&runtime, &Codex, &cli).await.unwrap().notes,
+        ["globalInstructions"]
+    );
+    std::fs::remove_dir_all(&home).unwrap();
+}
+
+async fn choose(
+    cloud: &crate::cloud::CloudState,
+    step: Step,
+    cli: &Path,
+    model: &str,
+    protection: Option<bool>,
+    protection_confirmed: bool,
+) -> Result<crate::cloud::commands::CloudView, CloudError> {
+    cloud
+        .use_choice(
+            step,
+            crate::cloud::commands::Selection {
+                template: "codex",
+                base_url: "cli://codex",
+                model,
+                key: None,
+                cli_path: cli.to_str(),
+            },
+            true,
+            protection,
+            protection_confirmed,
+        )
+        .await
+}
+
+fn class(result: Result<Value, CloudError>) -> ErrorClass {
+    match result.unwrap_err() {
+        CloudError::Cloud(class) => class,
+    }
+}
+
+#[tokio::test]
+async fn a_codex_text_step_runs_only_after_all_locks() {
+    let cli = fake_codex("flow-text", OK);
+    let cloud = state("codex-text", runtime(Duration::from_secs(10)));
+    let view = choose(&cloud, Step::Corrector, &cli, "gpt-6-luna", None, false)
+        .await
+        .unwrap();
+    let step = &view.steps[&Step::Corrector];
+    assert_eq!(step.label, "ChatGPT-Abo");
+    assert!(step.protection);
+    assert_eq!(step.cli.as_ref().unwrap().version, "0.164.0");
+
+    assert_eq!(
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), false)
+                .await
+        ),
+        ErrorClass::NotPseudonymized
+    );
+    assert_eq!(beside(&cli, "runs.txt"), "");
+    let answer = cloud
+        .chat(None, Step::Corrector, text_request(), true)
+        .await
+        .unwrap();
+    assert_eq!(answer["choices"][0]["message"]["content"], "Antwort");
+    assert_eq!(beside(&cli, "runs.txt"), "run\n");
+    assert!(beside(&cli, "args.txt").contains("gpt-6-luna\n"));
+
+    assert_eq!(
+        class(
+            cloud
+                .chat(None, Step::Corrector, image_request(), true)
+                .await
+        ),
+        ErrorClass::InvalidRequest
+    );
+    assert_eq!(beside(&cli, "runs.txt"), "run\n");
+}
+
+#[tokio::test]
+async fn the_codex_recognition_needs_protection_off_and_then_sends_files() {
+    let cli = fake_codex("flow-image", OK);
+    let cloud = state("codex-image", runtime(Duration::from_secs(10)));
+    assert_eq!(
+        choose(&cloud, Step::Transcriber, &cli, "gpt-6-luna", None, false)
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::ProtectionActive
+    );
+    choose(
+        &cloud,
+        Step::Transcriber,
+        &cli,
+        "gpt-6-luna",
+        Some(false),
+        true,
+    )
+    .await
+    .unwrap();
+    cloud
+        .chat(None, Step::Transcriber, image_request(), false)
+        .await
+        .unwrap();
+    assert_eq!(beside(&cli, "page.bin"), "ABC");
+    assert!(beside(&cli, "args.txt").contains("--image=page-1.png,page-2.jpg\n"));
+}
+
+#[tokio::test]
+async fn codex_choices_are_checked_before_anything_runs() {
+    let cli = fake_codex("flow-checks", OK);
+    let cloud = state("codex-checks", runtime(Duration::from_secs(10)));
+    assert_eq!(
+        choose(&cloud, Step::Corrector, &cli, "sonnet", None, false)
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::InvalidRequest
+    );
+    let old = fake_codex("flow-old", "");
+    let script = std::fs::read_to_string(&old)
+        .unwrap()
+        .replace("0.164.0", "0.139.0");
+    std::fs::write(&old, script).unwrap();
+    assert_eq!(
+        choose(&cloud, Step::Corrector, &old, "gpt-6-luna", None, false)
+            .await
+            .unwrap_err()
+            .class(),
+        ErrorClass::CliOutdated
+    );
+    assert_eq!(beside(&cli, "runs.txt"), "");
+}
+
+#[tokio::test]
+async fn a_tool_call_fails_the_request_through_the_whole_stack() {
+    let cli = fake_codex("flow-tool", &tool("command_execution"));
+    let cloud = state("codex-tool", runtime(Duration::from_secs(10)));
+    choose(&cloud, Step::Corrector, &cli, "gpt-6-luna", None, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        class(
+            cloud
+                .chat(None, Step::Corrector, text_request(), true)
+                .await
+        ),
+        ErrorClass::CliFailed
+    );
+}
+
+#[tokio::test]
+async fn the_codex_check_reads_a_structured_answer() {
+    let cli = fake_codex("flow-check", OK_SCHEMA);
+    let cloud = state("codex-check", runtime(Duration::from_secs(10)));
+    choose(&cloud, Step::Reviewer, &cli, "gpt-6-luna", None, false)
+        .await
+        .unwrap();
+    cloud.check(Step::Reviewer).await.unwrap();
+    assert!(beside(&cli, "args.txt").contains("--output-schema\nschema.json\n"));
 }

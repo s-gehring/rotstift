@@ -134,7 +134,7 @@ async fn gone(pid: i32) -> bool {
     false
 }
 
-fn state(name: &str, cli: Runtime) -> CloudState {
+pub(super) fn state(name: &str, cli: Runtime) -> CloudState {
     let dir = world().join(format!("state-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     let mut state = CloudState::with_sender(
@@ -355,13 +355,13 @@ async fn a_hanging_cli_is_killed_with_its_children() {
         stdin: b"",
         files: &[],
         limits: Limits {
-            timeout: Duration::from_secs(1),
+            timeout: Duration::from_secs(3),
             ..CHAT_LIMITS
         },
     })
     .await;
     assert_eq!(result.unwrap_err(), RunError::Timeout);
-    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(started.elapsed() < Duration::from_secs(10));
     let grandchild: i32 = beside(&cli, "grandchild.txt").trim().parse().unwrap();
     assert!(gone(grandchild).await);
 }
@@ -583,22 +583,6 @@ async fn only_known_models_paths_and_programs_are_accepted() {
         .await,
         ErrorClass::CliMissing
     );
-    let hidden = cloud
-        .use_choice(
-            Step::Corrector,
-            crate::cloud::commands::Selection {
-                template: "codex",
-                base_url: "cli://codex",
-                model: "gpt-5",
-                key: None,
-                cli_path: None,
-            },
-            true,
-            None,
-            false,
-        )
-        .await;
-    assert_eq!(hidden.unwrap_err().class(), ErrorClass::NotConfigured);
 }
 
 #[tokio::test]

@@ -60,18 +60,18 @@
     },
     {
       "id": "codex",
-      "label": "ChatGPT-Abo (Codex)",
+      "label": "ChatGPT-Abo (Codex, ungetestet)",
       "shortLabel": "ChatGPT-Abo",
       "baseUrl": "cli://codex",
       "key": "none",
       "tokenField": "max_tokens",
       "api": "cli",
-      "hidden": true,
       "cli": {
         "adapter": "codex",
-        "models": [],
+        "models": ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"],
         "install": "npm install -g @openai/codex",
-        "login": "codex login"
+        "login": "codex login",
+        "hint": "Dieser Weg wurde noch nie mit einer echten Codex-Installation ausprobiert. Die Anmeldung muss mit dem ChatGPT-Konto erfolgen, nicht mit einem API-Schlüssel, sonst rechnet Codex darüber ab."
       }
     },
     {

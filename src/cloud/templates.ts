@@ -6,6 +6,7 @@ const cliSchema = z.strictObject({
   models: z.array(z.string().min(1)),
   install: z.string().min(1),
   login: z.string().min(1),
+  hint: z.string().min(1).optional(),
 });
 
 const templateSchema = z.strictObject({

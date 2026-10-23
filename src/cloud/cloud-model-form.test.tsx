@@ -422,13 +422,62 @@ describe('CloudModelForm', () => {
       expect(dialog?.textContent).toContain('zum Training');
     });
 
-    it('hides the prepared Codex entry', () => {
-      render(testCloud({ available: true }));
+    it('offers Codex with its models, an honest label and the sign-in hint', async () => {
+      const use = sequence({ state: 'ok' });
+      const findCli = vi.fn<CloudModel['findCli']>(() =>
+        Promise.resolve({
+          state: 'ok',
+          cli: { path: '/Users/lehrkraft/.local/bin/codex', version: '0.164.0' },
+        }),
+      );
+      render(testCloud({ available: true, use, findCli }));
       const options = [...(field('template')?.querySelectorAll('option') ?? [])].map(
+        (option) => option.textContent,
+      );
+      expect(options).toContain('ChatGPT-Abo (Codex, ungetestet)');
+      await act(async () => {
+        change(field('template'), 'codex');
+        await Promise.resolve();
+      });
+      expect(findCli).toHaveBeenCalledExactlyOnceWith('codex');
+      expect(container.textContent).toContain('noch nie mit einer echten Codex-Installation');
+      expect(container.textContent).toContain('nicht mit einem API-Schlüssel');
+      expect(container.querySelector('[role="note"]')).toBeNull();
+      const models = [...(field('model')?.querySelectorAll('option') ?? [])].map(
         (option) => option.value,
       );
-      expect(options).toContain('claude-code');
-      expect(options).not.toContain('codex');
+      expect(models).toEqual(['', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra']);
+      change(field('model'), 'gpt-6-luna');
+      await submit();
+      expect(use).toHaveBeenCalledExactlyOnceWith(
+        'corrector',
+        expect.objectContaining({
+          template: 'codex',
+          baseUrl: 'cli://codex',
+          model: 'gpt-6-luna',
+          cliPath: '/Users/lehrkraft/.local/bin/codex',
+        }),
+        false,
+      );
+    });
+
+    it('warns when a global AGENTS.md exists in the Codex folder', async () => {
+      const findCli = vi.fn<CloudModel['findCli']>(() =>
+        Promise.resolve({
+          state: 'ok',
+          cli: {
+            path: '/Users/lehrkraft/.local/bin/codex',
+            version: '0.164.0',
+            notes: ['globalInstructions'],
+          },
+        }),
+      );
+      render(testCloud({ available: true, findCli }));
+      await act(async () => {
+        change(field('template'), 'codex');
+        await Promise.resolve();
+      });
+      expect(container.querySelector('[role="note"]')?.textContent).toContain('AGENTS.md');
     });
   });
 });

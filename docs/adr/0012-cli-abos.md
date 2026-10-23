@@ -7,7 +7,7 @@
 
 [0009](0009-cloud-modelle.md) lässt jeden Schritt ein Cloud-Modell über eine HTTP-API mit Schlüssel nutzen, [0011](0011-personenbezug-entfernen.md) entfernt davor standardmäßig den Personenbezug. Viele Lehrkräfte haben aber keinen API-Schlüssel, sondern ein privates Abo: Claude Pro oder Max mit der CLI Claude Code (`claude`), ChatGPT mit der Codex CLI (`codex`). Beide CLIs lassen sich nicht-interaktiv starten und melden sich selbst an. Ein Schlüssel ist dann nicht nötig, und Rotstift muss weder Schlüssel noch Token sehen.
 
-Eine CLI ist kein HTTP-Endpunkt, sondern ein fremdes Programm auf dem Rechner der Lehrkraft. Es liest Einstellungen, Hooks, Speicher und Projektanweisungen aus dem Benutzerordner, kann Werkzeuge ausführen und schickt die Anfrage selbst an den Anbieter. Dieses ADR legt fest, wie Rotstift so ein Programm startet, abschirmt und an Wahl, Freigabe und Schutz aus 0009 und 0011 bindet. Gebaut ist der Adapter für Claude Code, Codex braucht nur noch einen eigenen Adapter.
+Eine CLI ist kein HTTP-Endpunkt, sondern ein fremdes Programm auf dem Rechner der Lehrkraft. Es liest Einstellungen, Hooks, Speicher und Projektanweisungen aus dem Benutzerordner, kann Werkzeuge ausführen und schickt die Anfrage selbst an den Anbieter. Dieses ADR legt fest, wie Rotstift so ein Programm startet, abschirmt und an Wahl, Freigabe und Schutz aus 0009 und 0011 bindet. Gebaut sind Adapter für Claude Code und für Codex. Der Codex-Adapter ist nur gegen nachgebaute CLIs und gegen den Quellcode von Codex (Tag `rust-v0.164.0`) geprüft und lief nie gegen eine echte Installation, deshalb heißt die Vorlage „ChatGPT-Abo (Codex, ungetestet)“.
 
 Privat-Abos sind Verbraucherverträge. Einen Vertrag zur Auftragsverarbeitung gibt es dafür in der Regel nicht, und je nach Kontoeinstellung nutzt der Anbieter die Gespräche zum Training. Für Schulen ist das die wichtigste Grenze dieses Weges.
 
@@ -19,10 +19,10 @@ Privat-Abos sind Verbraucherverträge. Einen Vertrag zur Auftragsverarbeitung gi
 - **Adapter**: Der Teil in Rust, der für eine bestimmte CLI Argumente und Eingabe baut, die Ausgabe liest und Fehler einordnet (`src-tauri/src/cloud/cli/`).
 - **Programm**: Der Pfad zur ausführbaren Datei der CLI, gefunden oder von Hand gewählt, samt Version.
 
-| Vorlage       | Anzeige                    | Adresse        | Modelle                   | Zustand                                        |
-| ------------- | -------------------------- | -------------- | ------------------------- | ---------------------------------------------- |
-| `claude-code` | „Claude-Abo (Claude Code)“ | `cli://claude` | `sonnet`, `opus`, `haiku` | gebaut                                         |
-| `codex`       | „ChatGPT-Abo (Codex)“      | `cli://codex`  | noch keine                | ausgeblendet (`hidden`), bis der Adapter kommt |
+| Vorlage       | Anzeige                           | Adresse        | Modelle                                    | Zustand                                   |
+| ------------- | --------------------------------- | -------------- | ------------------------------------------ | ----------------------------------------- |
+| `claude-code` | „Claude-Abo (Claude Code)“        | `cli://claude` | `sonnet`, `opus`, `haiku`                  | gebaut                                    |
+| `codex`       | „ChatGPT-Abo (Codex, ungetestet)“ | `cli://codex`  | `gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-astra` | gebaut, nie gegen eine echte CLI gelaufen |
 
 ### Gleiche Regeln wie Cloud-Anbieter
 
@@ -115,6 +115,48 @@ Weiter gelten `rateLimited` (429 ohne Kontingent-Text), `notFound` (404 oder unb
 
 Die Texte der CLI werden nur zum Einordnen gelesen, nie angezeigt und nie protokolliert. Das Protokoll schreibt wie in 0009 eine Zeile `cloud_request` mit Vorlage, Schritt, Dauer, Versuchen, Bytes über stdin und Fehlerklasse, ohne Pfad und ohne Text.
 
+### Codex
+
+Der Adapter für `codex` (`src-tauri/src/cloud/cli/codex.rs`) startet genau diese Argumentliste, ohne Shell. Alles Folgende stammt aus dem Quellcode von `rust-v0.164.0`, nichts davon ist gegen eine echte Installation gelaufen. Die Belege mit Datei und Zeile stehen im PR.
+
+```
+<programm> exec --ephemeral --skip-git-repo-check --ignore-user-config --ignore-rules --strict-config
+  --sandbox read-only --json --model <modell>
+  -c features.shell_tool=false -c web_search="disabled" -c features.apps=false
+  -c features.plugins=false -c features.hooks=false -c features.memories=false
+  -c features.multi_agent=false -c features.view_image=false -c features.sleep_tool=false
+  -c features.image_generation=false -c mcp_servers={} -c history.persistence="none"
+  -c project_doc_max_bytes=0
+  [--output-schema schema.json] [--image=page-1.png,page-2.jpg] -
+```
+
+- **Prompt:** Der feste Satz aus dem Claude-Adapter und die Anweisungen der Anfrage gehen über stdin (`-`), nie als Argument. Codex hat keinen Schalter für einen eigenen Systemprompt.
+- **Bilder:** Bei ausgeschaltetem Schutz schreibt Rotstift die Seiten aus den Data-URLs als Dateien (Rechte 0600) in den leeren Temp-Arbeitsordner und übergibt sie mit relativen Namen per `--image=a,b`. Die Form mit `=` ist nötig, weil `--image` sonst das folgende `-` als Bildpfad verschluckt. Der Ordner wird danach gelöscht. Codex meldet eine fehlende Bilddatei nicht als Fehler, sondern ersetzt sie durch einen Platzhaltertext.
+- **Schema:** Codex schickt `--output-schema` mit `strict: true` an die API. Rotstift legt das Schema als `schema.json` in den Arbeitsordner und wandelt es vorher um: `additionalProperties:false` und alle Felder in `required` an jedem Objekt, `type: "string"` bei einem reinen `enum`, ohne `maxLength`, `minLength`, `minItems` und `maxItems`. Die Prüfung der Länge übernimmt wie sonst die Auswertung in der Oberfläche.
+- **Antwort:** Rotstift liest die JSONL-Zeilen: Der letzte `item.completed` vom Typ `agent_message` ist die Antwort, `turn.completed` gibt die Token. Erfolg braucht beides, kein `turn.failed` und Exit-Code 0. Ein einzelnes `error`-Ereignis (etwa beim Neuverbinden) macht die Anfrage nicht zum Fehler.
+- **Werkzeuge als Fehler:** Jedes Item außer `agent_message`, `reasoning`, `error` und `todo_list` macht die Anfrage zum `cliFailed`, auch wenn eine Antwort kam. Das schließt `command_execution`, `file_change`, `mcp_tool_call`, `collab_tool_call`, `web_search` und alles Unbekannte ein. Grund: `apply_patch` lässt sich über die Konfiguration nicht abschalten, geschützt ist es nur durch `--sandbox read-only` und die feste Freigabe „nie“.
+- **Umgebung:** Wie bei Claude, `CODEX_HOME` geht durch, `CODEX_API_KEY`, `CODEX_ACCESS_TOKEN` und `OPENAI_API_KEY` nicht (sie hätten sonst Vorrang vor dem Abo).
+- **Version:** Mindestens 0.140.0 (`codex-cli x.y.z`). Eine ältere Version scheitert schon bei der Wahl mit `cliOutdated`. `--strict-config` lässt den Start scheitern, wenn Codex einen der gesetzten `-c`-Schlüssel nicht kennt („unknown configuration field“), das wird ebenfalls `cliOutdated`. Ohne das Flag würde Codex unbekannte Schlüssel still ignorieren und ohne die Abschirmung laufen.
+- **Fehlerklassen:** `quotaExhausted` bei „usage limit“, „quota“, „upgrade to“, `notLoggedIn` bei „sign in“, „refresh token“, „Missing bearer“ und HTTP 401 oder 403, `rateLimited` bei „rate limit“, „high demand“, „at capacity“ und 429, `tooLarge` bei „context window“, `network` bei „stream disconnected“, sonst nach dem Statuscode in `unexpected status <Code>` und zuletzt `cliFailed`. Der Text bei fehlender Anmeldung und bei unbekanntem Modell kommt vom Server und steht nicht im Quellcode, hier hilft nur der Statuscode.
+
+**Grenzen, die sich nicht abschalten lassen:**
+
+- **Globale `AGENTS.md`:** `--ignore-user-config` leert nur die `config.toml`. Eine `AGENTS.override.md` oder `AGENTS.md` in `CODEX_HOME` (Standard `~/.codex`) liest Codex immer und gibt sie an das Modell weiter. Die Auswahl der Programmdatei prüft deshalb, ob so eine nicht leere Datei existiert (`CliInfo.notes` mit `globalInstructions`), und das Formular zeigt dann einen Hinweis. Rotstift bricht nicht ab, weil die Datei nur das Verhalten des Modells beeinflusst, nicht den Weg der Daten.
+- **Anmeldung im Schlüsselbund:** Wer `cli_auth_credentials_store` auf `keyring` oder `auto` gestellt hat, erscheint im Lauf als nicht angemeldet, weil `--ignore-user-config` die Einstellung nicht liest. Rotstift setzt den Wert nicht, denn `auto` würde beim Auffrischen der Anmeldung zuerst den Schlüsselbund beschreiben und Anmeldungen aus der Datei verschieben.
+- **API-Schlüssel statt Abo:** Ist `codex` mit einem API-Schlüssel angemeldet, rechnet es darüber ab. Rotstift kann das nicht prüfen, ohne `auth.json` zu lesen (das es nie tut). Das Formular sagt es deshalb beim Anbieter.
+- **Schreibzugriffe:** Codex schreibt beim Auffrischen der Anmeldung in `CODEX_HOME/auth.json` und legt dort Zustandsdateien an. Verwaltete Vorgaben eines Administrators gelten weiter.
+- **Bildgröße:** Codex verkleinert große Bilder selbst, bevor es sie sendet.
+
+**Rauchtest mit einer echten Installation** (nie gelaufen, Anleitung für später):
+
+```bash
+npm install -g @openai/codex
+codex login
+cd src-tauri && ROTSTIFT_CODEX_SMOKE=1 cargo test real_codex_cli -- --nocapture
+```
+
+`ROTSTIFT_CLI_PATH` und `ROTSTIFT_CLI_MODEL` (Standard `gpt-6-luna`) sind optional. Der Test prüft einen Textschritt mit Platzhalter, die Prüfanfrage mit Schema und die Erkennung einer zur Laufzeit gerenderten Druckseite. Erst wenn er grün ist und die Tabelle der offenen Punkte bestätigt wurde, sollte der Zusatz „ungetestet“ aus dem Namen der Vorlage entfallen.
+
 ### Adapter-Schnittstelle
 
 ```rust
@@ -122,12 +164,14 @@ pub trait Adapter: Sync {
     fn binary_names(&self) -> &'static [&'static str];        // erlaubte Dateinamen
     fn search_dirs(&self, home: &Path) -> Vec<PathBuf>;       // eigene Installationsorte
     fn version(&self, stdout: &str) -> Option<String>;        // `--version` prüfen
-    fn invocation(&self, prompt: &Prompt) -> Invocation;      // Argumente, stdin, Zusatz-Umgebung
-    fn answer(&self, output: &RunOutput) -> Result<Answer, ErrorClass>; // Antwort lesen, Fehler einordnen
+    fn outdated(&self, version: &str) -> bool;                // Mindestversion
+    fn notes(&self, parent: ParentEnv) -> Vec<String>;        // Hinweise zur Installation
+    fn invocation(&self, prompt: &Prompt) -> Result<Invocation, ErrorClass>; // Argumente, stdin, Dateien, Zusatz-Umgebung
+    fn answer(&self, output: &RunOutput) -> Result<Answer, ErrorClass>;      // Antwort lesen, Fehler einordnen
 }
 ```
 
-`Prompt` ist anbieterneutral (Modell, Anweisungen, Nachrichten mit Text- und Bildteilen, Schema). Prozessstart, Umgebung, Arbeitsordner, Zeitlimit, Abbruch, Grenzen, Suche und die Sperren liegen außerhalb des Adapters. Für Codex kommen ein Modul `codex.rs`, ein Eintrag in `cli::adapter` und die Modelle in der Vorlage dazu, danach entfällt `hidden`.
+`Prompt` ist anbieterneutral (Modell, Anweisungen, Nachrichten mit Text- und Bildteilen, Schema). Prozessstart, Umgebung, Arbeitsordner, Zeitlimit, Abbruch, Grenzen, Suche und die Sperren liegen außerhalb des Adapters. `Invocation` kann Dateien mitgeben, die der Prozessstart vor dem Start in den Arbeitsordner schreibt (Rechte 0600), so kommen die Seitenbilder zu Codex.
 
 ## Folgen
 
@@ -139,6 +183,7 @@ pub trait Adapter: Sync {
 - Jeder Aufruf startet die CLI neu (gemessen etwa 1 s Grundlast). Gemessen im Rauchtest auf einem Mac mit Apple Silicon: Textschritt mit `haiku` 1,4–1,6 s, mit `sonnet` 5,8 s; Prüfanfrage mit Schema 1,1–2,8 s; Erkennung einer gedruckten Seite (950 × 180 px) 1,0–1,4 s.
 - Das Kontingent des Abos ist begrenzt. Viele Arbeiten mit Inhalt und Form (5–12 Anfragen je Arbeit) können es erschöpfen, dann meldet der Lauf `quotaExhausted`.
 - Unter Linux beendet ein Absturz von Rotstift eine laufende CLI nicht, sie endet nach ihrer einen Antwort von selbst.
+- Der Codex-Adapter ist ungetestet gegen eine echte CLI. Fehlertexte, Laufzeiten und das Verhalten der Abschirmung sind aus dem Quellcode abgeleitet. Eine globale `AGENTS.md` in `CODEX_HOME` lässt sich nicht fernhalten, und die Anmeldung im Schlüsselbund sieht der Lauf nicht.
 
 ## Tests
 
@@ -146,8 +191,9 @@ pub trait Adapter: Sync {
 - Rust: Ohne Freigabe, nach dem Ausschalten und mit Schutz läuft die CLI nie (Zähler bleibt leer). Nur Aliase aus der Vorlage, kein Schlüssel, nur passende Programme. Die ausgeblendete Codex-Vorlage lässt sich nicht wählen. Die Suche findet `PATH` und `~/.claude/local` und speichert den aufgelösten Ordner.
 - Frontend: Kein Schlüsselfeld, gefundenes Programm mit Version, Auswahl der Aliase ohne Vorauswahl, Installationsbefehl und Dateiwahl, Anmeldehinweis bei `notLoggedIn`, Zusatzsatz im Hinweis zum Ausschalten, Codex ausgeblendet, Cloud-Zeichen „über Claude-Abo, pseudonymisiert“.
 - E2E mit nachgebildetem Backend: Wahl des Claude-Abos bis zum Cloud-Zeichen, Dateiwahl und Anmeldehinweis.
-- Rauchtest gegen die echte CLI nur mit `ROTSTIFT_CLI_SMOKE=1` (`ROTSTIFT_CLI_PATH`, `ROTSTIFT_CLI_MODEL` optional): ein Textschritt mit selbst geschriebenem Text, die Prüfanfrage mit Schema und eine Erkennung mit einer zur Laufzeit gerenderten Druckseite.
+- Codex: nachgebaute CLIs mit den JSONL-Ereignissen und Fehlertexten aus dem Quellcode von Codex (`codex_tests.rs`): Argumente exakt, Strict-Schema, Bilddateien mit Rechten 0600, Werkzeug-Items als Fehler, Fehlerklassen, Mindestversion, Hinweis auf die globale `AGENTS.md`, Sperren und Schutz über `cloud_chat`. Frontend und E2E: Vorlage mit Modellen, Hinweis und Notiz.
+- Rauchtest gegen die echte CLI nur mit `ROTSTIFT_CLI_SMOKE=1` (Claude) oder `ROTSTIFT_CODEX_SMOKE=1` (Codex) (`ROTSTIFT_CLI_PATH`, `ROTSTIFT_CLI_MODEL` optional): ein Textschritt mit selbst geschriebenem Text, die Prüfanfrage mit Schema und eine Erkennung mit einer zur Laufzeit gerenderten Druckseite.
 
 ## Doku
 
-README: Abschnitt „Abo über Claude Code nutzen“ mit Installations- und Anmeldebefehl. Neuer Prozessstart (CLI und einmal die Login-Shell), kein neuer Netzwerkweg aus Rotstift selbst, die CSP in `tauri.conf.json` bleibt unverändert. Neue Abhängigkeiten: das Tokio-Feature `process` und `libc` jetzt für alle Unix-Systeme (Prozessgruppe).
+README: Abschnitte „Abo über Claude Code nutzen“ und „Abo über Codex nutzen (ungetestet)“ mit Installations- und Anmeldebefehl. Neuer Prozessstart (CLI und einmal die Login-Shell), kein neuer Netzwerkweg aus Rotstift selbst, die CSP in `tauri.conf.json` bleibt unverändert. Neue Abhängigkeiten: das Tokio-Feature `process` und `libc` jetzt für alle Unix-Systeme (Prozessgruppe).

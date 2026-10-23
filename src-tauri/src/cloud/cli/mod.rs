@@ -115,6 +115,9 @@ pub trait Adapter: Sync {
     fn outdated(&self, _version: &str) -> bool {
         false
     }
+    fn notes(&self, _parent: ParentEnv) -> Vec<String> {
+        Vec::new()
+    }
     fn invocation(&self, prompt: &Prompt) -> Result<Invocation, ErrorClass>;
     fn answer(&self, output: &RunOutput) -> Result<Answer, ErrorClass>;
 }
@@ -132,6 +135,8 @@ pub fn adapter(id: &str) -> Option<&'static dyn Adapter> {
 pub struct CliInfo {
     pub path: String,
     pub version: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
 }
 
 pub fn valid_model(model: &str) -> bool {
@@ -384,6 +389,7 @@ pub async fn inspect(
     Ok(CliInfo {
         path: path.to_string_lossy().into_owned(),
         version,
+        notes: adapter.notes(runtime.parent),
     })
 }
 

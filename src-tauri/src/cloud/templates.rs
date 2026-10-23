@@ -102,7 +102,7 @@ mod tests {
             }
         }
         assert!(!find("claude-code").unwrap().hidden);
-        assert!(find("codex").unwrap().hidden);
+        assert!(!find("codex").unwrap().hidden);
         assert!(find("server").unwrap().base_url.is_none());
         assert_eq!(find("anthropic").unwrap().api, Api::Anthropic);
         assert_eq!(find("mistral").unwrap().api, Api::Openai);

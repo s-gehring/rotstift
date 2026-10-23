@@ -181,7 +181,7 @@ async fn real_codex_cli_reads_text_and_a_rendered_page() {
     if std::env::var("ROTSTIFT_CODEX_SMOKE").as_deref() != Ok("1") {
         return;
     }
-    exercise(&Codex, "codex", "cli://codex", "gpt-5.5").await;
+    exercise(&Codex, "codex", "cli://codex", "gpt-6-luna").await;
 }
 
 async fn exercise(adapter: &dyn Adapter, template: &str, base_url: &str, default_model: &str) {

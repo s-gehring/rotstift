@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 
 use super::claude::SYSTEM_PROMPT;
 use super::runner::RunOutput;
-use super::{Adapter, Answer, Invocation, Prompt};
+use super::{Adapter, Answer, Invocation, ParentEnv, Prompt};
 use crate::cloud::ErrorClass;
 
 pub struct Codex;
@@ -14,7 +14,7 @@ pub const MIN_VERSION: (u64, u64, u64) = (0, 140, 0);
 
 pub const SCHEMA_FILE: &str = "schema.json";
 
-const OVERRIDES: [&str; 9] = [
+const OVERRIDES: [&str; 12] = [
     "features.shell_tool=false",
     "web_search=\"disabled\"",
     "features.apps=false",
@@ -22,52 +22,49 @@ const OVERRIDES: [&str; 9] = [
     "features.hooks=false",
     "features.memories=false",
     "features.multi_agent=false",
+    "features.view_image=false",
+    "features.sleep_tool=false",
+    "features.image_generation=false",
     "mcp_servers={}",
     "history.persistence=\"none\"",
 ];
 
-const TOOL_ITEMS: [&str; 4] = [
-    "command_execution",
-    "file_change",
-    "mcp_tool_call",
-    "web_search",
-];
+const PLAIN_ITEMS: [&str; 4] = ["agent_message", "reasoning", "error", "todo_list"];
+
+const GLOBAL_INSTRUCTIONS: [&str; 2] = ["AGENTS.override.md", "AGENTS.md"];
+
+pub const GLOBAL_INSTRUCTIONS_NOTE: &str = "globalInstructions";
 
 const QUOTA_HINTS: [&str; 4] = ["usage limit", "quota", "upgrade to", "credits"];
 
-const LOGIN_HINTS: [&str; 9] = [
+const LOGIN_HINTS: [&str; 6] = [
     "not logged in",
-    "log in",
-    "login",
     "sign in",
     "unauthorized",
-    "401",
-    "authentication",
     "refresh token",
     "invalid api key",
+    "missing bearer",
 ];
 
-const MODEL_HINTS: [&str; 5] = [
+const MODEL_HINTS: [&str; 4] = [
     "model_not_found",
     "model not found",
     "does not exist",
-    "unknown model",
-    "is not supported",
+    "model is not supported",
 ];
 
-const RATE_HINTS: [&str; 5] = [
+const RATE_HINTS: [&str; 4] = [
     "rate limit",
     "high demand",
     "at capacity",
     "too many requests",
-    "429",
 ];
 
-const LARGE_HINTS: [&str; 3] = ["context window", "too large", "413"];
+const LARGE_HINTS: [&str; 2] = ["context window", "payload too large"];
 
 const NETWORK_HINTS: [&str; 4] = ["stream disconnected", "timed out", "connection", "network"];
 
-const SERVER_HINTS: [&str; 4] = ["500", "502", "503", "server error"];
+const OUTDATED_HINTS: [&str; 2] = ["unknown configuration field", "unexpected argument"];
 
 #[cfg(windows)]
 const BINARIES: [&str; 1] = ["codex.exe"];
@@ -193,6 +190,7 @@ pub fn arguments(prompt: &Prompt, images: &[(String, Vec<u8>)]) -> Vec<OsString>
         "--skip-git-repo-check",
         "--ignore-user-config",
         "--ignore-rules",
+        "--strict-config",
         "--sandbox",
         "read-only",
         "--json",
@@ -224,24 +222,46 @@ fn mentions(text: &str, hints: &[&str]) -> bool {
     hints.iter().any(|hint| text.contains(hint))
 }
 
+fn status(text: &str) -> Option<u16> {
+    let (_, rest) = text.split_once("unexpected status ")?;
+    rest.split(|c: char| !c.is_ascii_digit())
+        .next()?
+        .parse()
+        .ok()
+}
+
 fn classify(text: &str) -> ErrorClass {
     let text = text.to_lowercase();
+    if mentions(&text, &OUTDATED_HINTS) {
+        return ErrorClass::CliOutdated;
+    }
     if mentions(&text, &QUOTA_HINTS) {
-        ErrorClass::QuotaExhausted
-    } else if mentions(&text, &LOGIN_HINTS) {
-        ErrorClass::NotLoggedIn
-    } else if mentions(&text, &MODEL_HINTS) {
-        ErrorClass::NotFound
-    } else if mentions(&text, &RATE_HINTS) {
-        ErrorClass::RateLimited
-    } else if mentions(&text, &LARGE_HINTS) {
-        ErrorClass::TooLarge
-    } else if mentions(&text, &NETWORK_HINTS) {
-        ErrorClass::Network
-    } else if mentions(&text, &SERVER_HINTS) {
-        ErrorClass::Server
-    } else {
-        ErrorClass::CliFailed
+        return ErrorClass::QuotaExhausted;
+    }
+    if mentions(&text, &LOGIN_HINTS) {
+        return ErrorClass::NotLoggedIn;
+    }
+    if mentions(&text, &MODEL_HINTS) {
+        return ErrorClass::NotFound;
+    }
+    if mentions(&text, &RATE_HINTS) {
+        return ErrorClass::RateLimited;
+    }
+    if mentions(&text, &LARGE_HINTS) {
+        return ErrorClass::TooLarge;
+    }
+    if mentions(&text, &NETWORK_HINTS) {
+        return ErrorClass::Network;
+    }
+    match status(&text) {
+        Some(401 | 403) => ErrorClass::NotLoggedIn,
+        Some(404) => ErrorClass::NotFound,
+        Some(408) => ErrorClass::Timeout,
+        Some(413) => ErrorClass::TooLarge,
+        Some(429) => ErrorClass::RateLimited,
+        Some(400..=499) => ErrorClass::BadRequest,
+        Some(500..=599) => ErrorClass::Server,
+        _ => ErrorClass::CliFailed,
     }
 }
 
@@ -274,7 +294,7 @@ fn events(stdout: &[u8]) -> Events {
                     .pointer("/item/type")
                     .and_then(Value::as_str)
                     .unwrap_or_default();
-                if TOOL_ITEMS.contains(&item_kind) {
+                if !PLAIN_ITEMS.contains(&item_kind) {
                     events.tools = true;
                 } else if item_kind == "agent_message" && kind == "item.completed" {
                     events.message = event
@@ -334,6 +354,24 @@ impl Adapter for Codex {
         triple(version).is_some_and(|found| found < MIN_VERSION)
     }
 
+    fn notes(&self, parent: ParentEnv) -> Vec<String> {
+        let home = parent("CODEX_HOME").map(PathBuf::from).or_else(|| {
+            parent("HOME")
+                .or_else(|| parent("USERPROFILE"))
+                .map(|home| PathBuf::from(home).join(".codex"))
+        });
+        let present = home.is_some_and(|home| {
+            GLOBAL_INSTRUCTIONS.iter().any(|name| {
+                std::fs::metadata(home.join(name))
+                    .is_ok_and(|meta| meta.is_file() && meta.len() > 0)
+            })
+        });
+        present
+            .then(|| GLOBAL_INSTRUCTIONS_NOTE.to_owned())
+            .into_iter()
+            .collect()
+    }
+
     fn invocation(&self, prompt: &Prompt) -> Result<Invocation, ErrorClass> {
         let images = images(prompt)?;
         let args = arguments(prompt, &images);
@@ -368,9 +406,6 @@ impl Adapter for Codex {
                 input_tokens: events.input_tokens,
                 output_tokens: events.output_tokens,
             });
-        }
-        if !events.seen && stderr.contains("unexpected argument") {
-            return Err(ErrorClass::CliOutdated);
         }
         if output.code == Some(0) && !events.failed {
             return Err(ErrorClass::InvalidResponse);

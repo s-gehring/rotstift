@@ -149,6 +149,7 @@ impl CloudState {
         let cli = choice.cli_path.clone().map(|path| CliInfo {
             path,
             version: choice.cli_version.clone().unwrap_or_default(),
+            notes: Vec::new(),
         });
         Some(StepView {
             template: choice.template.clone(),
