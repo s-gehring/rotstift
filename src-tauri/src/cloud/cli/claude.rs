@@ -150,17 +150,18 @@ impl Adapter for Claude {
         (numeric && rest.trim() == "(Claude Code)").then(|| version.to_owned())
     }
 
-    fn invocation(&self, prompt: &Prompt) -> Invocation {
+    fn invocation(&self, prompt: &Prompt) -> Result<Invocation, ErrorClass> {
         let mut stdin = message(prompt).to_string().into_bytes();
         stdin.push(b'\n');
-        Invocation {
+        Ok(Invocation {
             args: arguments(prompt),
             stdin,
+            files: Vec::new(),
             env: ENV
                 .iter()
                 .map(|(key, value)| (OsString::from(key), OsString::from(value)))
                 .collect(),
-        }
+        })
     }
 
     fn answer(&self, output: &RunOutput) -> Result<Answer, ErrorClass> {

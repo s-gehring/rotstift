@@ -42,6 +42,7 @@ async fn read_login_path() -> Option<OsString> {
         args: &["-l".into(), "-i".into(), "-c".into(), script.into()],
         env: &env,
         stdin: &[],
+        files: &[],
         limits: SHELL_LIMITS,
     })
     .await
