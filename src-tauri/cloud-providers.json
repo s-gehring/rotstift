@@ -44,6 +44,37 @@
       "tokenField": "max_completion_tokens"
     },
     {
+      "id": "claude-code",
+      "label": "Claude-Abo (Claude Code)",
+      "shortLabel": "Claude-Abo",
+      "baseUrl": "cli://claude",
+      "key": "none",
+      "tokenField": "max_tokens",
+      "api": "cli",
+      "cli": {
+        "adapter": "claude",
+        "models": ["sonnet", "opus", "haiku"],
+        "install": "curl -fsSL https://claude.ai/install.sh | bash",
+        "login": "claude auth login"
+      }
+    },
+    {
+      "id": "codex",
+      "label": "ChatGPT-Abo (Codex)",
+      "shortLabel": "ChatGPT-Abo",
+      "baseUrl": "cli://codex",
+      "key": "none",
+      "tokenField": "max_tokens",
+      "api": "cli",
+      "hidden": true,
+      "cli": {
+        "adapter": "codex",
+        "models": [],
+        "install": "npm install -g @openai/codex",
+        "login": "codex login"
+      }
+    },
+    {
       "id": "server",
       "label": "Eigener Server",
       "baseUrl": null,

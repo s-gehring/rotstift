@@ -16,6 +16,12 @@ export interface CloudStep {
   readonly confirmed: boolean;
   readonly protection: boolean;
   readonly key: KeyStore | null;
+  readonly cli?: CliInfo | null;
+}
+
+export interface CliInfo {
+  readonly path: string;
+  readonly version: string;
 }
 
 export interface CloudView {
@@ -32,6 +38,7 @@ export interface CloudInput {
   readonly baseUrl: string;
   readonly model: string;
   readonly key: string | null;
+  readonly cliPath: string | null;
   readonly protection: boolean | null;
   readonly protectionConfirmed: boolean;
 }
@@ -66,6 +73,8 @@ export function createCloudClient(invoke: Invoke = tauriInvoke) {
     models: (template: string, baseUrl: string, key: string | null) =>
       call<readonly RemoteModel[]>('cloud_models', { template, baseUrl, key }),
     check: (step: ModelRole) => call<undefined>('cloud_check', { step }),
+    findCli: (template: string) => call<CliInfo | null>('cli_find', { template }),
+    pickCli: (template: string) => call<CliInfo | null>('cli_pick', { template }),
   };
 }
 

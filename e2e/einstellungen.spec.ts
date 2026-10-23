@@ -135,6 +135,7 @@ test.describe('on a laptop with 8 GB', () => {
       'Anthropic',
       'OpenAI',
       'OpenAI (EU-Projekt)',
+      'Claude-Abo (Claude Code)',
       'Eigener Server',
       'Anderer Anbieter',
     ]);

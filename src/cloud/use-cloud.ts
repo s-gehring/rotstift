@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ModelRole } from '../app/types.ts';
 import {
   CloudCallError,
+  type CliInfo,
   type CloudClient,
   type CloudInput,
   type CloudView,
@@ -19,12 +20,18 @@ export type ModelsOutcome =
   | { readonly state: 'ok'; readonly models: readonly RemoteModel[] }
   | { readonly state: 'error'; readonly error: CloudErrorClass };
 
+export type CliOutcome =
+  | { readonly state: 'ok'; readonly cli: CliInfo | null }
+  | { readonly state: 'error'; readonly error: CloudErrorClass };
+
 export interface CloudModel {
   readonly available: boolean;
   readonly steps: CloudView['steps'];
   readonly protects: (role: ModelRole) => boolean;
   readonly use: (role: ModelRole, input: CloudInput, confirmed: boolean) => Promise<CloudOutcome>;
   readonly models: (input: CloudInput) => Promise<ModelsOutcome>;
+  readonly findCli: (template: string) => Promise<CliOutcome>;
+  readonly pickCli: (template: string) => Promise<CliOutcome>;
   readonly setKey: (role: ModelRole, key: string) => Promise<CloudErrorClass | null>;
   readonly setProtection: (
     role: ModelRole,
@@ -94,6 +101,30 @@ export function useCloud(client: CloudClient | null): CloudModel {
     [client],
   );
 
+  const findCli = useCallback(
+    async (template: string): Promise<CliOutcome> => {
+      if (client === null) return { state: 'error', error: 'notConfigured' };
+      try {
+        return { state: 'ok', cli: await client.findCli(template) };
+      } catch (error) {
+        return { state: 'error', error: errorClass(error) };
+      }
+    },
+    [client],
+  );
+
+  const pickCli = useCallback(
+    async (template: string): Promise<CliOutcome> => {
+      if (client === null) return { state: 'error', error: 'notConfigured' };
+      try {
+        return { state: 'ok', cli: await client.pickCli(template) };
+      } catch (error) {
+        return { state: 'error', error: errorClass(error) };
+      }
+    },
+    [client],
+  );
+
   const setKey = useCallback(
     async (role: ModelRole, key: string): Promise<CloudErrorClass | null> => {
       if (client === null) return 'notConfigured';
@@ -148,10 +179,12 @@ export function useCloud(client: CloudClient | null): CloudModel {
       protects,
       use,
       models,
+      findCli,
+      pickCli,
       setKey,
       setProtection,
       clear,
     }),
-    [client, view.steps, protects, use, models, setKey, setProtection, clear],
+    [client, view.steps, protects, use, models, findCli, pickCli, setKey, setProtection, clear],
   );
 }

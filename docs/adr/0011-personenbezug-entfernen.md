@@ -9,7 +9,7 @@
 
 Das reicht nicht. Nach EuGH C-434/16 (Nowak) sind schon die Antworten einer Prüfung personenbezogene Daten, auch ohne Namen. Wer Arbeiten an einen Anbieter schickt, überträgt personenbezogene Daten. Rotstift kann das nicht verhindern, aber es kann die Menge verkleinern: Kennungen, die eine Person erst bestimmbar machen, ersetzt die App lokal durch Platzhalter, bevor Text an einen Cloud-Anbieter geht, und setzt die Originale nach der Antwort wieder ein.
 
-Dieses ADR legt fest, was ersetzt wird, wann der Schutz gilt, wie er sich abschalten lässt und was Rust unabhängig von der Oberfläche durchsetzt. Das Kernmodul (`src/privacy/`), die Messung der Erkennung (`eval/`) sowie die Verdrahtung im Ablauf mit der Prüfansicht (`src/review/review-flow.ts`, `src/privacy-review/`) entstehen getrennt.
+Dieses ADR legt fest, was ersetzt wird, wann der Schutz gilt, wie er sich abschalten lässt und was Rust unabhängig von der Oberfläche durchsetzt. Für Abos über eine CLI gilt es unverändert, der Hinweis zum Ausschalten bekommt dort einen Satz zu Auftragsverarbeitung und Training ([0012](0012-cli-abos.md)). Das Kernmodul (`src/privacy/`), die Messung der Erkennung (`eval/`) sowie die Verdrahtung im Ablauf mit der Prüfansicht (`src/review/review-flow.ts`, `src/privacy-review/`) entstehen getrennt.
 
 ## Entscheidung
 

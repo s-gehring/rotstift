@@ -18,7 +18,12 @@ export type CloudErrorClass =
   | 'timeout'
   | 'cancelled'
   | 'invalidResponse'
-  | 'storage';
+  | 'storage'
+  | 'cliMissing'
+  | 'cliOutdated'
+  | 'cliFailed'
+  | 'notLoggedIn'
+  | 'quotaExhausted';
 
 export interface CloudError {
   readonly kind: 'cloud';
@@ -57,6 +62,11 @@ const TEXT: Readonly<Record<CloudErrorClass, string>> = {
   cancelled: 'Abgebrochen',
   invalidResponse: 'Die Antwort des Anbieters war unbrauchbar',
   storage: 'Die Einstellung ließ sich nicht speichern',
+  cliMissing: 'Das Programm fehlt oder ist nicht die erwartete CLI',
+  cliOutdated: 'Die CLI ist zu alt. Bitte aktualisieren',
+  cliFailed: 'Die CLI hat mit einem Fehler aufgehört',
+  notLoggedIn: 'Die CLI ist nicht angemeldet',
+  quotaExhausted: 'Das Kontingent des Abos ist aufgebraucht',
 };
 
 export function describeCloudError(error: CloudErrorClass): string {
@@ -69,6 +79,10 @@ const UNAVAILABLE: ReadonlySet<CloudErrorClass> = new Set([
   'protectionActive',
   'keyMissing',
   'auth',
+  'cliMissing',
+  'cliOutdated',
+  'notLoggedIn',
+  'quotaExhausted',
 ]);
 
 export function cloudUnavailable(error: CloudErrorClass): boolean {

@@ -13,6 +13,8 @@ Die Modellwahl je Schritt kommt aus [0008](0008-modellwahl-je-schritt.md). Diese
 
 Nachtrag: [0011](0011-personenbezug-entfernen.md) legt fest, dass vor dem Senden standardmäßig der Personenbezug entfernt wird und die Erkennung dann lokal bleibt. Wo dieses ADR „gesendet“ sagt, gilt es ohne Schutz oder nach dem Schwärzen, wie die Tabelle unten zeigt.
 
+Nachtrag: [0012](0012-cli-abos.md) fügt Anbieter hinzu, die über eine CLI mit Abo laufen (Claude Code). Sie nutzen dieselbe Wahl, Freigabe und dieselben Sperren, aber statt HTTP einen abgeschirmten Prozess.
+
 ## Entscheidung
 
 ### Begriffe

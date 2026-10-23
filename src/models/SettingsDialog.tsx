@@ -241,7 +241,11 @@ function CloudRow({
               </span>
             </span>
             <span className="settings-model-note">
-              {step.label === step.host ? step.host : `${step.label} · ${step.host}`}
+              {step.cli != null
+                ? `${step.label} · ${step.cli.path} · Version ${step.cli.version}`
+                : step.label === step.host
+                  ? step.host
+                  : `${step.label} · ${step.host}`}
             </span>
             {step.key === 'session' && (
               <span className="settings-model-note">Schlüssel gilt nur bis zum Beenden.</span>
@@ -262,6 +266,7 @@ function CloudRow({
         role={role}
         on={step.protection}
         askBeforeOff={stepProtectionDefault(step)}
+        subscription={findTemplate(step.template)?.api === 'cli'}
         disabled={locked}
         onChange={(on, confirmed) => {
           setProtectionError(null);

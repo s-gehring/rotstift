@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCloud } from '../app/test-app.ts';
 import { CloudModelForm } from './CloudModelForm.tsx';
-import type { CloudModel, CloudOutcome } from './use-cloud.ts';
+import type { CliOutcome, CloudModel, CloudOutcome } from './use-cloud.ts';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -86,6 +86,14 @@ function sequence(...outcomes: CloudOutcome[]) {
   return vi.fn<CloudModel['use']>(() => Promise.resolve(outcomes.shift() ?? { state: 'ok' }));
 }
 
+async function chooseClaude(cloud: CloudModel) {
+  render(cloud);
+  await act(async () => {
+    change(field('template'), 'claude-code');
+    await Promise.resolve();
+  });
+}
+
 describe('CloudModelForm', () => {
   it('asks before the first use and sends nothing when cancelled', async () => {
     const use = sequence({ state: 'consent' });
@@ -99,6 +107,7 @@ describe('CloudModelForm', () => {
         baseUrl: 'https://api.mistral.ai/v1',
         model: 'mistral-small-latest',
         key: 'fake-test-key',
+        cliPath: null,
         protection: null,
         protectionConfirmed: false,
       },
@@ -258,6 +267,7 @@ describe('CloudModelForm', () => {
         baseUrl: 'https://api.anthropic.com/v1',
         model: '',
         key: 'fake-test-key',
+        cliPath: null,
         protection: null,
         protectionConfirmed: false,
       });
@@ -338,6 +348,87 @@ describe('CloudModelForm', () => {
         expect.objectContaining({ protection: false, protectionConfirmed: true }),
         false,
       );
+    });
+  });
+  describe('with a subscription through a CLI', () => {
+    const FOUND: CliOutcome = {
+      state: 'ok',
+      cli: { path: '/Users/lehrkraft/.local/bin/claude', version: '2.1.299' },
+    };
+
+    it('finds the CLI, offers the aliases and asks for no key', async () => {
+      const use = sequence({ state: 'ok' });
+      const findCli = vi.fn<CloudModel['findCli']>(() => Promise.resolve(FOUND));
+      await chooseClaude(testCloud({ available: true, use, findCli }));
+      expect(findCli).toHaveBeenCalledExactlyOnceWith('claude-code');
+      expect(field('key')).toBeNull();
+      expect(field('address')).toBeNull();
+      expect(container.textContent).toContain(
+        '/Users/lehrkraft/.local/bin/claude · Version 2.1.299',
+      );
+      const options = [...(field('model')?.querySelectorAll('option') ?? [])].map(
+        (option) => option.value,
+      );
+      expect(options).toEqual(['', 'sonnet', 'opus', 'haiku']);
+      expect(field('model')?.value).toBe('');
+      expect(button('Verwenden')?.disabled).toBe(true);
+      change(field('model'), 'sonnet');
+      expect(protectionSwitch()?.checked).toBe(true);
+      await submit();
+      expect(use).toHaveBeenCalledExactlyOnceWith(
+        'corrector',
+        {
+          template: 'claude-code',
+          baseUrl: 'cli://claude',
+          model: 'sonnet',
+          key: null,
+          cliPath: '/Users/lehrkraft/.local/bin/claude',
+          protection: null,
+          protectionConfirmed: false,
+        },
+        false,
+      );
+    });
+
+    it('names the install command when nothing is found and takes a picked file', async () => {
+      const pickCli = vi.fn<CloudModel['pickCli']>(() => Promise.resolve(FOUND));
+      await chooseClaude(testCloud({ available: true, pickCli }));
+      expect(container.textContent).toContain('Nicht gefunden.');
+      expect(container.textContent).toContain('curl -fsSL https://claude.ai/install.sh | bash');
+      await act(async () => {
+        button('Datei wählen …')?.click();
+        await Promise.resolve();
+      });
+      expect(pickCli).toHaveBeenCalledExactlyOnceWith('claude-code');
+      expect(container.textContent).toContain('Version 2.1.299');
+    });
+
+    it('explains how to sign in when the CLI is not signed in', async () => {
+      const use = sequence({ state: 'error', error: 'notLoggedIn' });
+      const findCli = vi.fn<CloudModel['findCli']>(() => Promise.resolve(FOUND));
+      await chooseClaude(testCloud({ available: true, use, findCli }));
+      change(field('model'), 'haiku');
+      await submit();
+      expect(container.textContent).toContain('Die CLI ist nicht angemeldet.');
+      expect(container.textContent).toContain('claude auth login');
+    });
+
+    it('names the missing processing agreement and training when protection goes off', async () => {
+      const findCli = vi.fn<CloudModel['findCli']>(() => Promise.resolve(FOUND));
+      await chooseClaude(testCloud({ available: true, findCli }));
+      toggle();
+      const dialog = container.querySelector('[role="alertdialog"]');
+      expect(dialog?.textContent).toContain('kein Vertrag zur Auftragsverarbeitung');
+      expect(dialog?.textContent).toContain('zum Training');
+    });
+
+    it('hides the prepared Codex entry', () => {
+      render(testCloud({ available: true }));
+      const options = [...(field('template')?.querySelectorAll('option') ?? [])].map(
+        (option) => option.value,
+      );
+      expect(options).toContain('claude-code');
+      expect(options).not.toContain('codex');
     });
   });
 });

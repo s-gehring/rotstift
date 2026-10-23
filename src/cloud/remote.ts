@@ -62,7 +62,8 @@ export function cloudUsable(
 ): step is CloudStep {
   if (step === undefined || !step.confirmed) return false;
   if (role === 'transcriber' && step.protection) return false;
-  return step.key !== null || findTemplate(step.template)?.key === 'optional';
+  const need = findTemplate(step.template)?.key;
+  return step.key !== null || need === 'optional' || need === 'none';
 }
 
 export const PRIVACY_NOTE = 'Alles bleibt auf diesem Rechner.';

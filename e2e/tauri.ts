@@ -13,6 +13,8 @@ export interface CloudChatCheck {
 export interface TauriOptions {
   readonly totalRamGiB: number;
   readonly cloudCheckFails?: boolean;
+  readonly cloudCheckError?: string;
+  readonly cliFound?: boolean;
   readonly transcript?: readonly string[];
   readonly cloudChat?: CloudChatCheck;
   readonly privacyAnswer?: string;
@@ -188,12 +190,16 @@ function install(options: TauriOptions): void {
     diag_read: () => ['{"event":"app_start","version":"0.2.0"}'],
     diag_clear: () => null,
     cloud_config: () => view(),
+    cli_find: () =>
+      options.cliFound === false ? null : { path: '/opt/fake/bin/claude', version: '2.1.299' },
+    cli_pick: () => ({ path: '/opt/picked/claude', version: '2.1.300' }),
     cloud_use: ({
       step,
       template,
       baseUrl,
       model,
       key,
+      cliPath,
       confirmed,
       protection,
       protectionConfirmed,
@@ -208,11 +214,14 @@ function install(options: TauriOptions): void {
         return Promise.reject({ kind: 'cloud', detail: 'consentMissing' });
       if (!protect && defaultProtection && protectionConfirmed !== true)
         return Promise.reject({ kind: 'cloud', detail: 'protectionConsentMissing' });
+      const viaCli = url.startsWith('cli://');
+      if (viaCli && typeof cliPath !== 'string')
+        return Promise.reject({ kind: 'cloud', detail: 'cliMissing' });
       cloudSteps = {
         ...cloudSteps,
         [String(step)]: {
           template,
-          label: String(template),
+          label: viaCli ? 'Claude-Abo' : String(template),
           baseUrl: url,
           host: new URL(url).host,
           model,
@@ -220,6 +229,7 @@ function install(options: TauriOptions): void {
           confirmed: confirmed === true || loopback,
           protection: protect,
           key: key === null ? null : 'session',
+          cli: viaCli ? { path: cliPath, version: '2.1.299' } : null,
         },
       };
       return view();
@@ -237,9 +247,11 @@ function install(options: TauriOptions): void {
       return view();
     },
     cloud_check: () =>
-      options.cloudCheckFails === true
-        ? Promise.reject({ kind: 'cloud', detail: 'network' })
-        : null,
+      options.cloudCheckError !== undefined
+        ? Promise.reject({ kind: 'cloud', detail: options.cloudCheckError })
+        : options.cloudCheckFails === true
+          ? Promise.reject({ kind: 'cloud', detail: 'network' })
+          : null,
     cloud_clear: ({ step }) => {
       const { [String(step)]: _removed, ...rest } = cloudSteps;
       cloudSteps = rest;
