@@ -136,6 +136,7 @@ test.describe('on a laptop with 8 GB', () => {
       'OpenAI',
       'OpenAI (EU-Projekt)',
       'Claude-Abo (Claude Code)',
+      'ChatGPT-Abo (Codex, ungetestet)',
       'Eigener Server',
       'Anderer Anbieter',
     ]);

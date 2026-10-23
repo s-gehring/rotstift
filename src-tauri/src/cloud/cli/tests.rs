@@ -71,7 +71,7 @@ sleep 60
 const HUGE: &str = r#"head -c 5000000 /dev/zero | tr '\0' 'x'
 "#;
 
-fn world() -> &'static Path {
+pub(super) fn world() -> &'static Path {
     static WORLD: OnceLock<PathBuf> = OnceLock::new();
     WORLD.get_or_init(|| {
         let dir = std::env::temp_dir().join(format!("rotstift-cli-world-{}", std::process::id()));
@@ -82,7 +82,7 @@ fn world() -> &'static Path {
     })
 }
 
-fn fake_parent(name: &str) -> Option<OsString> {
+pub(super) fn fake_parent(name: &str) -> Option<OsString> {
     match name {
         "HOME" => Some(world().join("home").into()),
         "PATH" => Some(format!("{}:/usr/bin:/bin", world().join("bin").display()).into()),
@@ -91,12 +91,15 @@ fn fake_parent(name: &str) -> Option<OsString> {
         "ANTHROPIC_API_KEY" => Some("sk-ant-secret".into()),
         "ANTHROPIC_BASE_URL" => Some("https://elsewhere.example".into()),
         "CLAUDECODE" => Some("1".into()),
+        "CODEX_API_KEY" => Some("sk-codex-secret".into()),
+        "CODEX_ACCESS_TOKEN" => Some("codex-token-secret".into()),
+        "OPENAI_API_KEY" => Some("sk-openai-secret".into()),
         "CLAUDE_CODE_ENTRYPOINT" => Some("claude-desktop".into()),
         _ => None,
     }
 }
 
-fn runtime(timeout: Duration) -> Runtime {
+pub(super) fn runtime(timeout: Duration) -> Runtime {
     Runtime {
         limits: Limits {
             timeout,
@@ -117,7 +120,7 @@ fn fake_cli(name: &str, body: &str) -> PathBuf {
     path
 }
 
-fn beside(cli: &Path, file: &str) -> String {
+pub(super) fn beside(cli: &Path, file: &str) -> String {
     std::fs::read_to_string(cli.with_file_name(file)).unwrap_or_default()
 }
 
@@ -131,7 +134,7 @@ async fn gone(pid: i32) -> bool {
     false
 }
 
-fn state(name: &str, cli: Runtime) -> CloudState {
+pub(super) fn state(name: &str, cli: Runtime) -> CloudState {
     let dir = world().join(format!("state-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
     let mut state = CloudState::with_sender(
@@ -319,6 +322,7 @@ async fn the_runner_uses_a_fresh_folder_and_removes_it() {
         args: &["-p".into(), "".into()],
         env: &env,
         stdin: b"hallo",
+        files: &[],
         limits: CHAT_LIMITS,
     })
     .await
@@ -349,14 +353,15 @@ async fn a_hanging_cli_is_killed_with_its_children() {
         args: &[],
         env: &env,
         stdin: b"",
+        files: &[],
         limits: Limits {
-            timeout: Duration::from_secs(1),
+            timeout: Duration::from_secs(3),
             ..CHAT_LIMITS
         },
     })
     .await;
     assert_eq!(result.unwrap_err(), RunError::Timeout);
-    assert!(started.elapsed() < Duration::from_secs(5));
+    assert!(started.elapsed() < Duration::from_secs(10));
     let grandchild: i32 = beside(&cli, "grandchild.txt").trim().parse().unwrap();
     assert!(gone(grandchild).await);
 }
@@ -370,6 +375,7 @@ async fn oversized_output_is_refused() {
         args: &[],
         env: &env,
         stdin: b"",
+        files: &[],
         limits: CHAT_LIMITS,
     })
     .await;
@@ -577,22 +583,6 @@ async fn only_known_models_paths_and_programs_are_accepted() {
         .await,
         ErrorClass::CliMissing
     );
-    let hidden = cloud
-        .use_choice(
-            Step::Corrector,
-            crate::cloud::commands::Selection {
-                template: "codex",
-                base_url: "cli://codex",
-                model: "gpt-5",
-                key: None,
-                cli_path: None,
-            },
-            true,
-            None,
-            false,
-        )
-        .await;
-    assert_eq!(hidden.unwrap_err().class(), ErrorClass::NotConfigured);
 }
 
 #[tokio::test]

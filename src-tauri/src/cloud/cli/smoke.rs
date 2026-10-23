@@ -5,7 +5,8 @@ use std::time::Instant;
 use serde_json::{Value, json};
 
 use super::claude::Claude;
-use super::{Runtime, locate};
+use super::codex::Codex;
+use super::{Adapter, Runtime, locate};
 use crate::cloud::commands::Selection;
 use crate::cloud::keys::fake::MemoryStore;
 use crate::cloud::send::{Policy, Sender};
@@ -172,12 +173,24 @@ async fn real_claude_cli_reads_text_and_a_rendered_page() {
     if std::env::var("ROTSTIFT_CLI_SMOKE").as_deref() != Ok("1") {
         return;
     }
+    exercise(&Claude, "claude-code", "cli://claude", "haiku").await;
+}
+
+#[tokio::test]
+async fn real_codex_cli_reads_text_and_a_rendered_page() {
+    if std::env::var("ROTSTIFT_CODEX_SMOKE").as_deref() != Ok("1") {
+        return;
+    }
+    exercise(&Codex, "codex", "cli://codex", "gpt-6-luna").await;
+}
+
+async fn exercise(adapter: &dyn Adapter, template: &str, base_url: &str, default_model: &str) {
     let runtime = Runtime::default();
     let path = match std::env::var_os("ROTSTIFT_CLI_PATH") {
         Some(path) => PathBuf::from(path),
-        None => PathBuf::from(locate::find(&runtime, &Claude).await.unwrap().path),
+        None => PathBuf::from(locate::find(&runtime, adapter).await.unwrap().path),
     };
-    let model = std::env::var("ROTSTIFT_CLI_MODEL").unwrap_or_else(|_| "haiku".into());
+    let model = std::env::var("ROTSTIFT_CLI_MODEL").unwrap_or_else(|_| default_model.into());
     let dir = std::env::temp_dir().join(format!("rotstift-cli-smoke-{}", std::process::id()));
     let cloud = CloudState::with_sender(
         dir.clone(),
@@ -193,8 +206,8 @@ async fn real_claude_cli_reads_text_and_a_rendered_page() {
                 .use_choice(
                     step,
                     Selection {
-                        template: "claude-code",
-                        base_url: "cli://claude",
+                        template,
+                        base_url,
                         model: &model,
                         key: None,
                         cli_path: Some(&path),

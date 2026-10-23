@@ -55,6 +55,20 @@ claude auth login
 
 Unter Windows installiert `irm https://claude.ai/install.ps1 | iex` in der PowerShell. Danach in den Einstellungen beim Schritt „Cloud-Modell …“ wählen, als Anbieter „Claude-Abo (Claude Code)“ und ein Modell (`sonnet`, `opus` oder `haiku`). Rotstift findet das Programm selbst, sonst lässt es sich über „Datei wählen …“ angeben. Es gelten derselbe Hinweis und derselbe Schutz wie bei Cloud-Anbietern. Für ein privates Abo gibt es in der Regel keinen Vertrag zur Auftragsverarbeitung, und je nach Kontoeinstellung nutzt Anthropic die Daten zum Training. Ein gesetztes `ANTHROPIC_API_KEY` gibt Rotstift nicht weiter, abgerechnet wird immer über das Abo. Einzelheiten in [ADR 0012](docs/adr/0012-cli-abos.md).
 
+### Abo über Codex nutzen (ungetestet)
+
+Wer ein ChatGPT-Abo hat, kann die CLI Codex verwenden. Der Weg wurde nur gegen nachgebaute Programme und den Quellcode von Codex geprüft und lief nie mit einer echten Installation, deshalb steht „ungetestet“ im Namen. Installieren und anmelden:
+
+```bash
+npm install -g @openai/codex
+```
+
+```bash
+codex login
+```
+
+Die Anmeldung muss mit dem ChatGPT-Konto erfolgen, nicht mit einem API-Schlüssel. Danach in den Einstellungen beim Schritt „Cloud-Modell …“ als Anbieter „ChatGPT-Abo (Codex, ungetestet)“ und ein Modell wählen. Rotstift startet Codex abgeschirmt (nur lesend, ohne Werkzeuge, Hooks und MCP), lässt aber eine globale `AGENTS.md` im Codex-Ordner nicht aus: Codex liest sie immer. Rotstift weist darauf hin, wenn so eine Datei existiert. Es gelten derselbe Hinweis und derselbe Schutz wie bei den anderen Anbietern, und auch für ein ChatGPT-Abo gibt es in der Regel keinen Vertrag zur Auftragsverarbeitung. Einzelheiten und die Anleitung für den Rauchtest in [ADR 0012](docs/adr/0012-cli-abos.md).
+
 Rechner ohne Internet (etwa in Schulen): Die Modelldateien (`.gguf`) auf einem anderen Rechner von Hugging Face herunterladen, per USB-Stick übertragen und in der Einrichtung oder den Einstellungen über „Aus Datei importieren …“ auswählen. Rotstift erkennt die Dateien am Hash und übernimmt nur passende.
 
 Die Modelle stecken in `src-tauri/models.json` (Quelle auf einen Commit festgelegt, SHA256 und Größe je Datei, Startparameter, Prompt). Dort werden sie auch getauscht, sonst ist keine Codeänderung nötig. Der Download akzeptiert nur `https` und Hugging Face als Host (samt deren CDN). Die Dateien liegen im App-Datenverzeichnis unter `models/`.
@@ -63,7 +77,7 @@ Die Modelle stecken in `src-tauri/models.json` (Quelle auf einen Commit festgele
 
 - Keine Telemetrie. Ohne Cloud-Modell greift Rotstift nur zum einmaligen Herunterladen von Modellen von Hugging Face aufs Netz.
 - Cloud-Modelle sind standardmäßig aus. Wird für einen Schritt eines gewählt, sendet Rotstift die Daten dieses Schritts (Seitenbilder bei der Erkennung, erkannten Text bei den übrigen Schritten) an den gewählten Anbieter. Vorher erscheint ein Hinweis, der nur mit „Verwenden“ weitergeht (nicht bei einem Server auf demselben Rechner). Ein graues Wolkenzeichen neben „Korrigieren“ zeigt, solange ein Schritt nicht lokal läuft. Für Datenschutz und Verträge mit dem Anbieter ist die Lehrkraft beziehungsweise die Schule verantwortlich.
-- Abos über eine CLI (Claude Code) startet nur der Rust-Teil der App, ohne Shell, in einem leeren Temp-Ordner, mit geleerter Umgebung und ohne Werkzeuge, eigene Einstellungen, Hooks, CLAUDE.md und MCP-Server. Prompt und Bilder gehen über die Standardeingabe, nie als Argument.
+- Abos über eine CLI (Claude Code, Codex) startet nur der Rust-Teil der App, ohne Shell, in einem leeren Temp-Ordner, mit geleerter Umgebung und ohne Werkzeuge, eigene Einstellungen, Hooks, CLAUDE.md und MCP-Server. Prompt und Bilder gehen über die Standardeingabe, nie als Argument.
 - Cloud-Aufrufe laufen nur über den Rust-Teil der App, nur über HTTPS (HTTP nur zu eigenen Servern im lokalen Netz und ohne Schlüssel) und ohne Weiterleitungen. Der Schlüssel liegt im Schlüsselbund des Systems, sonst nur bis zum Beenden im Speicher. Das Protokoll enthält nur Anbieter, Schritt, Dauer und Fehlerklasse, nie Inhalte oder Schlüssel.
 - Die Modelle laufen über einen eingebetteten llama.cpp-Server auf dem eigenen Rechner. Er lauscht nur auf `127.0.0.1` und verlangt einen zufälligen Schlüssel, den nur die App kennt.
 - Der Quellcode ist offen, damit Schulen und Datenschutzbeauftragte das prüfen können.

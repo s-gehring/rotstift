@@ -15,6 +15,7 @@ export interface TauriOptions {
   readonly cloudCheckFails?: boolean;
   readonly cloudCheckError?: string;
   readonly cliFound?: boolean;
+  readonly codexNotes?: readonly string[];
   readonly transcript?: readonly string[];
   readonly cloudChat?: CloudChatCheck;
   readonly privacyAnswer?: string;
@@ -190,8 +191,12 @@ function install(options: TauriOptions): void {
     diag_read: () => ['{"event":"app_start","version":"0.2.0"}'],
     diag_clear: () => null,
     cloud_config: () => view(),
-    cli_find: () =>
-      options.cliFound === false ? null : { path: '/opt/fake/bin/claude', version: '2.1.299' },
+    cli_find: ({ template }) =>
+      options.cliFound === false
+        ? null
+        : template === 'codex'
+          ? { path: '/opt/fake/bin/codex', version: '0.164.0', notes: options.codexNotes ?? [] }
+          : { path: '/opt/fake/bin/claude', version: '2.1.299' },
     cli_pick: () => ({ path: '/opt/picked/claude', version: '2.1.300' }),
     cloud_use: ({
       step,

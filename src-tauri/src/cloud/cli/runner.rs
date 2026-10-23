@@ -36,6 +36,7 @@ pub struct Run<'a> {
     pub args: &'a [OsString],
     pub env: &'a [(OsString, OsString)],
     pub stdin: &'a [u8],
+    pub files: &'a [(String, Vec<u8>)],
     pub limits: Limits,
 }
 
@@ -56,6 +57,20 @@ impl WorkDir {
         }
         builder.create(&path)?;
         Ok(Self(path))
+    }
+}
+
+impl WorkDir {
+    fn put(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
+        use std::io::Write;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        options.open(self.0.join(name))?.write_all(bytes)
     }
 }
 
@@ -107,6 +122,9 @@ async fn read_capped<R: AsyncRead + Unpin>(
 
 pub async fn run(run: Run<'_>) -> Result<RunOutput, RunError> {
     let work = WorkDir::create().map_err(|_| RunError::Io)?;
+    for (name, bytes) in run.files {
+        work.put(name, bytes).map_err(|_| RunError::Io)?;
+    }
     let mut command = Command::new(run.program);
     command
         .args(run.args)

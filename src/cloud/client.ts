@@ -22,6 +22,7 @@ export interface CloudStep {
 export interface CliInfo {
   readonly path: string;
   readonly version: string;
+  readonly notes?: readonly string[];
 }
 
 export interface CloudView {

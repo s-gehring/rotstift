@@ -58,3 +58,30 @@ test('says how to sign in when the CLI is not signed in', async ({ page }) => {
   await expect(correction).toContainText('claude auth login');
   await expect(correction.getByRole('radio', { name: /^haiku Cloud/u })).toHaveCount(0);
 });
+
+test('offers the Codex subscription with an honest label and a note on a global AGENTS.md', async ({
+  page,
+}) => {
+  await mockTauri(page, { totalRamGiB: 16, codexNotes: ['globalInstructions'] });
+  await open(page);
+  const dialog = await openSettings(page);
+  const correction = dialog.getByRole('region', { name: 'Korrektur' });
+  await correction.getByRole('button', { name: 'Cloud-Modell …' }).click();
+  await correction
+    .getByRole('combobox', { name: 'Anbieter' })
+    .selectOption({ label: 'ChatGPT-Abo (Codex, ungetestet)' });
+  const program = correction.getByRole('group', { name: 'Programm' });
+  await expect(program).toContainText('/opt/fake/bin/codex · Version 0.164.0');
+  await expect(program).toContainText('noch nie mit einer echten Codex-Installation');
+  await expect(program.getByRole('note')).toContainText('AGENTS.md');
+  await correction.getByRole('combobox', { name: 'Modell' }).selectOption('gpt-6-luna');
+  await correction.getByRole('button', { name: 'Verwenden' }).click();
+  await correction.getByRole('alertdialog').getByRole('button', { name: 'Verwenden' }).click();
+  const uses = await tauriCalls(page, 'cloud_use');
+  expect(uses.at(-1)?.args).toMatchObject({
+    template: 'codex',
+    baseUrl: 'cli://codex',
+    model: 'gpt-6-luna',
+    cliPath: '/opt/fake/bin/codex',
+  });
+});

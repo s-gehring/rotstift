@@ -1,7 +1,10 @@
 mod claude;
+mod codex;
 pub mod locate;
 pub mod runner;
 
+#[cfg(test)]
+mod codex_tests;
 #[cfg(test)]
 mod smoke;
 #[cfg(test)]
@@ -93,6 +96,7 @@ pub struct Prompt {
 pub struct Invocation {
     pub args: Vec<OsString>,
     pub stdin: Vec<u8>,
+    pub files: Vec<(String, Vec<u8>)>,
     pub env: Vec<(OsString, OsString)>,
 }
 
@@ -108,13 +112,20 @@ pub trait Adapter: Sync {
     fn binary_names(&self) -> &'static [&'static str];
     fn search_dirs(&self, home: &Path) -> Vec<PathBuf>;
     fn version(&self, stdout: &str) -> Option<String>;
-    fn invocation(&self, prompt: &Prompt) -> Invocation;
+    fn outdated(&self, _version: &str) -> bool {
+        false
+    }
+    fn notes(&self, _parent: ParentEnv) -> Vec<String> {
+        Vec::new()
+    }
+    fn invocation(&self, prompt: &Prompt) -> Result<Invocation, ErrorClass>;
     fn answer(&self, output: &RunOutput) -> Result<Answer, ErrorClass>;
 }
 
 pub fn adapter(id: &str) -> Option<&'static dyn Adapter> {
     match id {
         "claude" => Some(&claude::Claude),
+        "codex" => Some(&codex::Codex),
         _ => None,
     }
 }
@@ -124,6 +135,8 @@ pub fn adapter(id: &str) -> Option<&'static dyn Adapter> {
 pub struct CliInfo {
     pub path: String,
     pub version: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
 }
 
 pub fn valid_model(model: &str) -> bool {
@@ -362,6 +375,7 @@ pub async fn inspect(
         args: &[OsString::from("--version")],
         env: &env,
         stdin: &[],
+        files: &[],
         limits: VERSION_LIMITS,
     })
     .await
@@ -369,9 +383,13 @@ pub async fn inspect(
     let version = adapter
         .version(&String::from_utf8_lossy(&output.stdout))
         .ok_or(ErrorClass::CliMissing)?;
+    if adapter.outdated(&version) {
+        return Err(ErrorClass::CliOutdated);
+    }
     Ok(CliInfo {
         path: path.to_string_lossy().into_owned(),
         version,
+        notes: adapter.notes(runtime.parent),
     })
 }
 
@@ -384,7 +402,10 @@ pub async fn chat(
     if !path.is_absolute() || !named_like(adapter, path) || !executable(path) {
         return (Err(ErrorClass::CliMissing), 0);
     }
-    let invocation = adapter.invocation(prompt);
+    let invocation = match adapter.invocation(prompt) {
+        Ok(invocation) => invocation,
+        Err(class) => return (Err(class), 0),
+    };
     let mut env = runtime.env(path).await;
     env.extend(invocation.env);
     let bytes = invocation.stdin.len();
@@ -393,6 +414,7 @@ pub async fn chat(
         args: &invocation.args,
         env: &env,
         stdin: &invocation.stdin,
+        files: &invocation.files,
         limits: runtime.limits,
     })
     .await

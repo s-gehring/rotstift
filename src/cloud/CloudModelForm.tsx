@@ -103,6 +103,15 @@ function CliProgram({
           <span className="cloud-cli-path">{search.cli.path}</span> · Version {search.cli.version}
         </p>
       )}
+      {search.state === 'found' && search.cli.notes?.includes('globalInstructions') === true && (
+        <p className="settings-model-note" role="note">
+          Im Codex-Ordner liegt eine eigene AGENTS.md. Codex liest sie trotz Abschirmung und gibt
+          sie an das Modell weiter. Am besten entfernen oder umbenennen Sie sie vor dem Verwenden.
+        </p>
+      )}
+      {template.cli?.hint !== undefined && (
+        <p className="settings-model-note">{template.cli.hint}</p>
+      )}
       {search.state === 'missing' && (
         <p className="settings-model-note">
           Nicht gefunden. Installieren im Terminal: <code>{template.cli?.install}</code>
