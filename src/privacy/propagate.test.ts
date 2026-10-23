@@ -53,6 +53,18 @@ describe('propagateSpans', () => {
     ]);
   });
 
+  it('propagates names and places with a hyphen', () => {
+    const lines = ['Anne-Sophie kam.', 'Dann kam anne-sophie aus der Käthe-Kollwitz-Schule.'];
+    const [spans] = propagateSpans([
+      { lines, spans: [at(1, 0, 11), at(2, 29, 21, 'institution', 'teacher')] },
+    ]);
+    expect(texts(lines, spans ?? [])).toEqual([
+      [1, 'Anne-Sophie', 'person', 'model'],
+      [2, 'Käthe-Kollwitz-Schule', 'institution', 'teacher'],
+      [2, 'anne-sophie', 'person', 'model'],
+    ]);
+  });
+
   it('propagates only the full form of other categories', () => {
     const lines = ['Wir wohnen in 34127 Kassel.', 'In Kassel und 34127 Kassel ist es schön.'];
     const [spans] = propagateSpans([{ lines, spans: [at(1, 14, 12, 'place', 'rule')] }]);

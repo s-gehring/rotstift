@@ -826,3 +826,60 @@ describe('createPowerHold', () => {
     await vi.waitFor(() => expect(calls).toEqual(['power_hold', 'power_release']));
   });
 });
+
+describe('runs that wait for the release of protected works', () => {
+  const waiting = reviewed(null, { status: 'waiting' });
+  const pages = { a: waiting, b: waiting };
+  const queued = runState({ a: entry('A'), b: entry('B') });
+  const protectedRun = (
+    phase: ReviewPhase,
+    finished: number,
+    left: { confirm: number; correct: number; review: number },
+  ) =>
+    reviewState(pages, {
+      run: { phase, total: 2, finished, pending: { ...left, withCorrection: true } },
+    });
+
+  it('shows the wait for the teacher as its own state and not as remaining time', () => {
+    const paused = protectedRun('awaiting', 0, { confirm: 2, correct: 2, review: 0 });
+    expect(runSnapshot(paused, queued, null)).toBeNull();
+    expect(runProgress(paused, queued, IDLE_ENGINE, 0)).toMatchObject({
+      detail: 'Wartet auf Freigabe (2 Arbeiten)',
+    });
+    const slow = createEstimator({ ...DEFAULT_RATES, correct: 60 });
+    expect(runProgress(paused, queued, IDLE_ENGINE, 0, null, slow)?.detail).toBe(
+      'Wartet auf Freigabe (2 Arbeiten), danach etwa 2 min',
+    );
+  });
+
+  it('says that personal data is being detected', () => {
+    const detecting = protectedRun('detecting', 0, { confirm: 2, correct: 2, review: 0 });
+    expect(runProgress(detecting, queued, IDLE_ENGINE, 0)?.detail).toBe(
+      'Personenbezug wird erkannt …',
+    );
+    expect(runSnapshot(detecting, queued, null)).toBeNull();
+  });
+
+  it('counts the remaining protected work while a released work is corrected', () => {
+    const correcting = protectedRun('correcting', 1, { confirm: 1, correct: 1, review: 2 });
+    expect(runSnapshot(correcting, queued, null)).toEqual({
+      step: 'correct',
+      left: { read: 0, confirm: 0, correct: 1, review: 2 },
+    });
+    const reviewing = protectedRun('reviewing', 1, { confirm: 0, correct: 0, review: 1 });
+    expect(runSnapshot(reviewing, queued, null)?.step).toBe('review');
+  });
+
+  it('fills the bar from the end of the local steps on', () => {
+    const fractions = [0, 1, 2].map((finished) =>
+      reviewFraction(
+        protectedRun('awaiting', finished, { confirm: 1, correct: 2 - finished, review: 0 }),
+        queued,
+        ['a', 'b'],
+      ),
+    );
+    expect(fractions[0]).toBeCloseTo(0.65);
+    expect(fractions[1]).toBeCloseTo(0.825);
+    expect(fractions[2]).toBeCloseTo(1);
+  });
+});

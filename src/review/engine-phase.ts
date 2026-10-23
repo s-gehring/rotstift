@@ -29,7 +29,9 @@ const LOADING_TEXT = {
 const SWITCH_TEXT = 'Modellwechsel wird vorbereitet …';
 
 export function engineText(run: ReviewRun, engine: ReviewEngine): string | null {
-  if (run.phase === 'locating') return null;
+  if (run.phase === 'locating' || run.phase === 'detecting' || run.phase === 'awaiting') {
+    return null;
+  }
   const [own, other] =
     run.phase === 'reviewing'
       ? [engine.reviewer ?? engine.corrector, engine.transcriber]

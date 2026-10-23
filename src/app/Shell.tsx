@@ -3,6 +3,7 @@ import { KlasseView } from '../import/KlasseView.tsx';
 import { useFileDrop } from '../import/use-file-drop.ts';
 import { SettingsDialog } from '../models/SettingsDialog.tsx';
 import { SetupDialog } from '../models/SetupDialog.tsx';
+import { PrivacyReviewDialog } from '../privacy-review/PrivacyReviewDialog.tsx';
 import { ArbeitView } from '../review/ArbeitView.tsx';
 import { ClassOverviewDialog } from '../review/ClassOverviewDialog.tsx';
 import { ToastRegion } from '../ui/Toast.tsx';
@@ -30,6 +31,7 @@ export function Shell() {
       <SetupDialog />
       <SettingsDialog />
       <ClassOverviewDialog />
+      <PrivacyReviewDialog />
       <ToastRegion toasts={toasts} />
       {dropActive && (
         <div className="drop-overlay" aria-hidden="true">

@@ -5,14 +5,22 @@ export interface TauriCall {
   readonly args: Record<string, unknown>;
 }
 
+export interface CloudChatCheck {
+  readonly forbidden: readonly string[];
+  readonly fix: readonly [string, string];
+}
+
 export interface TauriOptions {
   readonly totalRamGiB: number;
   readonly cloudCheckFails?: boolean;
+  readonly transcript?: readonly string[];
+  readonly cloudChat?: CloudChatCheck;
 }
 
 declare global {
   interface Window {
     tauriCalls: TauriCall[];
+    cloudViolations: string[];
   }
 }
 
@@ -44,7 +52,7 @@ function install(options: TauriOptions): void {
   };
   const LOOPBACK = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/u;
   const view = () => ({ steps: cloudSteps });
-
+  const violations: string[] = [];
   const handlers: Record<string, Handler> = {
     'plugin:event|listen': ({ event, handler }) => {
       const id = Number(handler);
@@ -127,6 +135,39 @@ function install(options: TauriOptions): void {
     llm_probe_model: () => null,
     llm_status: () => ({ state: 'stopped' }),
     llm_stop: () => ({ state: 'stopped' }),
+    llm_start_model: ({ modelId }) => ({ state: 'ready', model: String(modelId), port: 1 }),
+    llm_stop_if_idle: () => false,
+    llm_cancel: () => null,
+    llm_chat: () =>
+      options.transcript === undefined
+        ? Promise.reject({ kind: 'request', detail: 'not mocked' })
+        : {
+            choices: [
+              {
+                message: { role: 'assistant', content: options.transcript.join('\n') },
+                finish_reason: 'stop',
+              },
+            ],
+          },
+    cloud_cancel: () => null,
+    cloud_chat: ({ step, pseudonymized, request }) => {
+      const check = options.cloudChat;
+      if (check === undefined) return Promise.reject({ kind: 'cloud', detail: 'network' });
+      const sent = JSON.stringify(request);
+      if (pseudonymized !== true) violations.push(`${String(step)} ohne pseudonymized`);
+      for (const name of check.forbidden) {
+        if (sent.includes(name)) violations.push(`${String(step)} enthält ${name}`);
+      }
+      if (violations.length > 0) {
+        return Promise.reject({ kind: 'cloud', detail: 'notPseudonymized' });
+      }
+      const contents = Array.from(sent.matchAll(/"content":"((?:[^"\\]|\\.)*)"/gu), (match) =>
+        String(JSON.parse(`"${match[1] ?? ''}"`)),
+      );
+      const numbered = (contents.at(-1) ?? '').split('\n').filter((line) => /^\d+: /u.test(line));
+      const content = numbered.join('\n').replaceAll(check.fix[0], check.fix[1]);
+      return { choices: [{ message: { role: 'assistant', content }, finish_reason: 'stop' }] };
+    },
     diag_log: () => null,
     diag_heartbeat: () => null,
     diag_read: () => ['{"event":"app_start","version":"0.2.0"}'],
@@ -198,6 +239,7 @@ function install(options: TauriOptions): void {
 
   Object.assign(window, {
     tauriCalls: calls,
+    cloudViolations: violations,
     __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener: () => undefined },
     __TAURI_INTERNALS__: {
       metadata: {
@@ -229,6 +271,10 @@ function install(options: TauriOptions): void {
 
 export async function mockTauri(page: Page, options: TauriOptions): Promise<void> {
   await page.addInitScript(install, options);
+}
+
+export function cloudViolations(page: Page): Promise<string[]> {
+  return page.evaluate(() => window.cloudViolations);
 }
 
 export function tauriCalls(page: Page, cmd: string): Promise<TauriCall[]> {

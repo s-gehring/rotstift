@@ -25,7 +25,7 @@ function fold(text: string): string {
 }
 
 function escape(text: string): string {
-  return text.replaceAll(/[.*+?^${}()|[\]\\/-]/gu, '\\$&');
+  return text.replaceAll(/[.*+?^${}()|[\]\\/]/gu, '\\$&');
 }
 
 function formOf(text: string, category: IdentifierCategory, source: PrivacySource): Form | null {

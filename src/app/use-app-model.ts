@@ -38,6 +38,7 @@ import {
   totalSeconds,
 } from './estimate.ts';
 import { KLASSE, resolveRoute, routePosition, stepRoute } from './navigation.ts';
+import { previewProtection, useShields } from './use-shields.ts';
 import { secondReaderReadiness, withSecondReader } from './second-reading.ts';
 import {
   countFinishedText,
@@ -60,6 +61,7 @@ import type {
   AppModel,
   ModelRole,
   Navigation,
+  PrivacyReview,
   Route,
   RunKind,
   ScopeField,
@@ -68,6 +70,7 @@ import type {
 
 const modelClient = browserModelClient();
 const cloudClient = modelClient === null ? null : createCloudClient();
+const shieldPreview = modelClient === null && import.meta.env.DEV && previewProtection();
 
 interface SetupState {
   readonly open: boolean;
@@ -141,6 +144,30 @@ function useRunClock(
   const { learned } = clock;
   useEffect(() => saveRates(learned), [learned]);
   return clock;
+}
+
+function usePrivacyReview(flow: ReviewFlow, works: PrivacyReview['works']): PrivacyReview {
+  const [open, setOpen] = useState(false);
+  const [shownFor, setShownFor] = useState<PrivacyReview['works']>(null);
+  const active = works !== null;
+  if (active !== (shownFor !== null)) {
+    setShownFor(works);
+    setOpen(active);
+  }
+  const show = useCallback(() => setOpen(true), []);
+  const close = useCallback(() => setOpen(false), []);
+  return useMemo(
+    () => ({
+      works,
+      open: open && active,
+      show,
+      close,
+      add: flow.addIdentifier,
+      remove: flow.removeIdentifier,
+      release: flow.release,
+    }),
+    [works, open, active, show, close, flow],
+  );
 }
 
 function useNavigation(arbeiten: AppModel['importState']['arbeiten']): Navigation {
@@ -225,6 +252,11 @@ export function useAppModel(): AppModel {
   const grading = useGrading();
   const pages = useMemo(() => flattenPages(importState.arbeiten), [importState.arbeiten]);
   const review = useReview(count.runner, pages, corrector, reviewer, importState.arbeiten);
+  const shields = useShields(cloud, shieldPreview ? { corrector, reviewer } : null);
+  useEffect(() => {
+    review.flow.setShields(shields);
+  }, [review.flow, shields]);
+  const privacy = usePrivacyReview(review.flow, review.state.privacy ?? null);
   const navigation = useNavigation(importState.arbeiten);
 
   const reviewing = review.state.run !== null;
@@ -479,6 +511,7 @@ export function useAppModel(): AppModel {
         close: () => setSettingsOpen(false),
       },
     },
+    privacy,
     toasts,
     preview: import.meta.env.DEV || !isTauri(),
   };

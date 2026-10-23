@@ -8,6 +8,8 @@ import type { CorrectorInfo } from '../models/registry.ts';
 import type { ModelSetup } from '../models/use-model-setup.ts';
 import type { SecondReading } from '../models/use-second-reading.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
+import type { IdentifierCategory } from '../privacy/types.ts';
+import type { PrivacyWork, TextRange } from '../privacy-review/review-work.ts';
 import type { WordCount } from '../results/use-word-count.ts';
 import type { ReviewEngine } from '../review/engine-phase.ts';
 import type { Review } from '../review/use-review.ts';
@@ -115,6 +117,21 @@ export interface Models {
   readonly settings: SettingsRequest;
 }
 
+export interface PrivacyReview {
+  readonly works: readonly PrivacyWork[] | null;
+  readonly open: boolean;
+  readonly show: () => void;
+  readonly close: () => void;
+  readonly add: (
+    workId: string,
+    pageId: string,
+    range: TextRange,
+    category: IdentifierCategory,
+  ) => void;
+  readonly remove: (workId: string, pageId: string, range: TextRange) => void;
+  readonly release: (workId: string) => void;
+}
+
 export interface AppModel {
   readonly importState: ImportPages;
   readonly pages: readonly ImportPage[];
@@ -125,6 +142,7 @@ export interface AppModel {
   readonly grading: GradingModel;
   readonly work: Work;
   readonly models: Models;
+  readonly privacy: PrivacyReview;
   readonly toasts: Toasts;
   readonly preview: boolean;
 }

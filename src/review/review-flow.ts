@@ -29,6 +29,16 @@ import { marginsOf } from '../overlay/margins.ts';
 import type { PageMargins } from '../overlay/model.ts';
 import type { PageEntry, Runner } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
+import type { PrivacyWorkPage } from '../privacy/pseudonymizing-corrector.ts';
+import type { IdentifierCategory } from '../privacy/types.ts';
+import { detectWork, type DetectWork } from '../privacy-review/detect.ts';
+import {
+  addIdentifier,
+  dropPages,
+  removeIdentifier,
+  type PrivacyWork,
+  type TextRange,
+} from '../privacy-review/review-work.ts';
 import { computeStatistics, type Statistics } from '../stats/statistics.ts';
 
 export interface ReviewImage {
@@ -37,9 +47,9 @@ export interface ReviewImage {
   readonly height: number;
 }
 
-export type ReviewPhase = 'transcribing' | 'locating' | 'correcting' | 'reviewing';
+export type PagePhase = 'transcribing' | 'locating' | 'correcting';
 
-export type PagePhase = Exclude<ReviewPhase, 'reviewing'>;
+export type ReviewPhase = PagePhase | 'reviewing' | 'detecting' | 'awaiting';
 
 export type ReviewStatus =
   'waiting' | PagePhase | 'done' | 'empty' | 'unreadable' | 'failed' | 'cancelled';
@@ -91,6 +101,7 @@ export interface WorkReview {
 export interface ReviewWork {
   readonly id: string;
   readonly pageIds: readonly string[];
+  readonly name?: string;
 }
 
 export interface ContentReviewLog {
@@ -107,11 +118,19 @@ export interface RunStages {
   readonly review: boolean;
 }
 
+export interface PendingWork {
+  readonly confirm: number;
+  readonly correct: number;
+  readonly review: number;
+  readonly withCorrection: boolean;
+}
+
 export interface ReviewRun {
   readonly phase: ReviewPhase;
   readonly total: number;
   readonly finished: number;
   readonly stages?: RunStages;
+  readonly pending?: PendingWork;
 }
 
 export interface ReviewState {
@@ -121,6 +140,14 @@ export interface ReviewState {
   readonly run: ReviewRun | null;
   readonly stopping: boolean;
   readonly outcome: 'finished' | 'cancelled' | null;
+  readonly privacy?: readonly PrivacyWork[] | null;
+}
+
+export type Shield = (pages: readonly PrivacyWorkPage[]) => Corrector;
+
+export interface Shields {
+  readonly corrector?: Shield;
+  readonly reviewer?: Shield;
 }
 
 export type TranscriptionSource = Pick<
@@ -134,6 +161,7 @@ export interface ReviewDeps {
   readonly loadImage: (page: ImportPage) => Promise<ReviewImage>;
   readonly logReview?: (entry: ContentReviewLog) => void;
   readonly now?: () => number;
+  readonly detect?: DetectWork;
 }
 
 export const CORRECTOR_MISSING =
@@ -148,6 +176,9 @@ export const LAYOUT_FAILED =
   'Die Zeilen wurden auf der Seite nicht gefunden. Die Fehler stehen nur in der Liste.';
 
 export const NOT_RERECOGNIZED = 'Die Seite wurde nach dem Drehen nicht neu erkannt.';
+
+export const DETECT_FAILED =
+  'Der Personenbezug konnte nicht erkannt werden. Von dieser Arbeit wurde nichts gesendet.';
 
 const UNREADABLE = 'Die Seite wurde nicht erkannt.';
 
@@ -168,6 +199,7 @@ const EMPTY: ReviewState = {
   run: null,
   stopping: false,
   outcome: null,
+  privacy: null,
 };
 
 const ABORTED = Symbol('aborted');
@@ -236,11 +268,16 @@ function withHints(
 }
 
 export function reviewWorks(
-  arbeiten: readonly { readonly id: string; readonly pages: readonly { readonly id: string }[] }[],
+  arbeiten: readonly {
+    readonly id: string;
+    readonly name?: string;
+    readonly pages: readonly { readonly id: string }[];
+  }[],
 ): ReviewWork[] {
   return arbeiten.map((arbeit) => ({
     id: arbeit.id,
     pageIds: arbeit.pages.map((page) => page.id),
+    ...(arbeit.name !== undefined && { name: arbeit.name }),
   }));
 }
 
@@ -346,7 +383,10 @@ export function createReviewFlow(deps: ReviewDeps) {
   let lastScope: CorrectionScope = DEFAULT_SCOPE;
   let lastWorks: readonly ReviewWork[] = [];
   let stages: RunStages = { pages: true, review: false };
+  let shields: Shields = {};
+  const changes = new Set<() => void>();
   const now = deps.now ?? (() => performance.now());
+  const detect = deps.detect ?? detectWork;
 
   const commit = (next: ReviewState) => {
     state = next;
@@ -365,6 +405,37 @@ export function createReviewFlow(deps: ReviewDeps) {
 
   const setRun = (run: Omit<ReviewRun, 'stages'>) => {
     commit({ ...state, run: { ...run, stages } });
+  };
+
+  const notify = () => {
+    for (const listener of changes) listener();
+  };
+
+  const nextChange = (signal: AbortSignal): Promise<void> =>
+    new Promise((resolve) => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        changes.delete(done);
+        signal.removeEventListener('abort', done);
+        resolve();
+      };
+      changes.add(done);
+      signal.addEventListener('abort', done, { once: true });
+    });
+
+  const patchPrivacy = (id: string, change: (work: PrivacyWork) => PrivacyWork) => {
+    const works = state.privacy;
+    if (works == null) return;
+    const index = works.findIndex((work) => work.id === id);
+    const work = works[index];
+    if (work === undefined) return;
+    const next = change(work);
+    if (next === work) return;
+    commit({ ...state, privacy: works.map((entry) => (entry.id === id ? next : entry)) });
+    notify();
   };
 
   const track = <T>(promise: Promise<T>): Promise<T> => {
@@ -504,6 +575,60 @@ export function createReviewFlow(deps: ReviewDeps) {
     }
   };
 
+  const correctOne = async (
+    { page, lines, reading }: Readable,
+    current: Corrector | null,
+    profile: CorrectionProfile,
+    scope: CorrectionScope,
+    signal: AbortSignal,
+    isPreview: boolean,
+  ): Promise<boolean> => {
+    if (current === null && requestedCodes(profile, scope).length > 0) {
+      patch(page.id, { status: 'failed', message: CORRECTOR_MISSING, detail: null });
+      return true;
+    }
+    patch(page.id, { status: 'correcting', message: null, detail: null });
+    const bboxes = state.pages[page.id]?.bboxes ?? undefined;
+    const work = track(
+      correctPage({
+        lines,
+        profile,
+        scope,
+        corrector: current ?? NO_MODEL_NEEDED,
+        signal,
+        ...(bboxes && { bboxes }),
+      }),
+    );
+    const result = await abortable(work, signal).catch((error: unknown): CorrectPageResult => ({
+      ok: false,
+      error: { kind: 'failed', message: UNEXPECTED, detail: errorText(error) },
+    }));
+    if (result === ABORTED) return false;
+    if (result.ok) {
+      const separated = separateUncertain(result.transcript, reading);
+      patch(page.id, {
+        status: 'done',
+        result: withHints({
+          baseTranscript: separated.transcript,
+          hints: separated.hints,
+          droppedMarks: result.droppedMarks,
+          preview: isPreview,
+          requested: requestedCodes(profile, scope),
+        }),
+      });
+    } else if (result.error.kind === 'cancelled') {
+      patch(page.id, { status: 'cancelled' });
+    } else {
+      const { error } = result;
+      patch(page.id, {
+        status: 'failed',
+        message: describeCorrectError(error),
+        detail: error.kind === 'failed' ? (error.detail ?? null) : null,
+      });
+    }
+    return true;
+  };
+
   const correctPhase = async (
     readable: readonly Readable[],
     profile: CorrectionProfile,
@@ -513,53 +638,10 @@ export function createReviewFlow(deps: ReviewDeps) {
     let finished = 0;
     const current = corrector;
     const isPreview = preview;
-    const needsModel = requestedCodes(profile, scope).length > 0;
     setRun({ phase: 'correcting', total: readable.length, finished });
-    for (const { page, lines, reading } of readable) {
+    for (const item of readable) {
       if (signal.aborted) return;
-      if (current === null && needsModel) {
-        patch(page.id, { status: 'failed', message: CORRECTOR_MISSING, detail: null });
-      } else {
-        patch(page.id, { status: 'correcting', message: null, detail: null });
-        const bboxes = state.pages[page.id]?.bboxes ?? undefined;
-        const work = track(
-          correctPage({
-            lines,
-            profile,
-            scope,
-            corrector: current ?? NO_MODEL_NEEDED,
-            signal,
-            ...(bboxes && { bboxes }),
-          }),
-        );
-        const result = await abortable(work, signal).catch((error: unknown): CorrectPageResult => ({
-          ok: false,
-          error: { kind: 'failed', message: UNEXPECTED, detail: errorText(error) },
-        }));
-        if (result === ABORTED) return;
-        if (result.ok) {
-          const separated = separateUncertain(result.transcript, reading);
-          patch(page.id, {
-            status: 'done',
-            result: withHints({
-              baseTranscript: separated.transcript,
-              hints: separated.hints,
-              droppedMarks: result.droppedMarks,
-              preview: isPreview,
-              requested: requestedCodes(profile, scope),
-            }),
-          });
-        } else if (result.error.kind === 'cancelled') {
-          patch(page.id, { status: 'cancelled' });
-        } else {
-          const { error } = result;
-          patch(page.id, {
-            status: 'failed',
-            message: describeCorrectError(error),
-            detail: error.kind === 'failed' ? (error.detail ?? null) : null,
-          });
-        }
-      }
+      if (!(await correctOne(item, current, profile, scope, signal, isPreview))) return;
       finished += 1;
       setRun({ phase: 'correcting', total: readable.length, finished });
     }
@@ -662,6 +744,170 @@ export function createReviewFlow(deps: ReviewDeps) {
     }
   };
 
+  const privacyPages = (work: ReviewWork) =>
+    work.pageIds.flatMap((pageId) => {
+      const source = state.pages[pageId]?.source;
+      return source == null ? [] : [{ pageId, lines: visibleText(source.split('\n')) }];
+    });
+
+  const protectedPhase = async (
+    readable: readonly Readable[],
+    works: readonly ReviewWork[],
+    profile: CorrectionProfile,
+    scope: CorrectionScope,
+    guard: Shields,
+    signal: AbortSignal,
+  ) => {
+    const covered = new Set(works.flatMap((work) => work.pageIds));
+    const all: ReviewWork[] = [
+      ...works,
+      ...readable
+        .filter(({ page }) => !covered.has(page.id))
+        .map(({ page }) => ({ id: page.id, pageIds: [page.id] })),
+    ];
+    const due = new Set(
+      guard.reviewer === undefined ? [] : dueWorks(all, profile, scope).map((work) => work.id),
+    );
+    const groups = all
+      .map((work) => ({
+        work,
+        readable:
+          guard.corrector === undefined
+            ? []
+            : readable.filter(({ page }) => work.pageIds.includes(page.id)),
+      }))
+      .filter((group) => group.readable.length > 0 || due.has(group.work.id));
+    if (groups.length === 0) return;
+    const reviews = guard.reviewer !== undefined && reviewsContent(scope);
+    const total =
+      groups.reduce((sum, group) => sum + group.readable.length, 0) + (reviews ? groups.length : 0);
+    let finished = 0;
+    let busy: 'correcting' | 'reviewing' | null = null;
+    let detecting = true;
+    const left = {
+      correct: total - (reviews ? groups.length : 0),
+      review: reviews ? groups.length : 0,
+    };
+    const updateRun = () => {
+      const confirm = (state.privacy ?? []).filter(
+        (work) => work.status === 'detecting' || work.status === 'open',
+      ).length;
+      setRun({
+        phase: busy ?? (detecting ? 'detecting' : 'awaiting'),
+        total,
+        finished,
+        pending: { confirm, ...left, withCorrection: guard.corrector !== undefined },
+      });
+    };
+    const step = (kind: 'correct' | 'review') => {
+      finished += 1;
+      left[kind] = Math.max(0, left[kind] - 1);
+    };
+    commit({
+      ...state,
+      privacy: groups.map(({ work }) => ({
+        id: work.id,
+        name: work.name ?? '',
+        status: 'detecting',
+        pages: [],
+        removed: [],
+        message: null,
+      })),
+    });
+    updateRun();
+
+    const detectAll = async () => {
+      for (const { work, readable: pages } of groups) {
+        if (signal.aborted) return;
+        const context = {
+          workName: work.name ?? '',
+          subject: profile.subject,
+          language: profile.language,
+          ...(scope.content && { task: cleanAssignment(scope.assignment) }),
+        };
+        const found = await abortable(
+          track(detect(privacyPages(work), context, signal)),
+          signal,
+        ).catch(() => null);
+        if (found === ABORTED) return;
+        if (found === null) {
+          patchPrivacy(work.id, (entry) => ({
+            ...entry,
+            status: 'failed',
+            message: DETECT_FAILED,
+          }));
+          for (const { page } of pages) {
+            patch(page.id, { status: 'failed', message: DETECT_FAILED, detail: null });
+            step('correct');
+          }
+          if (reviews) step('review');
+        } else {
+          patchPrivacy(work.id, (entry) => ({ ...entry, status: 'open', pages: found }));
+        }
+        updateRun();
+      }
+      detecting = false;
+      updateRun();
+    };
+
+    const sendWork = async (group: (typeof groups)[number], released: PrivacyWork) => {
+      const pages = released.pages;
+      const isPreview = preview;
+      if (guard.corrector !== undefined) {
+        const shielded = guard.corrector(pages);
+        for (const item of group.readable) {
+          if (signal.aborted) return;
+          busy = 'correcting';
+          updateRun();
+          if (!(await correctOne(item, shielded, profile, scope, signal, isPreview))) return;
+          step('correct');
+        }
+      }
+      if (!reviews || signal.aborted) return;
+      if (dueWorks([group.work], profile, scope).length > 0) {
+        busy = 'reviewing';
+        updateRun();
+        if (!(await reviewWork(group.work, guard.reviewer(pages), profile, scope, signal))) return;
+      }
+      step('review');
+    };
+
+    const sendAll = async () => {
+      const sent = new Set<string>();
+      for (;;) {
+        if (signal.aborted) return;
+        const privacy = state.privacy ?? [];
+        const next = privacy.find((work) => work.status === 'released' && !sent.has(work.id));
+        const group = next && groups.find((candidate) => candidate.work.id === next.id);
+        if (next === undefined || group === undefined) {
+          if (!privacy.some((work) => work.status === 'detecting' || work.status === 'open')) {
+            return;
+          }
+          busy = null;
+          updateRun();
+          await nextChange(signal);
+          continue;
+        }
+        sent.add(next.id);
+        await sendWork(group, next);
+        busy = null;
+        updateRun();
+      }
+    };
+
+    await Promise.all([detectAll(), sendAll()]);
+  };
+
+  const guardFor = (profile: CorrectionProfile, scope: CorrectionScope): Shields | null => {
+    const chosen: Shields = {
+      ...(shields.corrector !== undefined &&
+        requestedCodes(profile, scope).length > 0 && { corrector: shields.corrector }),
+      ...(shields.reviewer !== undefined &&
+        reviewsContent(scope) && { reviewer: shields.reviewer }),
+    };
+    return chosen.corrector === undefined && chosen.reviewer === undefined ? null : chosen;
+  };
+
   const process = async (
     targets: readonly ImportPage[],
     profile: CorrectionProfile,
@@ -682,16 +928,24 @@ export function createReviewFlow(deps: ReviewDeps) {
     }
     lastScope = scope;
     stages = { pages: targets.length > 0, review: reviewsContent(scope) && works.length > 0 };
-    commit({ ...state, pages, profile, outcome: null, stopping: false });
+    const guard = guardFor(profile, scope);
+    commit({ ...state, pages, profile, outcome: null, stopping: false, privacy: null });
     try {
+      let readable: Readable[] = [];
       if (targets.length > 0) {
         await transcribePhase(targets, begin);
         if (aborted()) return;
-        const readable = collectTranscripts(targets);
+        readable = collectTranscripts(targets);
         await locatePhase(readable, abort.signal);
         if (aborted()) return;
-        await correctPhase(readable, profile, scope, abort.signal);
-        if (aborted()) return;
+        if (guard?.corrector === undefined) {
+          await correctPhase(readable, profile, scope, abort.signal);
+          if (aborted()) return;
+        }
+      }
+      if (guard !== null) {
+        await protectedPhase(readable, works, profile, scope, guard, abort.signal);
+        if (aborted() || guard.reviewer !== undefined) return;
       }
       await reviewPhase(works, profile, scope, abort.signal);
     } finally {
@@ -717,6 +971,7 @@ export function createReviewFlow(deps: ReviewDeps) {
         run: null,
         stopping: false,
         outcome: cancelled ? 'cancelled' : 'finished',
+        privacy: null,
       });
     }
   };
@@ -795,6 +1050,29 @@ export function createReviewFlow(deps: ReviewDeps) {
       reviewer = next;
     },
 
+    setShields: (next: Shields) => {
+      shields = next;
+    },
+
+    addIdentifier: (
+      workId: string,
+      pageId: string,
+      range: TextRange,
+      category: IdentifierCategory,
+    ) => {
+      patchPrivacy(workId, (work) => addIdentifier(work, pageId, range, category));
+    },
+
+    removeIdentifier: (workId: string, pageId: string, range: TextRange) => {
+      patchPrivacy(workId, (work) => removeIdentifier(work, pageId, range));
+    },
+
+    release: (workId: string) => {
+      patchPrivacy(workId, (work) =>
+        work.status === 'open' ? { ...work, status: 'released' } : work,
+      );
+    },
+
     cancel: () => {
       if (active === null || active.signal.aborted) return;
       commit({ ...state, stopping: true });
@@ -813,7 +1091,14 @@ export function createReviewFlow(deps: ReviewDeps) {
       for (const id of removed) delete pages[id];
       const works = { ...state.works };
       for (const id of removedWorks) delete works[id];
-      commit({ ...state, pages, works });
+      const privacy =
+        state.privacy?.flatMap((work) =>
+          presentWorks !== undefined && !presentWorks.has(work.id) && !present.has(work.id)
+            ? []
+            : [dropPages(work, present)],
+        ) ?? null;
+      commit({ ...state, pages, works, privacy });
+      notify();
     },
 
     dispose: () => {
