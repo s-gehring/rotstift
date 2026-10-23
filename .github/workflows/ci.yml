@@ -2,8 +2,11 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore: ['docs/**', '**/*.md']
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
 
 permissions:
   contents: read
@@ -14,9 +17,25 @@ concurrency:
 
 jobs:
   check:
+    if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.changes.outputs.build }}
     steps:
       - uses: actions/checkout@v7
+      - id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if ! files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE...$HEAD" --jq '.files[].filename'); then
+            echo build=true >> "$GITHUB_OUTPUT"
+          elif grep -qE '^(src-tauri/|scripts/|package\.json$|pnpm-lock\.yaml$|vite\.config\.ts$|index\.html$|\.nvmrc$|rust-toolchain\.toml$|\.github/workflows/ci\.yml$)' <<< "$files"; then
+            echo build=true >> "$GITHUB_OUTPUT"
+          else
+            echo build=false >> "$GITHUB_OUTPUT"
+          fi
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -37,6 +56,7 @@ jobs:
           key: llama-cpp-${{ runner.os }}-${{ hashFiles('scripts/runtime/manifest.ts') }}
       - run: pnpm fetch:runtime
       - run: pnpm check
+      - run: pnpm exec vite build
       - name: Download the llama.cpp test model
         run: |
           mkdir -p "$RUNNER_TEMP/models"
@@ -51,6 +71,7 @@ jobs:
 
   build:
     needs: check
+    if: needs.check.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
