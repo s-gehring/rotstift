@@ -14,6 +14,7 @@ export interface CloudStep {
   readonly model: string;
   readonly loopback: boolean;
   readonly confirmed: boolean;
+  readonly protection: boolean;
   readonly key: KeyStore | null;
 }
 
@@ -31,6 +32,8 @@ export interface CloudInput {
   readonly baseUrl: string;
   readonly model: string;
   readonly key: string | null;
+  readonly protection: boolean | null;
+  readonly protectionConfirmed: boolean;
 }
 
 export class CloudCallError extends Error {
@@ -56,6 +59,8 @@ export function createCloudClient(invoke: Invoke = tauriInvoke) {
     config: () => call<CloudView>('cloud_config'),
     use: (step: ModelRole, input: CloudInput, confirmed: boolean) =>
       call<CloudView>('cloud_use', { step, ...input, confirmed }),
+    setProtection: (step: ModelRole, protection: boolean, confirmed: boolean) =>
+      call<CloudView>('cloud_set_protection', { step, protection, confirmed }),
     setKey: (step: ModelRole, key: string) => call<CloudView>('cloud_set_key', { step, key }),
     clear: (step: ModelRole) => call<CloudView>('cloud_clear', { step }),
     models: (template: string, baseUrl: string, key: string | null) =>

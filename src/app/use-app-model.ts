@@ -182,7 +182,7 @@ export function useAppModel(): AppModel {
       : null;
   const availability = useMemo<ModelAvailability | null>(() => {
     if (transcriberCloud !== null) {
-      return cloudUsable(transcriberCloud)
+      return cloudUsable(transcriberCloud, 'transcriber')
         ? { model: remoteTranscriber(transcriberCloud), state: 'ready', remote: true }
         : null;
     }
@@ -193,8 +193,11 @@ export function useAppModel(): AppModel {
   });
   const transcriber = useMemo(
     () =>
-      transcriberCloud !== null && !cloudUsable(transcriberCloud)
-        ? { state: 'unavailable' as const, message: cloudBlockedMessage(transcriberCloud) }
+      transcriberCloud !== null && !cloudUsable(transcriberCloud, 'transcriber')
+        ? {
+            state: 'unavailable' as const,
+            message: cloudBlockedMessage(transcriberCloud, 'transcriber'),
+          }
         : resolvedTranscriber,
     [transcriberCloud, resolvedTranscriber],
   );

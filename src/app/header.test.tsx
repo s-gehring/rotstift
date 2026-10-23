@@ -93,6 +93,7 @@ describe('Header', () => {
       model: 'mistral-small-latest',
       loopback: false,
       confirmed: true,
+      protection: false,
       key: 'system',
     } as const;
     render({
@@ -107,6 +108,24 @@ describe('Header', () => {
     );
     click(sign ?? undefined);
     expect(show).toHaveBeenCalledOnce();
+  });
+
+  it('names the protection of a remote step in the cloud sign', () => {
+    const step = {
+      template: 'mistral',
+      label: 'Mistral AI',
+      baseUrl: 'https://api.mistral.ai/v1',
+      host: 'api.mistral.ai',
+      model: 'mistral-small-latest',
+      loopback: false,
+      confirmed: true,
+      protection: true,
+      key: 'system',
+    } as const;
+    render({ models: { cloud: testCloud({ steps: { corrector: step } }) } });
+    expect(container.querySelector('.cloud-sign')?.getAttribute('aria-label')).toBe(
+      'Texterkennung lokal, Korrektur über Mistral AI, pseudonymisiert, Inhalt und Form lokal',
+    );
   });
 
   it('marks the demo mode', () => {

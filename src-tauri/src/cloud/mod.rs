@@ -19,6 +19,7 @@ use tokio::sync::oneshot;
 pub use keys::Keys;
 
 pub const CONSENT_VERSION: u32 = 1;
+pub const PROTECTION_CONSENT_VERSION: u32 = 1;
 const CONFIG_FILE: &str = "cloud.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -44,6 +45,9 @@ impl Step {
 pub enum ErrorClass {
     NotConfigured,
     ConsentMissing,
+    ProtectionActive,
+    NotPseudonymized,
+    ProtectionConsentMissing,
     KeyMissing,
     InvalidAddress,
     Insecure,
@@ -66,6 +70,9 @@ impl ErrorClass {
         match self {
             Self::NotConfigured => "notConfigured",
             Self::ConsentMissing => "consentMissing",
+            Self::ProtectionActive => "protectionActive",
+            Self::NotPseudonymized => "notPseudonymized",
+            Self::ProtectionConsentMissing => "protectionConsentMissing",
             Self::KeyMissing => "keyMissing",
             Self::InvalidAddress => "invalidAddress",
             Self::Insecure => "insecure",
