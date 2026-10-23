@@ -6,7 +6,7 @@ import { DEFAULT_SCOPE, type CorrectionScope } from '../correction/scope.ts';
 import type { Arbeit } from '../import/arbeiten.ts';
 import type { ImportPage } from '../import/pages.ts';
 import type { DownloadError } from '../models/types.ts';
-import { startablePages, type RunState } from '../pipeline/runner.ts';
+import { startablePages, type PageEntry, type RunState } from '../pipeline/runner.ts';
 import type { TranscriberStatus } from '../pipeline/transcriber.ts';
 import {
   arbeitenText,
@@ -134,13 +134,16 @@ export function startWorkload(
   review: ReviewState,
   profile: CorrectionProfile,
   scope: CorrectionScope,
+  secondReading = false,
 ): Workload {
   const open = openPages(kind, pages, count, review, profile);
   const read = open.filter((page) => count.entries[page.id]?.status !== 'done').length;
-  if (kind === 'count') return { ...NO_WORK, read };
+  const confirm = secondReading ? read : 0;
+  if (kind === 'count') return { ...NO_WORK, read, confirm };
   const ids = new Set(open.map((page) => page.id));
   return {
     read,
+    confirm,
     correct: scope.spelling || scope.grammar ? open.length : 0,
     review: reviewsContent(scope) ? worksTouching(arbeiten, ids) : 0,
   };
@@ -191,6 +194,17 @@ function share(finished: number, total: number): number {
   return total === 0 ? 1 : Math.min(1, finished / total);
 }
 
+function awaitsSecond(entry: PageEntry | undefined, secondReading: boolean): boolean {
+  if (entry === undefined || entry.status === 'error') return false;
+  if (entry.awaitingSecond === true) return true;
+  return secondReading && (entry.status === 'waiting' || entry.status === 'running');
+}
+
+function secondLeft(count: RunState, pageIds: readonly string[]): number {
+  const secondReading = count.secondReading === true;
+  return pageIds.filter((id) => awaitsSecond(count.entries[id], secondReading)).length;
+}
+
 export function reviewFraction(
   review: ReviewState,
   count: RunState,
@@ -204,7 +218,12 @@ export function reviewFraction(
       const status = count.entries[id]?.status;
       return status === 'done' || status === 'error';
     }).length;
-    return transcribing * share(transcribed, pageIds.length);
+    const secondTotal =
+      count.secondReading === true
+        ? pageIds.filter((id) => count.entries[id]?.status !== 'error').length
+        : 0;
+    const confirmed = secondTotal - secondLeft(count, pageIds);
+    return transcribing * share(transcribed + confirmed, pageIds.length + secondTotal);
   }
   if (run.phase === 'locating') return transcribing + locating * share(run.finished, run.total);
   if (run.phase === 'correcting') {
@@ -237,17 +256,25 @@ export function runSnapshot(
   if (run === null) {
     const { batch } = count;
     if (batch === null) return null;
-    return { step: 'read', left: { ...NO_WORK, read: Math.max(0, batch.total - batch.finished) } };
+    const read = Math.max(0, batch.total - batch.finished);
+    const confirm = secondLeft(count, Object.keys(count.entries));
+    return {
+      step: read === 0 && confirm > 0 ? 'confirm' : 'read',
+      left: { ...NO_WORK, read, confirm },
+    };
   }
   const pageIds = start?.pageIds ?? activePageIds(review);
   const pagesStage = run.stages?.pages !== false;
   const reviewLeft = run.stages?.review === true ? (start?.works ?? 0) : 0;
   const status = (id: string) => count.entries[id]?.status;
   if (run.phase === 'transcribing') {
+    const read = pageIds.filter((id) => status(id) !== 'done' && status(id) !== 'error').length;
+    const confirm = secondLeft(count, pageIds);
     return {
-      step: 'read',
+      step: read === 0 && confirm > 0 ? 'confirm' : 'read',
       left: {
-        read: pageIds.filter((id) => status(id) !== 'done' && status(id) !== 'error').length,
+        read,
+        confirm,
         correct: pagesStage ? pageIds.filter((id) => status(id) !== 'error').length : 0,
         review: reviewLeft,
       },
@@ -255,12 +282,12 @@ export function runSnapshot(
   }
   const left = Math.max(0, run.total - run.finished);
   if (run.phase === 'locating') {
-    return { step: 'correct', left: { read: 0, correct: run.total, review: reviewLeft } };
+    return { step: 'correct', left: { ...NO_WORK, correct: run.total, review: reviewLeft } };
   }
   if (run.phase === 'correcting') {
-    return { step: 'correct', left: { read: 0, correct: left, review: reviewLeft } };
+    return { step: 'correct', left: { ...NO_WORK, correct: left, review: reviewLeft } };
   }
-  return { step: 'review', left: { read: 0, correct: 0, review: left } };
+  return { step: 'review', left: { ...NO_WORK, review: left } };
 }
 
 function remainingDetail(

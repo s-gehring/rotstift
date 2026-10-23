@@ -859,7 +859,7 @@ describe('SettingsDialog thoroughness', () => {
     expect(calls).toEqual([
       `transcriber:${transcriber.id}`,
       `corrector:${LARGEST_ID}`,
-      `reviewer:${LARGEST_ID}`,
+      `reviewer:${corrector.id}`,
     ]);
   });
 
@@ -867,13 +867,13 @@ describe('SettingsDialog thoroughness', () => {
     const e4b = CORRECTORS.find((model) => model.id === E4B_ID) ?? corrector;
     renderModels({
       corrector: testModelSetup(e4b),
-      reviewer: testModelSetup(e4b),
       secondReading: { enabled: true, set: noop },
     });
     expect(checkedLevel()).toBe('Gründlich');
 
     renderModels({
       corrector: testModelSetup(e4b),
+      reviewer: testModelSetup(e4b),
       secondReading: { enabled: true, set: noop },
     });
     expect(levelNames()).toEqual(['Schnell', 'Gründlich', 'Sehr gründlich', 'Eigene Auswahl']);

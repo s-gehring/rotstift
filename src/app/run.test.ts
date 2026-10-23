@@ -19,6 +19,7 @@ import {
   RUN_KIND_STORAGE_KEY,
   reviewFraction,
   runProgress,
+  runSnapshot,
   saveRunKind,
   startDecision,
   startRun,
@@ -278,6 +279,12 @@ describe('open pages for correcting', () => {
 
 const pending = (status: PageEntry['status']) => entry('', { status });
 
+const withSecond = (entries: Record<string, PageEntry>) =>
+  runState(entries, { secondReading: true });
+
+const awaiting = (status: PageEntry['status'] = 'done') =>
+  entry('', { status, awaitingSecond: true });
+
 describe('runProgress', () => {
   const waiting = reviewed(null, { status: 'waiting' });
 
@@ -361,6 +368,62 @@ describe('runProgress', () => {
     expect(start.pageIds).toEqual(['a', 'b']);
     const halfRead = runState({ a: pending('done'), old: pending('done') });
     expect(runProgress(begin, halfRead, IDLE_ENGINE, 0, start)?.label).toBe('30\u00a0%');
+  });
+
+  describe('with a second reading', () => {
+    const begin = reviewState(
+      { a: waiting, b: waiting },
+      { run: { phase: 'transcribing', total: 2, finished: 0 } },
+    );
+
+    it('counts every reading pass of every page towards the first part of the bar', () => {
+      const start = startRun(
+        begin,
+        withSecond({ a: pending('waiting'), b: pending('waiting') }),
+        0,
+      );
+      const fraction = (entries: Record<string, PageEntry>) =>
+        reviewFraction(begin, withSecond(entries), start.pageIds) / 0.6;
+      expect(fraction({ a: pending('waiting'), b: pending('waiting') })).toBe(0);
+      expect(fraction({ a: awaiting(), b: pending('running') })).toBeCloseTo(1 / 4);
+      expect(fraction({ a: awaiting(), b: awaiting() })).toBeCloseTo(2 / 4);
+      expect(fraction({ a: entry('x'), b: awaiting() })).toBeCloseTo(3 / 4);
+      expect(fraction({ a: entry('x'), b: entry('y') })).toBe(1);
+    });
+
+    it('does not wait for a second reading of pages that failed', () => {
+      const entries = { a: entry('x'), b: pending('error') };
+      expect(reviewFraction(begin, withSecond(entries), ['a', 'b']) / 0.6).toBe(1);
+    });
+
+    it('prices the second reading as its own step once every page is read once', () => {
+      const queued = withSecond({ a: pending('waiting'), b: pending('waiting') });
+      const start = startRun(begin, queued, 0);
+      expect(runSnapshot(begin, queued, start)).toMatchObject({
+        step: 'read',
+        left: { read: 2, confirm: 2 },
+      });
+      const confirming = withSecond({ a: awaiting(), b: awaiting() });
+      expect(runSnapshot(begin, confirming, start)).toMatchObject({
+        step: 'confirm',
+        left: { read: 0, confirm: 2 },
+      });
+      const almost = withSecond({ a: entry('x'), b: awaiting() });
+      expect(runSnapshot(begin, almost, start)).toMatchObject({
+        step: 'confirm',
+        left: { read: 0, confirm: 1 },
+      });
+    });
+
+    it('keeps counting the second readings while counting words', () => {
+      const counting = withSecond({ a: awaiting(), b: awaiting() });
+      const batch = { ...counting, batch: { total: 2, finished: 2 } };
+      expect(runSnapshot(EMPTY_REVIEW, batch, null)).toMatchObject({
+        step: 'confirm',
+        left: { read: 0, confirm: 2 },
+      });
+      expect(runProgress(EMPTY_REVIEW, batch, IDLE_ENGINE, 0)?.detail).toBe('noch etwa 1 min');
+    });
   });
 
   it('starts from the rule of thumb for the steps of the run', () => {
@@ -657,17 +720,42 @@ describe('startWorkload', () => {
     startWorkload(kind, pages, arbeiten, count, reviewState({}), DEUTSCH, scope);
 
   it('counts only the reading for the word count', () => {
-    expect(work('count', runState({}), plain)).toEqual({ read: 3, correct: 0, review: 0 });
+    expect(work('count', runState({}), plain)).toEqual({
+      read: 3,
+      confirm: 0,
+      correct: 0,
+      review: 0,
+    });
   });
 
   it('adds correcting and reviewing for the chosen scope', () => {
-    expect(work('correct', runState({}), plain)).toEqual({ read: 3, correct: 3, review: 0 });
+    expect(work('correct', runState({}), plain)).toEqual({
+      read: 3,
+      confirm: 0,
+      correct: 3,
+      review: 0,
+    });
     expect(work('correct', runState({}), content).review).toBe(2);
   });
 
   it('leaves out pages that are already read', () => {
     const count = runState({ a: entry('x'), b: entry('y') });
-    expect(work('correct', count, plain)).toEqual({ read: 1, correct: 3, review: 0 });
+    expect(work('correct', count, plain)).toEqual({ read: 1, confirm: 0, correct: 3, review: 0 });
+  });
+
+  it('adds one second reading for every page that still has to be read', () => {
+    const count = runState({ a: entry('x') });
+    const secondly = startWorkload(
+      'correct',
+      pages,
+      arbeiten,
+      count,
+      reviewState({}),
+      DEUTSCH,
+      plain,
+      true,
+    );
+    expect(secondly).toEqual({ read: 2, confirm: 2, correct: 3, review: 0 });
   });
 });
 

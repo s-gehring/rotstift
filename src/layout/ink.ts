@@ -7,10 +7,10 @@ export interface InkMask {
   readonly data: Uint8Array;
 }
 
-const MIN_CONTRAST = 22;
+export const MIN_CONTRAST = 22;
 const RELATIVE_THRESHOLD = 0.88;
 
-export function binarize(gray: GrayImage): InkMask {
+function localMean(gray: GrayImage): (x: number, y: number) => number {
   const { width, height, data } = gray;
   const stride = width + 1;
   const integral = new Float64Array(stride * (height + 1));
@@ -22,27 +22,59 @@ export function binarize(gray: GrayImage): InkMask {
     }
   }
   const radius = Math.max(8, Math.round(Math.max(width, height) / 50));
-  const out = new Uint8Array(width * height);
-  for (let y = 0; y < height; y += 1) {
+  return (x, y) => {
     const y0 = Math.max(0, y - radius);
     const y1 = Math.min(height, y + radius + 1);
+    const x0 = Math.max(0, x - radius);
+    const x1 = Math.min(width, x + radius + 1);
+    const sum =
+      (integral[y1 * stride + x1] ?? 0) -
+      (integral[y0 * stride + x1] ?? 0) -
+      (integral[y1 * stride + x0] ?? 0) +
+      (integral[y0 * stride + x0] ?? 0);
+    return sum / ((x1 - x0) * (y1 - y0));
+  };
+}
+
+export function binarize(gray: GrayImage, minContrast = MIN_CONTRAST): InkMask {
+  const { width, height, data } = gray;
+  const relative = 1 - ((1 - RELATIVE_THRESHOLD) * minContrast) / MIN_CONTRAST;
+  const meanAt = localMean(gray);
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const value = data[y * width + x] ?? 255;
       if (value > 200) continue;
-      const x0 = Math.max(0, x - radius);
-      const x1 = Math.min(width, x + radius + 1);
-      const sum =
-        (integral[y1 * stride + x1] ?? 0) -
-        (integral[y0 * stride + x1] ?? 0) -
-        (integral[y1 * stride + x0] ?? 0) +
-        (integral[y0 * stride + x0] ?? 0);
-      const mean = sum / ((x1 - x0) * (y1 - y0));
-      if (value <= mean * RELATIVE_THRESHOLD && mean - value >= MIN_CONTRAST) {
+      const mean = meanAt(x, y);
+      if (value <= mean * relative && mean - value >= minContrast) {
         out[y * width + x] = 1;
       }
     }
   }
   return { width, height, data: out };
+}
+
+export function medianInkContrast(gray: GrayImage, mask: InkMask): number {
+  const meanAt = localMean(gray);
+  const counts = new Int32Array(256);
+  let total = 0;
+  for (let y = 0; y < gray.height; y += 1) {
+    for (let x = 0; x < gray.width; x += 1) {
+      if (mask.data[y * gray.width + x] !== 1) continue;
+      const contrast = Math.max(
+        0,
+        Math.min(255, Math.round(meanAt(x, y) - (gray.data[y * gray.width + x] ?? 255))),
+      );
+      counts[contrast] = (counts[contrast] ?? 0) + 1;
+      total += 1;
+    }
+  }
+  let seen = 0;
+  for (let value = 0; value < 256; value += 1) {
+    seen += counts[value] ?? 0;
+    if (seen * 2 >= total && total > 0) return value;
+  }
+  return 0;
 }
 
 function inkPoints(mask: InkMask, limit: number): { xs: Int32Array; ys: Int32Array } {

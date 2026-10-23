@@ -487,13 +487,19 @@ def render_heft(out: Path, only: set[str], strike: int, seed: int, paper_image: 
                 rendered = render(page_text, font_name, page_seed, paper, pen, rulings[variant % 3], base)
                 binding = BINDINGS[(variant % 3)] if look == "photo" else "none"
                 rand = [(paper.left, 0), (paper.left, PAGE[1]), (PAGE[0] - paper.right, 0), (PAGE[0] - paper.right, PAGE[1])]
+                struck = [{"text": "", "bbox": [x0, y0, x1 - x0, y1 - y0]} for x0, y0, x1, y1 in rendered.struck]
                 if look == "photo":
-                    image, lines, quality, edges = photograph(rendered.image, rendered.lines, page_seed, binding, effects, rand)
+                    image, moved, quality, edges = photograph(rendered.image, rendered.lines + struck, page_seed, binding, effects, rand)
                 else:
-                    image, lines, quality, edges = scan(rendered.image, rendered.lines, page_seed, rand)
+                    image, moved, quality, edges = scan(rendered.image, rendered.lines + struck, page_seed, rand)
+                lines, struck = moved[:len(rendered.lines)], moved[len(rendered.lines):]
                 image.save(out / "images" / f"{name}.jpg", quality=quality)
                 (out / "ground_truth" / f"{name}.txt").write_text(page_text + "\n", encoding="utf-8")
                 (out / "markup" / f"{name}.txt").write_text(markup + "\n", encoding="utf-8")
+                if strike:
+                    boxes = [[x, y, round(x + w, 1), round(y + h, 1)] for x, y, w, h in (line["bbox"] for line in struck)]
+                    meta_strikes = {"width": image.size[0], "height": image.size[1], "boxes": boxes, "styles": rendered.styles}
+                    (out / "ground_truth" / f"{name}.strikes.json").write_text(json.dumps(meta_strikes) + "\n", encoding="utf-8")
                 meta = {"paper": paper_name, "look": look, "font": font_name, "pen": pen, "binding": binding,
                         "size": list(image.size), "margin": {"left": edges[:2], "right": edges[2:] if paper.right else None},
                         "lines": lines}
