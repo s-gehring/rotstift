@@ -1,4 +1,5 @@
 import type { PageComment } from '../overlay/layout.ts';
+import type { PageMargins } from '../overlay/model.ts';
 import type { CorrectionProfile } from '../annotations/profile.ts';
 import type { Transcript } from '../annotations/transcript.ts';
 import type { Grading } from '../stats/grading.ts';
@@ -12,6 +13,7 @@ export interface ExportPage {
   readonly transcript?: Transcript;
   readonly comments?: readonly PageComment[];
   readonly summary?: string | null;
+  readonly margins?: PageMargins;
 }
 
 export interface ContentNote {

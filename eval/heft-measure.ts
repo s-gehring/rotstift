@@ -4,10 +4,16 @@ import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { parseArgs } from 'node:util';
 import { DEUTSCH } from '../src/annotations/profile.ts';
-import type { Bbox, Transcript } from '../src/annotations/transcript.ts';
+import { transcriptSchema, type Bbox, type Transcript } from '../src/annotations/transcript.ts';
 import { correctPage } from '../src/correction/correct-page.ts';
 import { createLlmCorrector } from '../src/correction/llm-corrector.ts';
-import { applyDewarp, planDewarp, toSourceBox, type DewarpPlan } from '../src/layout/dewarp.ts';
+import {
+  applyDewarp,
+  planDewarp,
+  toSource,
+  toSourceBox,
+  type DewarpPlan,
+} from '../src/layout/dewarp.ts';
 import { readJpeg } from '../src/layout/image-files.ts';
 import { locateLines } from '../src/layout/locate-lines.ts';
 import { findStruckWords } from '../src/layout/strike.ts';
@@ -15,7 +21,10 @@ import { iou } from '../src/layout/synthetic.ts';
 import type { RgbaImage } from '../src/layout/types.ts';
 import type { LlmClient } from '../src/llm/client.ts';
 import { correctorConfig } from '../src/llm/sidecar-corrector.ts';
+import { estimateTextWidth } from '../src/overlay/char-width.ts';
 import { layoutOverlay } from '../src/overlay/layout.ts';
+import { marginsOf } from '../src/overlay/margins.ts';
+import type { PageMargins } from '../src/overlay/model.ts';
 import { parseTranscript } from '../src/pipeline/transcript-lines.ts';
 import { installDom } from './dom.ts';
 import { characterEdits, editDistance, wordEdits } from './metrics.ts';
@@ -50,8 +59,13 @@ export interface MarkStats {
   strokesOnLine: number;
   codes: number;
   codesInRand: number;
+  codesInRandFit: number;
   codesOverText: number;
+  codesOverTextFit: number;
   codesChecked: number;
+  codesAny: number;
+  codesAnyOverText: number;
+  codesAnyOverTextFit: number;
   rightLine: number;
   markLines: number;
 }
@@ -80,6 +94,8 @@ export interface PageStats {
   straightened?: boolean;
   dewarpMs?: number;
   marks?: MarkStats;
+  marksBefore?: MarkStats;
+  drawnMargin?: boolean;
 }
 
 const ZERO_MARKS: MarkStats = {
@@ -89,8 +105,13 @@ const ZERO_MARKS: MarkStats = {
   strokesOnLine: 0,
   codes: 0,
   codesInRand: 0,
+  codesInRandFit: 0,
   codesOverText: 0,
+  codesOverTextFit: 0,
   codesChecked: 0,
+  codesAny: 0,
+  codesAnyOverText: 0,
+  codesAnyOverTextFit: 0,
   rightLine: 0,
   markLines: 0,
 };
@@ -156,9 +177,14 @@ function markStats(
   matches: readonly number[],
   meta: PageMeta,
   factor: number,
+  margins: PageMargins | undefined,
 ): MarkStats {
   const stats = { ...ZERO_MARKS };
-  const overlay = layoutOverlay(transcript, { page: { width, height }, profile: DEUTSCH });
+  const overlay = layoutOverlay(transcript, {
+    page: { width, height },
+    profile: DEUTSCH,
+    ...(margins && { margins }),
+  });
   const truth = meta.lines ?? [];
   stats.marks = transcript.lines.reduce((sum, line) => sum + line.marks.length, 0);
   stats.unplaced = transcript.lines
@@ -191,26 +217,40 @@ function markStats(
       ) {
         stats.strokesOnLine += 1;
       }
-    } else if (item.role === 'code' && meta.margin !== undefined) {
-      stats.codes += 1;
-      const half = (item.text.length * item.size * 0.55) / 2;
-      const center =
-        item.anchor === 'start' ? item.x + half : item.anchor === 'end' ? item.x - half : item.x;
-      const left = edgeAt(meta.margin.left, item.y, factor);
-      const right = edgeAt(meta.margin.right, item.y, factor);
-      if (left === null) continue;
-      stats.codesChecked += 1;
-      if (center + half <= left + 2 || (right !== null && center - half >= right - 2)) {
-        stats.codesInRand += 1;
+    } else if (item.role === 'code') {
+      stats.codesAny += 1;
+      const left = meta.margin ? edgeAt(meta.margin.left, item.y, factor) : null;
+      const right = meta.margin ? edgeAt(meta.margin.right, item.y, factor) : null;
+      if (left !== null) {
+        stats.codes += 1;
+        stats.codesChecked += 1;
       }
-      const box = {
-        x: center - half,
-        y: item.y - item.size * 0.8,
-        width: 2 * half,
-        height: item.size,
-      };
-      if (boxes.some((truthBox) => iou(box, truthBox) > 0 || overlaps(box, truthBox))) {
-        stats.codesOverText += 1;
+      for (const wide of [true, false]) {
+        const textWidth = wide
+          ? item.text.length * item.size * 0.55
+          : estimateTextWidth(item.text, item.size);
+        const half = textWidth / 2;
+        const center =
+          item.anchor === 'start' ? item.x + half : item.anchor === 'end' ? item.x - half : item.x;
+        const box = {
+          x: center - half,
+          y: item.y - item.size * 0.8,
+          width: textWidth,
+          height: item.size,
+        };
+        const over = boxes.some((truthBox) => overlaps(box, truthBox));
+        const inside =
+          left !== null &&
+          (center + half <= left + 2 || (right !== null && center - half >= right - 2));
+        if (wide) {
+          if (over) stats.codesAnyOverText += 1;
+          if (over && left !== null) stats.codesOverText += 1;
+          if (inside) stats.codesInRand += 1;
+        } else {
+          if (over) stats.codesAnyOverTextFit += 1;
+          if (over && left !== null) stats.codesOverTextFit += 1;
+          if (inside) stats.codesInRandFit += 1;
+        }
       }
     }
   }
@@ -226,6 +266,12 @@ function straighten(image: RgbaImage): { plan: DewarpPlan | null; work: RgbaImag
   const plan = planDewarp(image);
   const work = plan === null ? image : applyDewarp(image, plan);
   return { plan, work, ms: performance.now() - started };
+}
+
+function sourceMargins(margins: PageMargins, plan: DewarpPlan, image: RgbaImage): PageMargins {
+  const map = (line: PageMargins['left']) =>
+    line && line.map((point) => toSource(plan, point, image));
+  return { left: map(margins.left) ?? null, right: map(margins.right) ?? null };
 }
 
 function readMeta(dir: string | undefined, name: string): PageMeta {
@@ -404,6 +450,41 @@ export function layoutRow(label: string, pages: readonly PageStats[]): string {
   return `| ${cells.join(' | ')} |`;
 }
 
+function stat(stats: MarkStats | undefined, field: string): number {
+  const found = Object.entries(stats ?? {}).find(([key]) => key === field)?.[1];
+  return typeof found === 'number' ? found : 0;
+}
+
+export function marksRow(label: string, pages: readonly PageStats[], fit = false): string {
+  const suffix = fit ? 'Fit' : '';
+  const total = (pick: 'marks' | 'marksBefore', field: string) =>
+    pages.reduce((sum, page) => sum + stat(page[pick], field), 0);
+  const cell = (field: string, base: string) =>
+    [total('marksBefore', field), total('marks', field)].map((count, index) =>
+      percent(count, total(index === 0 ? 'marksBefore' : 'marks', base)),
+    );
+  const [inBefore, inAfter] = cell(`codesInRand${suffix}`, 'codesChecked');
+  const [overBefore, overAfter] = cell(`codesOverText${suffix}`, 'codesChecked');
+  const [anyBefore, anyAfter] = cell(`codesAnyOverText${suffix}`, 'codesAny');
+  const cells = [
+    label,
+    String(total('marks', 'codesChecked')),
+    inBefore,
+    inAfter,
+    overBefore,
+    overAfter,
+    String(total('marks', 'codesAny')),
+    anyBefore,
+    anyAfter,
+  ];
+  return `| ${cells.join(' | ')} |`;
+}
+
+export const MARKS_HEADER = [
+  '| Gruppe | Randzeichen mit Rand | im Rand vorher | im Rand nachher | über Text vorher | über Text nachher | Randzeichen alle Seiten | über Text vorher (alle) | über Text nachher (alle) |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+].join('\n');
+
 export const LAYOUT_HEADER = [
   '| Gruppe | Seiten | Zeilen mit Box | davon grob | Box trifft (IoU ≥ 0,5) | Box sicher falsch | Papier erkannt | ms je Seite |',
   '| --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -429,6 +510,7 @@ async function main() {
       model: { type: 'string', default: 'gemma-4-e2b-q4' },
       threads: { type: 'string', default: '6' },
       marks: { type: 'boolean', default: false },
+      transcripts: { type: 'string' },
       'no-wer': { type: 'boolean', default: false },
       paper: { type: 'string' },
       dewarp: { type: 'boolean', default: false },
@@ -475,10 +557,24 @@ async function main() {
     const old = done.find((entry) => entry.name === page.name);
     return old === undefined || needsMarks(old);
   });
-  const session =
-    values.marks && todo.length > 0
-      ? await startCorrector(values.model, Number(values.threads))
-      : null;
+  let sidecar: Awaited<ReturnType<typeof startCorrector>> | null = null;
+  const session = values.marks && todo.length > 0 ? { stop: () => sidecar?.server.stop() } : null;
+  const corrected = async (name: string, lines: string[], bboxes: (Bbox | undefined)[]) => {
+    const cache = values.transcripts ? join(values.transcripts, `${name}.json`) : null;
+    if (cache !== null && existsSync(cache)) {
+      return {
+        ok: true,
+        transcript: transcriptSchema.parse(JSON.parse(readFileSync(cache, 'utf8'))),
+      };
+    }
+    sidecar ??= await startCorrector(values.model, Number(values.threads));
+    const result = await sidecar.correct(lines, bboxes);
+    if (cache !== null && result.ok) {
+      await mkdir(dirname(cache), { recursive: true });
+      await writeFile(cache, JSON.stringify(result.transcript));
+    }
+    return result;
+  };
   try {
     for (const page of todo) {
       const truthFile = join(values.truth, `${page.name}.txt`);
@@ -570,20 +666,19 @@ async function main() {
         ruling: layout.ruling?.kind ?? 'blank',
         expectedRuling: expectedRuling(values.paper ?? meta.paper),
         locateMs,
+        drawnMargin: meta.margin?.right != null && meta.paper !== 'liniert-eng',
         ...(straight === null ? {} : { straightened: plan !== null, dewarpMs: straight.ms }),
       };
       if (session !== null) {
         const bboxes = toBboxes(layout, lines.length);
-        const result = await session.correct(lines, bboxes);
+        const result = await corrected(page.name, lines, bboxes);
         if (result.ok) {
-          stats.marks = markStats(
-            result.transcript,
-            image.width,
-            image.height,
-            matches,
-            meta,
-            factor,
-          );
+          const found = marginsOf(located.ruling);
+          const margins = plan === null ? found : found && sourceMargins(found, plan, image);
+          const measure = (used: PageMargins | undefined) =>
+            markStats(result.transcript, image.width, image.height, matches, meta, factor, used);
+          stats.marks = measure(margins);
+          stats.marksBefore = measure(undefined);
         }
       }
       const at = done.findIndex((entry) => entry.name === page.name);
@@ -594,7 +689,7 @@ async function main() {
       await writeFile(values.out, `${JSON.stringify(done)}\n`);
     }
   } finally {
-    await session?.server.stop();
+    await session?.stop();
   }
   const groups = [...new Set(done.map((page) => page.group))].toSorted();
   const rows =
@@ -617,6 +712,28 @@ async function main() {
           ),
         )
       : [];
+  if (done.some((page) => page.marksBefore !== undefined)) {
+    for (const fit of [false, true]) {
+      const markRows = groups.map((group) =>
+        marksRow(
+          group,
+          done.filter((page) => page.group === group),
+          fit,
+        ),
+      );
+      console.log(
+        `\nRandzeichen, Breite ${fit ? 'nach Breitenmodell der Schrift' : '0,55 em je Zeichen (wie Phase 1)'}\n\n${MARKS_HEADER}`,
+      );
+      const withMargin = done.filter((page) => page.drawnMargin === true);
+      console.log(
+        [
+          ...markRows,
+          marksRow('alle', done, fit),
+          marksRow('mit gezeichnetem Rand', withMargin, fit),
+        ].join('\n'),
+      );
+    }
+  }
   console.log(`\n${LAYOUT_HEADER}`);
   console.log([...layoutRows, layoutRow('alle', done)].join('\n'));
   const timed = done.flatMap((page) => (page.dewarpMs === undefined ? [] : [page.dewarpMs]));

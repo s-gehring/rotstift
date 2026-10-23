@@ -43,3 +43,13 @@ export const INK_COLOR = '#d11f2a';
 export const INK_OPACITY = 0.9;
 export const FONT_FAMILY = 'Caveat';
 export const FONT_WEIGHT = 500;
+
+export interface MarginPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface PageMargins {
+  readonly left: readonly MarginPoint[] | null;
+  readonly right: readonly MarginPoint[] | null;
+}

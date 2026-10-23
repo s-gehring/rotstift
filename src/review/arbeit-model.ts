@@ -11,6 +11,7 @@ import type { CommentKind } from '../content-form/catalog.ts';
 import { coveringMark } from '../content-form/overlap.ts';
 import { summaryText } from '../content-form/review.ts';
 import type { PageComment } from '../overlay/layout.ts';
+import type { PageMargins } from '../overlay/model.ts';
 import type { CommentStatus, ReviewImage, ReviewState, WorkReview } from './review-flow.ts';
 import { gradeFor, type GradeScale, type Grading } from '../stats/grading.ts';
 import type { Weighting } from '../stats/weighting.ts';
@@ -36,6 +37,7 @@ export interface PageCorrection {
   readonly errors: number;
   readonly comments: readonly PageComment[];
   readonly summary: string | null;
+  readonly margins: PageMargins | null;
 }
 
 export interface CommentEntry {
@@ -186,6 +188,7 @@ export function buildArbeitModel(
     if (pageResult !== null) {
       correction = {
         transcript: pageResult.transcript,
+        margins: reviewPage?.margins ?? null,
         readingHints: pageResult.hints,
         hints: pageResult.hints.map((hint, hintIndex) => ({
           index: hintIndex,

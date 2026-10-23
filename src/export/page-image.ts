@@ -19,6 +19,7 @@ function layoutMarks(page: ExportPage, profile: CorrectionProfile | undefined): 
     profile,
     ...(page.comments && { comments: page.comments }),
     summary: page.summary ?? null,
+    ...(page.margins && { margins: page.margins }),
   });
 }
 

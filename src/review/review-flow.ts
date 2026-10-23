@@ -25,6 +25,8 @@ import {
 import type { ImportPage, Rotation } from '../import/pages.ts';
 import type { LayoutLocator } from '../layout/layout-client.ts';
 import type { LayoutResult } from '../layout/types.ts';
+import { marginsOf } from '../overlay/margins.ts';
+import type { PageMargins } from '../overlay/model.ts';
 import type { PageEntry, Runner } from '../pipeline/runner.ts';
 import { describeError } from '../pipeline/transcriber.ts';
 import { computeStatistics, type Statistics } from '../stats/statistics.ts';
@@ -64,6 +66,7 @@ export interface ReviewPage {
   readonly source: string | null;
   readonly image: ReviewImage | null;
   readonly bboxes: readonly (Bbox | undefined)[] | null;
+  readonly margins?: PageMargins | null;
   readonly warning: PageWarning | null;
   readonly result: CorrectedPage | null;
   readonly message: string | null;
@@ -298,6 +301,7 @@ function blankPage(rotation: Rotation): ReviewPage {
     source: null,
     image: null,
     bboxes: null,
+    margins: null,
     warning: null,
     result: null,
     message: null,
@@ -450,7 +454,7 @@ export function createReviewFlow(deps: ReviewDeps) {
       const lines = entry.text.split('\n');
       const previous = state.pages[page.id];
       const sameSource = previous?.source === entry.text && previous.rotation === page.rotation;
-      if (!sameSource) patch(page.id, { image: null, bboxes: null, warning: null });
+      if (!sameSource) patch(page.id, { image: null, bboxes: null, margins: null, warning: null });
       patch(page.id, { source: entry.text, rotation: page.rotation, result: null });
       if (lines.every((line) => line.trim() === '')) {
         patch(page.id, { status: 'empty', message: null, detail: null });
@@ -465,6 +469,7 @@ export function createReviewFlow(deps: ReviewDeps) {
     patch(page.id, { status: 'locating', warning: null });
     let image: ReviewImage | null = null;
     let bboxes: (Bbox | undefined)[] = lines.map(() => undefined);
+    let margins: PageMargins | null = null;
     let warning: PageWarning | null = null;
     try {
       const loaded = await abortable(track(deps.loadImage(page)), signal);
@@ -478,11 +483,12 @@ export function createReviewFlow(deps: ReviewDeps) {
         const layout = await abortable(track(deps.locator.locate(image.blob, lines)), signal);
         if (layout === ABORTED) return false;
         bboxes = toBboxes(layout, lines.length);
+        margins = marginsOf(layout.ruling) ?? null;
       } catch (error) {
         warning = { text: LAYOUT_FAILED, detail: errorText(error) };
       }
     }
-    patch(page.id, { status: 'waiting', image, bboxes, warning });
+    patch(page.id, { status: 'waiting', image, bboxes, margins, warning });
     return true;
   };
 

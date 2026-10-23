@@ -5,7 +5,13 @@ import type { ReadingHint } from '../correction/uncertain-reading.ts';
 import { layoutHints, markText, type HintSpot } from './hint-layout.ts';
 import { layoutOverlay, type PageComment } from './layout.ts';
 import type { TextLocator } from './locator.ts';
-import { INK_COLOR, INK_OPACITY, type OverlayItem, type PageSize } from './model.ts';
+import {
+  INK_COLOR,
+  INK_OPACITY,
+  type OverlayItem,
+  type PageMargins,
+  type PageSize,
+} from './model.ts';
 import './overlay.css';
 
 export interface AnnotatedPageProps {
@@ -19,6 +25,7 @@ export interface AnnotatedPageProps {
   readonly hints?: readonly ReadingHint[];
   readonly comments?: readonly PageComment[];
   readonly summary?: string | null;
+  readonly margins?: PageMargins;
   readonly activeMark?: string | null;
   readonly onMarkHover?: (key: string | null) => void;
   readonly onMarkSelect?: (key: string) => void;
@@ -69,6 +76,7 @@ export function AnnotatedPage({
   hints,
   comments,
   summary = null,
+  margins,
   activeMark = null,
   onMarkHover,
   onMarkSelect,
@@ -86,8 +94,9 @@ export function AnnotatedPage({
         ...(locator ? { locator } : {}),
         ...(notes && { comments: notes }),
         summary,
+        ...(margins && { margins }),
       }),
-    [transcript, size, profile, locator, notes, summary],
+    [transcript, size, profile, locator, notes, summary, margins],
   );
   const groups = useMemo(() => groupByMark(model.items), [model]);
   const interactive = onMarkHover !== undefined || onMarkSelect !== undefined;
