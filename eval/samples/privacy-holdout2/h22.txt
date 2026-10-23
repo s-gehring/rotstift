@@ -1,0 +1,17 @@
+arbeit: Reklamation Kopfhörer.pdf
+klasse: 9
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine Reklamation an einen Onlineshop wegen defekter Kopfhörer.
+---
+Betreff: Reklamation, Bestellnummer [B-2025-88213]{number}
+Sehr geehrte Damen und Herren,
+am [02.03.2025]{date} habe ich bei der [Technikwelt Hartmann GmbH]{institution}
+Kopfhörer bestellt. Leider funktioniert der linke Lautsprecher
+nach einer Woche nicht mehr. Meine Kundennummer ist
+[KD-4471829]{number}. Ich bitte Sie, mir ein neues Paar zu
+schicken oder den Kaufpreis zu erstatten. Sie erreichen
+mich unter [lukas.baumgart@gmx.de]{contact} oder telefonisch unter
+[0151 23456780]{contact}. Für eine schnelle Antwort danke ich.
+Mit freundlichen Grüßen
+[Lukas Baumgart]{person}

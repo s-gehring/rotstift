@@ -1,0 +1,17 @@
+arbeit: Tagebuch Klassenfahrt.pdf
+klasse: 7
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über einen Tag auf der Klassenfahrt.
+---
+Liebes Tagebuch, heute am [11.06.]{date} waren wir endlich wandern
+im Harz. Unser Klassenlehrer Herr [Fuchs]{person} hat uns um
+sieben Uhr geweckt, das war brutal. Auf dem Weg
+ist ein echter Fuchs über den Pfad gerannt und alle
+haben geschrien. [Mohamad]{person} wollte ihn streicheln, aber [Mohammed]{person}
+hat ihn zurückgehalten, zum Glück. [Jessika]{person} hat die
+ganze Zeit gejammert, dass ihre Füße weh tun. Wir
+nennen sie nur noch [Pummel]{person}, aber das hört sie nicht
+gerne. Abends gab es Nudeln, und danach haben wir
+bis elf Uhr Karten gespielt. Mein Zimmer ist das
+beste, und ich bin schon ganz müde.

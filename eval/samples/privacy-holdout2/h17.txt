@@ -1,0 +1,16 @@
+arbeit: Hobby Fotografie.pdf
+klasse: 8
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle dein Hobby in einem kurzen Text für die Schulhomepage vor.
+---
+Ich heiße [Pham Minh Anh]{person}, und meine Freunde nennen
+mich einfach [Anh]{person}. Mein Hobby ist Fotografieren. Mit
+der alten Kamera meines Onkels [Quang]{person} habe ich vor zwei
+Jahren angefangen. Am liebsten fotografiere ich Tiere und
+Straßen bei Regen. Meine Bilder poste ich auf
+[@anh.fotografiert]{contact}, dort habe ich schon über hundert Follower.
+Letztes Jahr hat mir Frau [Vogel]{person} gezeigt, wie man Bilder
+bearbeitet. Ein bisschen stolz bin ich schon, dass
+mein Foto vom Schulhof ausgestellt wurde. Wer will,
+kann mir unter [anh.pham2011@mail.de]{contact} schreiben.

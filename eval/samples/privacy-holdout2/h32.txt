@@ -1,0 +1,16 @@
+arbeit: Tagebuch erste Woche 6a.jpg
+klasse: 6
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über deine erste Woche an der neuen Schule.
+---
+Heute ist Freitag, und die erste Woche ist rum.
+Ich hab ganz nette Leute getroffen, zum Beispiel
+[Anna-Lena Wie-
+land]{person}, die neben mir sitzt. Sie ist die kleine [Lilli]{person}
+ihre beste Freundin, und wir verstehen uns gut. Weil ich
+[Legasthenie]{health} habe, schreibe ich manche Wörter falsch, aber
+Herr [Lorenz]{person} hat gesagt, das ist kein Problem. In Mathe
+hab ich eine Zwei geschrieben, das war richtig cool.
+Nur die Busfahrt ist doof, weil sie so lange
+dauert. Am Wochenende gehe ich zu [Anna-Lena]{person}.

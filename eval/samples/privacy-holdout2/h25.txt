@@ -1,0 +1,15 @@
+arbeit: Vorbild_Fußball_6b.pdf
+klasse: 6
+form: Erörterung
+fach: Deutsch
+aufgabe: Schreibe über eine Person, die dein Vorbild ist, und begründe deine Wahl.
+---
+Mein Vorbild ist die Fußballerin [Alexandra Popp]{keep}. Sie hat
+bei der Nationalmannschaft viele Tore geschossen und trotzdem
+bleibt sie bescheiden. Ich spiele selbst beim [TuS Hohenlimburg]{institution}
+und wohne in [Eckesey]{place}. Mein Trainer [Mirko]{person} sagt, dass man
+nur mit Fleiß gut wird. Auch [Manuel Neuer]{keep} bewundere ich,
+weil er als Torwart so mutig ist. Meine Freundin
+[Paris]{person} und ich waren letzten Sommer nicht in Paris,
+sondern an der Ostsee, und haben dort jeden Tag
+gekickt. Ich will später auch mal Profi werden.

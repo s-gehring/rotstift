@@ -188,6 +188,91 @@ node --experimental-transform-types eval/privacy-score.ts --set holdout --catego
   --detector "App E2B und E4B=$R/chain-holdout-e2b.json+$R/chain-holdout-e4b.json:app"
 ```
 
+## Nachtrag: Blinder Holdout
+
+Der erste Holdout ist verbraucht: Die Regeln der Kette wurden auf seine Lecks geschrieben, die 100 % dort sagen darum wenig über neue Texte. Für eine ehrliche Zahl entstand ein zweiter Satz, `eval/samples/privacy-holdout2`, den beim Bauen der Kette niemand gesehen hat. Er wurde vor der ersten Messung geschrieben und danach nicht mehr an Texten oder Zielen verändert. Die Messung lief genau einmal, mit der Kette aus [ADR 0011](../adr/0011-personenbezug-entfernen.md#erkennung) unverändert (`eval/privacy-chain-run.ts`, E2B und E4B mit `beispiele`, auf simon-pc, 4 Threads, nur CPU, Rechner ohne fremde Last, 3,2 GB bzw. 4,9 GB Peak-RSS). Wer die Messung gemacht hat, hat weder `src/privacy` noch den Fehlerteil dieses Berichts gelesen.
+
+**Satz:** 32 selbst geschriebene Schülertexte der Klassen 5 bis 10 (2704 Wörter, im Schnitt 85 je Arbeit), 140 Vorkommen von Kennungen (`person` 77, `place` 14, `institution` 14, `contact` 12, `date` 18, `number` 5), 37 zu behaltende Namen (`keep`) und 15 sensible Angaben. Neue Themen und Namen: Namen verschiedener Herkunft (ukrainisch, türkisch, vietnamesisch, nigerianisch, serbisch, arabisch), Spitz- und Kosenamen („Kaani“, „Mausi“, „Pummel“), Verschreibungen („Mohamad“ neben „Mohammed“, „Emily“ neben „Emmily“, klein geschriebenes „fynn“), Namen, die Wörter sind (Jung, Stein, Fuchs, Rose, Paris als Vorname neben Paris als Stadt), Namen über Zeilenumbruch („Anna-Lena Wie-⏎land“, „Annette-von-Droste-⏎Hülshoff-Gymnasium“), Briefköpfe, Vereine, Schulen, Praxen, Firmen, Handles, Telefon, Kennzeichen, IBAN, Kunden- und Bestellnummern, Daten mit und ohne Personenbezug (Frist einer Spendenaktion und 1989 stehen unmarkiert), Figuren und Prominente (Krabat, Rico, Möbius, Angela Merkel, Alexandra Popp), Namen aus der Aufgabe, dazu eine Arbeit ganz ohne Kennungen. Texte wie in der ersten Messung: `sauber`, `erkannt` (`render.py --heft --one-page`, GLM-OCR `glm-ocr-q8`) und `rauschen` (`ocr-noise.ts`, `noise1`).
+
+**Gold-Korrekturen nach der ersten Auswertung.** Drei Markierungen waren falsch gesetzt, weil sie ein Rollenwort oder einen Titel mitmarkierten, was das Gold-Format ausschließt („Frau“, „Dr.“, „Opa“ gehören nicht zum Namen): `Frau [Brandes]` (h29), `Dr. [Winkelmann]` (h21) und `Opa [Gerhard]` (h27). Ein vierter Fall (`Frau Dahling`, h14) war schon vor der Messung korrigiert. Die Korrekturen betreffen nur diese Spannen, Texte und Aufgaben blieben unverändert. Vor den Korrekturen standen E2B bei 88 % (sauber), 81 % (erkannt), 72 % (rauschen) und E2B und E4B bei 88 %, 84 %, 72 %. Weitere Änderungen am Gold gab es nicht.
+
+### Ergebnis
+
+Anteil der Arbeiten ohne ein einziges durchgerutschtes Vorkommen einer Kennung (95-%-Intervall), 32 Arbeiten:
+
+| Kette (eingebaut) |               sauber |    erkannt (GLM-OCR) |             rauschen |
+| ----------------- | -------------------: | -------------------: | -------------------: |
+| E2B               | **94 %** (80 bis 98) | **88 %** (72 bis 95) | **75 %** (58 bis 87) |
+| E2B und E4B       | **94 %** (80 bis 98) | **91 %** (76 bis 97) | **75 %** (58 bis 87) |
+
+Weitere Maße (Reihenfolge sauber, erkannt, rauschen):
+
+| Kette       | Vorkommen gefunden | Überersetzung (Wörter) |     Figuren ersetzt | sensibel gefunden | sensible Fehlalarme je Arbeit | Zeit je Arbeit (Mittel) |
+| ----------- | -----------------: | ---------------------: | ------------------: | ----------------: | ----------------------------: | ----------------------: |
+| E2B         |   99 %, 96 %, 94 % |    4,6 %, 5,1 %, 9,6 % | 28/37, 28/37, 30/37 |  53 %, 47 %, 40 % |              0,38, 0,34, 0,47 |     8,0 s, 6,4 s, 8,0 s |
+| E2B und E4B |   99 %, 98 %, 94 % |    4,5 %, 5,0 %, 9,5 % | 28/37, 28/37, 31/37 |  80 %, 80 %, 73 % |              0,84, 1,00, 0,84 |  21,1 s, 16,3 s, 21,0 s |
+
+Die Zeiten sind Mittel je Arbeit auf simon-pc (Median bei `sauber` 7,7 s für E2B, 12,6 s für den Anteil von E4B), die Arbeiten sind mit 85 Wörtern kürzer als im ersten Holdout. Für eine Klasse mit 25 Arbeiten sind das etwa 3,5 min (E2B) und 9 min (E2B und E4B) auf einem Rechner wie simon-pc.
+
+### Lecks nach Kategorie
+
+Recall je Kategorie (Anzahl Vorkommen in Klammern), beide Ketten, sauber, erkannt, rauschen:
+
+| Kategorie          | E2B                        | E2B und E4B                |
+| ------------------ | -------------------------- | -------------------------- |
+| `person` (77)      | 100 %, 100 %, 94 %         | 100 %, 100 %, 94 %         |
+| `place` (14)       | 93 %, 86 %, 100 %          | 93 %, 93 %, 100 %          |
+| `institution` (14) | 93 %, 86 %, 79 %           | 93 %, 93 %, 79 %           |
+| `contact` (12)     | 100 % in allen drei Texten | 100 % in allen drei Texten |
+| `date` (18)        | 100 %, 94 %, 94 %          | 100 %, 94 %, 94 %          |
+| `number` (5)       | 100 % in allen drei Texten | 100 % in allen drei Texten |
+
+Durchgerutschte Vorkommen, mit der Ausgabe von `privacy-score.ts --examples`:
+
+- **`sauber`, beide Ketten (2 von 32 Arbeiten):** eine Einrichtung mit Berufsbezeichnung im Namen („Hausarztpraxis Dr. Berger“, `institution`) und ein Friedhof mit Ortsnamen („Friedhof Altenbochum“, `place`).
+- **`erkannt`:** dieselben zwei, dazu „Samstag, 15.03.“ (`date`, Datum mit Wochentag am Zeilenanfang) in beiden Ketten. Nur E2B verpasst zusätzlich „Technikwelt⏎Hartmann GmbH“ (`institution`) und „Sporthalle⏎Am Hang“ (`place`), beide über einen Zeilenumbruch im Transkript, E4B findet sie.
+- **`rauschen`, beide Ketten (8 von 32 Arbeiten):** fünf Personen, deren Name durch Lesefehler oder angeklebte Fremdbuchstaben entstellt ist („Bn Wilhelm“ für Ben Wilhelm, „iiiQhaaog“ für Quang, „fycnn“ für fynn, „ocSelin“ für Selin, „oParis“ für Paris als Vorname), drei Einrichtungen („Hausarztpraxis Dr. Berger“, „cTSst Hohenlimburg“ für TuS Hohenlimburg, „iKir-nchetmymeanl St. Marien“ für Kirchengemeinde St. Marien) und wieder „Samstag, 15.03.“.
+
+**Die drei häufigsten Arten von Lecks:**
+
+1. **Einrichtungen und Orte mit Eigennamen, die wie Alltagswörter aussehen oder zusammengesetzt sind** („Hausarztpraxis Dr. Berger“ in allen drei Texten, „Friedhof Altenbochum“, „Kirchengemeinde St. Marien“). Sie machen alle Lecks im sauberen Text aus.
+2. **Lesefehler im Namen** (nur `rauschen`): fünf von 77 Personen, dazu drei Einrichtungen. Ein Namenslexikon und die Propagation greifen nicht mehr, wenn die Schreibweise des Namens entstellt ist.
+3. **Mehrzeilige oder kombinierte Angaben im Transkript** (`erkannt`, E2B): Einrichtung und Ort über einen Zeilenumbruch und ein Datum mit Wochentag. E4B fängt davon zwei der drei auf.
+
+Die Ursachen wurden nicht untersucht, der Detektor-Code ist von der Messung bewusst nicht gelesen worden. Die Einordnung ist deshalb eine Beschreibung der Fälle, keine Diagnose.
+
+### Vergleich mit dem alten Holdout
+
+| Kette       | Satz                                       |             sauber |            erkannt |         rauschen |
+| ----------- | ------------------------------------------ | -----------------: | -----------------: | ---------------: |
+| E2B         | alter Holdout (23), auf seine Lecks gebaut | 100 % (86 bis 100) | 100 % (86 bis 100) | 78 % (58 bis 90) |
+| E2B         | blinder Holdout (32)                       |   94 % (80 bis 98) |   88 % (72 bis 95) | 75 % (58 bis 87) |
+| E2B und E4B | alter Holdout (23), auf seine Lecks gebaut | 100 % (86 bis 100) | 100 % (86 bis 100) | 83 % (63 bis 93) |
+| E2B und E4B | blinder Holdout (32)                       |   94 % (80 bis 98) |   91 % (76 bis 97) | 75 % (58 bis 87) |
+
+- **Die 100 % des alten Holdouts waren nicht übertragbar.** Auf unbekannten Texten verliert die Kette bei `sauber` 6 Prozentpunkte, bei `erkannt` 9 bis 12 und bei `rauschen` 3 bis 8. Die Intervalle überlappen, bei 23 und 32 Arbeiten ist der Unterschied für sich nicht gesichert. Die Richtung ist aber eindeutig: Die Obergrenze der Kette liegt bei etwa 9 von 10 Arbeiten ohne Leck, nicht bei 10 von 10.
+- **Bei `rauschen` ändert sich wenig** (78 und 83 % gegen 75 %). Dort lag die Kette auch im alten Holdout nicht bei 100 %, es ist der ehrlichere Maßstab für Handschrift.
+- **Vorkommen gefunden** liegt bei 94 bis 99 % statt 100 %, die Überersetzung bei 4,5 bis 5,1 % (sauber, erkannt) und damit gleich wie vorher (4,7 und 4,9 %). Namen aus Werken und Prominente werden weiter in drei von vier Fällen ersetzt (28/37 gegen 24/32).
+- **Sensible Angaben** werden mit E2B in 53 % gefunden (vorher 50 %), mit E2B und E4B in 80 % (vorher 100 %, bei 15 Angaben gegen 8 ist das ein Unterschied von drei Fällen). Die sensiblen Fehlalarme sind mit 0,38 bzw. 0,84 je Arbeit deutlich höher als vorher (0,09 und 0,30). Sensible Angaben werden nur gewarnt, die Prüfansicht zeigt jede Warnung.
+- **Zeit:** E2B braucht mit 8 s je Arbeit nicht länger als beim ersten Holdout (10 s), die Arbeiten sind aber im Schnitt kürzer.
+
+### Grenzen dieser Messung
+
+- **Dieselbe Autorenfamilie.** Der Satz ist blind gegenüber den Detektoren, nicht gegenüber dem Stil: Er wurde wie dev und der erste Holdout von einem Sprachmodell geschrieben, nach demselben Format. Echte Schülertexte sind unordentlicher, die Zahl ist eher eine Obergrenze.
+- **Kleine Zahlen.** Bei 32 Arbeiten und 140 Vorkommen ist das Intervall etwa ±15 Prozentpunkte, bei den sensiblen Angaben (15) und je Kategorie noch breiter.
+- **Der Satz ist jetzt auch verbraucht.** Wer die Lecks oben in die Regeln übernimmt, braucht einen dritten Satz für die nächste Zahl.
+- **Gerenderte Seiten.** `erkannt` liest GLM-OCR auf den gerenderten Heftseiten fast fehlerfrei (alle Namen richtig), die Wahrheit für echte Hefte liegt zwischen `erkannt` und `rauschen`.
+
+```bash
+R=~/.cache/rotstift/eval/privacy/runs
+node --experimental-transform-types eval/privacy-chain-run.ts --set eval/samples/privacy-holdout2 --threads 4 --out $R/chain-holdout2
+node --experimental-transform-types eval/privacy-score.ts --set eval/samples/privacy-holdout2 --categories \
+  --detector "E2B=$R/chain-holdout2-e2b.json:app" \
+  --detector "E2B und E4B=$R/chain-holdout2-e2b.json+$R/chain-holdout2-e4b.json:app"
+```
+
+Das Transkript muss als `ocr-privacy-holdout2.json` in `~/.cache/rotstift/eval/privacy` liegen (`ocr-run.ts` mit `glm-ocr-q8` auf den mit `render.py --heft --one-page` gerenderten Seiten, wie für dev und Holdout).
+
 ## Nachstellen
 
 Die Befehle stehen in [eval/README.md](../../eval/README.md#personenbezug-erkennen). Transkripte und Läufe liegen in `~/.cache/rotstift/eval/privacy` und sind nicht eingecheckt, die Heftbilder erzeugt `render.py` bei Bedarf neu. Für die Holdout-Tabelle:
