@@ -4,7 +4,7 @@ form: Erlebniserzählung
 fach: Deutsch
 aufgabe: Erzähle von einem traurigen Erlebnis und wie du damit umgegangen bist.
 ---
-Im Winter ist [Opa Gerhard]{person} gestorben. Seitdem ist alles anders,
+Im Winter ist Opa [Gerhard]{person} gestorben. Seitdem ist alles anders,
 [weil Opa gestorben ist]{circumstances} und Oma nun allein im Haus
 sitzt. Wir sind [katholisch]{religion}, und die Beerdigung war in der
 [Kirchengemeinde St. Marien]{institution}. Danach sind wir zum [Friedhof Altenbochum]{place}
