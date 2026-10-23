@@ -297,7 +297,7 @@ impl LlmRuntime {
             return self.start(paths, options).await;
         };
         match self.start(paths, options.clone()).await {
-            Err(error) => {
+            Err(error) if may_blame_draft(&error, &draft) => {
                 diagnostics::record(
                     "sidecar_draft_failed",
                     json!({ "model": options.model, "error": error_kind(&error) }),
@@ -309,7 +309,7 @@ impl LlmRuntime {
                 };
                 self.start(paths, plain).await
             }
-            started => started,
+            other => other,
         }
     }
 
@@ -691,6 +691,14 @@ fn error_kind(error: &LlmError) -> &'static str {
         LlmError::Timeout => "timeout",
         LlmError::Request(_) => "request",
         LlmError::Server { .. } => "server",
+    }
+}
+
+fn may_blame_draft(error: &LlmError, draft: &str) -> bool {
+    match error {
+        LlmError::ExitedDuringStartup(_) => true,
+        LlmError::InvalidModelName(name) | LlmError::ModelNotFound(name) => name == draft,
+        _ => false,
     }
 }
 
@@ -1348,6 +1356,27 @@ mod tests {
             assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
             assert!(!runtime.draft_failed("mtp.gguf"));
             runtime.stop();
+        }
+
+        #[tokio::test]
+        async fn keeps_the_head_when_the_start_fails_for_another_reason() {
+            let paths = fake_sidecar("draft-timeout", "echo start >> starts\nexec sleep 30");
+            std::fs::write(paths.models_dir.join("mtp.gguf"), b"").unwrap();
+            let runtime = LlmRuntime::with_startup_timeout(Duration::from_millis(500));
+            let mut with_head = options("model.gguf");
+            with_head.draft = Some("mtp.gguf".into());
+            let result = runtime.start_with_fallback(&paths, with_head.clone()).await;
+            assert_eq!(result, Err(LlmError::StartupTimeout));
+            let starts =
+                std::fs::read_to_string(paths.library_dir.join("starts")).unwrap_or_default();
+            assert!(starts.lines().count() <= 1, "{starts}");
+            assert!(!runtime.draft_failed("mtp.gguf"));
+
+            let mut missing_model = with_head;
+            missing_model.model = "other.gguf".into();
+            let result = runtime.start_with_fallback(&paths, missing_model).await;
+            assert_eq!(result, Err(LlmError::ModelNotFound("other.gguf".into())));
+            assert!(!runtime.draft_failed("mtp.gguf"));
         }
 
         #[tokio::test]
