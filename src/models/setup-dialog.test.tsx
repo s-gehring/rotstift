@@ -118,7 +118,7 @@ describe('SetupDialog content', () => {
     );
     expect(listed).toEqual([
       ['Texterkennung', '1,4 GB', ''],
-      ['Korrektur', '2,8 GB', ''],
+      ['Korrektur', '2,9 GB', ''],
       ['Zusammen', '4,3 GB', ''],
     ]);
     expect(button('Herunterladen')?.disabled).toBe(false);
@@ -132,7 +132,7 @@ describe('SetupDialog content', () => {
     );
     expect(listed).toEqual([
       ['Texterkennung', '1,4 GB', ''],
-      ['Inhalt und Form', '2,8 GB', ''],
+      ['Inhalt und Form', '2,9 GB', ''],
       ['Zusammen', '4,3 GB', ''],
     ]);
   });
@@ -147,7 +147,7 @@ describe('SetupDialog content', () => {
     );
     expect(listed).toEqual([
       ['Texterkennung', '1,4 GB', ''],
-      ['Korrektur sowie Inhalt und Form', '2,8 GB', ''],
+      ['Korrektur sowie Inhalt und Form', '2,9 GB', ''],
       ['Zusammen', '4,3 GB', ''],
     ]);
 
@@ -210,8 +210,8 @@ describe('SetupDialog partly downloaded models', () => {
     );
     expect(listed).toEqual([
       ['Texterkennung', '485 MB', ''],
-      ['Korrektur', '2,8 GB', ''],
-      ['Zusammen', '3,3 GB', ''],
+      ['Korrektur', '2,9 GB', ''],
+      ['Zusammen', '3,4 GB', ''],
     ]);
   });
 
@@ -253,7 +253,7 @@ describe('SetupDialog warnings', () => {
     await mount({ roles: BOTH }, { hardware: { totalRamBytes: 4 * GIB, freeDiskBytes: 100e9 } });
     await vi.waitFor(() =>
       expect(container.querySelector('.setup-warning')?.textContent).toBe(
-        'Gemma 4 E2B it (Q4_0) braucht etwa 3,6 GB, dieser Rechner hat 4,0 GB Arbeitsspeicher.',
+        'Gemma 4 E2B it (Q4_0) braucht etwa 3,8 GB, dieser Rechner hat 4,0 GB Arbeitsspeicher.',
       ),
     );
     expect(container.querySelectorAll('.setup-warning')).toHaveLength(1);
@@ -301,14 +301,14 @@ describe('SetupDialog download', () => {
       modelId: corrector.id,
       state: 'progress',
       downloadedBytes: 1_000_000_000,
-      totalBytes: 2_841_481_184,
+      totalBytes: 2_900_717_056,
     });
     const bar = progressBar();
     expect(bar?.getAttribute('aria-label')).toBe('Fortschritt der Einrichtung');
     expect(bar?.getAttribute('aria-valuenow')).toBe('1000000000');
-    expect(bar?.getAttribute('aria-valuemax')).toBe('2841481184');
-    expect(bar?.getAttribute('aria-valuetext')).toBe('1,0 GB von 2,8 GB');
-    expect(container.querySelector('.setup-progress-text')?.textContent).toBe('1,0 GB von 2,8 GB');
+    expect(bar?.getAttribute('aria-valuemax')).toBe('2900717056');
+    expect(bar?.getAttribute('aria-valuetext')).toBe('1,0 GB von 2,9 GB');
+    expect(container.querySelector('.setup-progress-text')?.textContent).toBe('1,0 GB von 2,9 GB');
 
     emit(fake, { modelId: corrector.id, state: 'done' });
     await vi.waitFor(() => expect(rows()).toEqual(['ready', 'ready']));

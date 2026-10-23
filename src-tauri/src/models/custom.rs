@@ -84,6 +84,9 @@ pub fn validate(model: &CustomModel) -> Result<(), String> {
     if (model.role == Role::Transcriber) != model.files.mmproj.is_some() {
         return Err(format!("model {}: mmproj does not fit the role", model.id));
     }
+    if model.files.draft.is_some() {
+        return Err(format!("model {}: own models take no draft", model.id));
+    }
     validate_file(&model.files.model, &model.source)?;
     if let Some(mmproj) = &model.files.mmproj {
         validate_file(mmproj, &model.source)?;
@@ -364,6 +367,7 @@ pub async fn from_link(
     let files = ModelFiles {
         model,
         mmproj: files.next().map(to_file),
+        draft: None,
     };
     Ok(CustomModel {
         id: model_id(&files),
@@ -497,6 +501,7 @@ pub fn from_files(
     let files = ModelFiles {
         model: installed.next().ok_or(problem(CustomProblem::NoGguf))?,
         mmproj: installed.next(),
+        draft: None,
     };
     Ok(CustomModel {
         id: model_id(&files),
@@ -646,6 +651,7 @@ mod tests {
                 bytes: 2_244_011_552,
             },
             mmproj: None,
+            draft: None,
         };
         CustomModel {
             id: model_id(&files),
@@ -668,6 +674,9 @@ mod tests {
         let mut renamed = model.clone();
         renamed.id = "custom-000000000000".into();
         assert!(validate(&renamed).is_err());
+        let mut with_draft = model.clone();
+        with_draft.files.draft = Some(model.files.model.clone());
+        assert!(validate(&with_draft).is_err());
         let mut local_with_url = model;
         local_with_url.source = Source::File;
         assert!(validate(&local_with_url).is_err());
@@ -683,6 +692,7 @@ mod tests {
         assert_eq!(catalog.models().len(), 1);
         let entry = catalog.find(&id).unwrap();
         assert_eq!(entry.role, Role::Corrector);
+        assert_eq!(entry.files.draft, None);
         assert!(!entry.server.cpu_repack);
         assert_eq!(
             entry.prompt,
@@ -691,6 +701,7 @@ mod tests {
 
         let mut stored: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(stored["models"][0]["files"].get("draft").is_none());
         let mut broken = stored["models"][0].clone();
         broken["id"] = "custom-ffffffffffff".into();
         stored["models"].as_array_mut().unwrap().push(broken);
@@ -720,6 +731,7 @@ mod tests {
                 ..listed.files.model.clone()
             },
             mmproj: None,
+            draft: None,
         };
         let model = CustomModel {
             id: model_id(&files),

@@ -41,6 +41,8 @@ pub struct ModelFile {
 pub struct ModelFiles {
     pub model: ModelFile,
     pub mmproj: Option<ModelFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub draft: Option<ModelFile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -92,6 +94,13 @@ impl ModelEntry {
     }
 
     pub fn file_list(&self) -> Vec<&ModelFile> {
+        self.required_files()
+            .into_iter()
+            .chain(self.files.draft.as_ref())
+            .collect()
+    }
+
+    pub fn required_files(&self) -> Vec<&ModelFile> {
         std::iter::once(&self.files.model)
             .chain(self.files.mmproj.as_ref())
             .collect()
@@ -201,13 +210,13 @@ const TRANSCRIBER_SHAPE: Shape = Shape {
         "request.uncertainBelow",
     ],
     optional: &[],
-    forbidden: &["lineMode", "system"],
+    forbidden: &["lineMode", "system", "files.draft"],
 };
 
 const CORRECTOR_SHAPE: Shape = Shape {
     required: &["lineMode"],
     nullable: &["server.threads", "server.gpuLayers"],
-    optional: &["system"],
+    optional: &["system", "files.draft"],
     forbidden: &[
         "files.mmproj",
         "server.imageMaxTokens",
@@ -257,9 +266,9 @@ fn validate_role(entry: &ModelEntry) -> Result<(), String> {
                     "model {id}: a transcriber needs mmproj and imageMaxEdge"
                 ));
             }
-            if entry.line_mode.is_some() || entry.system.is_some() {
+            if entry.line_mode.is_some() || entry.system.is_some() || entry.files.draft.is_some() {
                 return Err(format!(
-                    "model {id}: lineMode and system belong to correctors"
+                    "model {id}: lineMode, system and draft belong to correctors"
                 ));
             }
         }
@@ -319,6 +328,9 @@ impl Registry {
             validate_file(id, "model", &entry.files.model)?;
             if let Some(mmproj) = &entry.files.mmproj {
                 validate_file(id, "mmproj", mmproj)?;
+            }
+            if let Some(draft) = &entry.files.draft {
+                validate_file(id, "draft", draft)?;
             }
             validate_role(entry)?;
             for file in entry.file_list() {
@@ -464,8 +476,8 @@ mod tests {
         let corrector = registry().unwrap().find(DEFAULT_CORRECTOR_ID).unwrap();
         assert_eq!(corrector.role, Role::Corrector);
         assert_eq!(corrector.files.mmproj, None);
-        assert_eq!(corrector.file_list().len(), 1);
-        assert_eq!(corrector.total_bytes(), 2_841_481_184);
+        assert_eq!(corrector.required_files().len(), 1);
+        assert_eq!(corrector.total_bytes(), 2_841_481_184 + 59_235_872);
         assert_eq!(corrector.server.context_size, 4096);
         assert!(!corrector.server.cpu_repack);
         assert_eq!(corrector.server.reasoning, Reasoning::Off);
@@ -482,6 +494,56 @@ mod tests {
         assert_eq!(transcriber.role, Role::Transcriber);
         assert!(transcriber.server.cpu_repack);
         assert_eq!(transcriber.server.reasoning, Reasoning::Auto);
+    }
+
+    #[test]
+    fn every_gemma_corrector_brings_its_head_from_the_same_commit() {
+        let registry = registry().unwrap();
+        for id in ["gemma-4-e2b-q4", "gemma-4-e4b-q4", "gemma-4-26b-a4b-q4"] {
+            let entry = registry.find(id).unwrap();
+            let draft = entry.files.draft.as_ref().unwrap();
+            assert!(draft.name.starts_with("mtp-"), "{id}");
+            let commit = |url: &str| url.rsplit('/').nth(1).unwrap().to_owned();
+            assert_eq!(commit(&draft.url), commit(&entry.files.model.url), "{id}");
+            assert_eq!(entry.required_files(), [&entry.files.model]);
+            assert_eq!(entry.file_list(), [&entry.files.model, draft]);
+            assert_eq!(entry.total_bytes(), entry.files.model.bytes + draft.bytes);
+        }
+        for entry in &registry.models {
+            if entry.role == Role::Transcriber {
+                assert_eq!(entry.files.draft, None, "{}", entry.id);
+            }
+        }
+    }
+
+    #[test]
+    fn only_a_corrector_takes_a_pinned_head() {
+        let draft = registry()
+            .unwrap()
+            .find(DEFAULT_CORRECTOR_ID)
+            .unwrap()
+            .files
+            .draft
+            .clone();
+        let error = rejection(|m| m["files"]["draft"] = json!(draft));
+        assert!(error.contains("takes no files.draft"), "{error}");
+        let error = corrector_rejection(|m| m["files"]["draft"] = Value::Null);
+        assert!(error.contains("files.draft must not be null"), "{error}");
+        let error = corrector_rejection(|m| {
+            m["files"]["draft"]["url"] = json!(format!(
+                "https://huggingface.co/a/b/resolve/main/{}",
+                draft.as_ref().unwrap().name
+            ));
+        });
+        assert!(error.contains("draft: url must be pinned"), "{error}");
+        let json = json_with(corrector_index(), |m| {
+            m["files"].as_object_mut().unwrap().remove("draft");
+        });
+        let without = Registry::parse(&json).unwrap();
+        assert_eq!(
+            without.find(DEFAULT_CORRECTOR_ID).unwrap().files.draft,
+            None
+        );
     }
 
     #[test]

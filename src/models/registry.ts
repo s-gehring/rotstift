@@ -49,7 +49,7 @@ const transcriberSchema = z.strictObject({
 const correctorSchema = z.strictObject({
   ...commonFields,
   role: z.literal('corrector'),
-  files: z.strictObject({ model: fileSchema }),
+  files: z.strictObject({ model: fileSchema, draft: fileSchema.optional() }),
   server: z.strictObject(serverFields),
   request: z.strictObject(requestFields),
   lineMode: z.enum(['plain', 'numbered']),
@@ -208,16 +208,24 @@ export function customSource(model: Sourced<AnyModelInfo>): CustomSource | null 
 const GB = 1e9;
 const REPACK_MIN_RAM = 12 * GIB;
 const RESERVED_RAM = 3.5 * GIB;
+const DRAFT_OVERHEAD = 0.15 * GB;
+
+export function modelBudget(totalRamBytes: number): number {
+  return totalRamBytes - RESERVED_RAM;
+}
 
 function neededBytes(model: AnyModelInfo, repack: boolean): number {
   const overhead = model.role === 'transcriber' ? 1.4 * GB : 0.65 * GB;
-  return totalBytes(model) * 1.05 + overhead + (repack ? 0.47 * model.files.model.bytes : 0);
+  const draft = draftFile(model) === null ? 0 : DRAFT_OVERHEAD;
+  return (
+    totalBytes(model) * 1.05 + overhead + draft + (repack ? 0.47 * model.files.model.bytes : 0)
+  );
 }
 
 export function repacks(model: AnyModelInfo, totalRamBytes: number | null): boolean {
   if (totalRamBytes === null) return model.server.cpuRepack;
   const wanted = model.server.cpuRepack || totalRamBytes >= REPACK_MIN_RAM;
-  return wanted && neededBytes(model, true) <= totalRamBytes - RESERVED_RAM;
+  return wanted && neededBytes(model, true) <= modelBudget(totalRamBytes);
 }
 
 export function estimateRamBytes(model: AnyModelInfo, totalRamBytes: number | null): number {
@@ -226,14 +234,18 @@ export function estimateRamBytes(model: AnyModelInfo, totalRamBytes: number | nu
 
 export function exceedsMemory(model: AnyModelInfo, totalRamBytes: number | null): boolean {
   return (
-    totalRamBytes !== null && estimateRamBytes(model, totalRamBytes) > totalRamBytes - RESERVED_RAM
+    totalRamBytes !== null && estimateRamBytes(model, totalRamBytes) > modelBudget(totalRamBytes)
   );
 }
 
+export function draftFile(model: AnyModelInfo) {
+  return model.role === 'corrector' ? (model.files.draft ?? null) : null;
+}
+
 export function modelFiles(model: AnyModelInfo) {
-  return model.role === 'transcriber'
-    ? [model.files.model, model.files.mmproj]
-    : [model.files.model];
+  if (model.role === 'transcriber') return [model.files.model, model.files.mmproj];
+  const draft = draftFile(model);
+  return draft === null ? [model.files.model] : [model.files.model, draft];
 }
 
 export function totalBytes(model: AnyModelInfo): number {

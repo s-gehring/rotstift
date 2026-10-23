@@ -238,6 +238,7 @@ export function useAppModel(): AppModel {
       second: transcriberCloud === null && secondReading.enabled ? secondReaderSetup.model : null,
       corrector: cloud.steps.corrector === undefined ? correctorSetup.model : null,
       reviewer: cloud.steps.reviewer === undefined ? reviewerSetup.model : null,
+      correctorDraft: correctorSetup.status?.draftReady === true,
     },
     transcriberSetup.state.hardware?.totalRamBytes ?? null,
   );

@@ -13,6 +13,7 @@ export interface ModelStatus {
   state: ModelState;
   downloadedBytes: number;
   totalBytes: number;
+  draftReady?: boolean;
 }
 
 export interface HardwareInfo {

@@ -13,4 +13,4 @@ mod verified;
 #[cfg(test)]
 mod download_tests;
 
-pub use manager::{ModelManager, entry};
+pub use manager::{ModelManager, draft_ready, entry};

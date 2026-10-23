@@ -142,24 +142,27 @@ Es läuft immer genau ein llama-server. Drei gleichzeitig würden auf 8 GB nicht
 Die App schätzt den Peak-Speicher jedes Eintrags, geprüft oder eigen, aus den Dateigrößen (GB = 10⁹ Byte):
 
 ```
-Bedarf = 1,05 × (Modell + mmproj) + Grundbedarf + Repack
+Bedarf = 1,05 × (Modell + mmproj + Kopf) + Grundbedarf + Kopfpuffer + Repack
 Grundbedarf = 1,4 GB für die Erkennung (Bildkodierung), 0,65 GB für die Textschritte
+Kopfpuffer = 0,15 GB, wenn der Eintrag einen MTP-Kopf hat (siehe Spekulatives Dekodieren)
 Repack = 0,47 × Modell, wenn der Eintrag repackt (cpuRepack, oder ab 12 GiB Arbeitsspeicher) und die repackte Kopie in den Speicher passt
 ```
 
 Die Faktoren sind an den gemessenen Peaks kalibriert, nicht an der Dateigröße allein:
 
-| Modell             | Repack | gemessen | geschätzt |
-| ------------------ | ------ | -------: | --------: |
-| Gemma 4 E2B        | nein   |   3,4 GB |   3,63 GB |
-| Gemma 4 E4B        | nein   |   5,2 GB |   5,47 GB |
-| GLM-OCR            | nein   |  2,49 GB |    2,9 GB |
-| GLM-OCR            | ja     |   3,2 GB |   3,35 GB |
-| Qwen3-VL 4B Q4_K_M | nein   |  4,42 GB |    4,5 GB |
+| Modell               | Repack | gemessen | geschätzt |
+| -------------------- | ------ | -------: | --------: |
+| Gemma 4 E2B          | nein   |   3,4 GB |   3,63 GB |
+| Gemma 4 E4B          | nein   |   5,2 GB |   5,47 GB |
+| Gemma 4 E2B mit Kopf | nein   |  3,3 GB¹ |   3,85 GB |
+| Gemma 4 E4B mit Kopf | nein   |  5,1 GB¹ |   5,68 GB |
+| GLM-OCR              | nein   |  2,49 GB |    2,9 GB |
+| GLM-OCR              | ja     |   3,2 GB |   3,35 GB |
+| Qwen3-VL 4B Q4_K_M   | nein   |  4,42 GB |    4,5 GB |
 
-Die Erkennung ohne Repack ist mit fünf Seiten je Modell gemessen. Qwen3-VL mit Repack lag in einer älteren Messung mit mehr Bild-Tokens bei 6,4 GB, die Schätzung (5,67 GB) liegt dort darunter; gewarnt wird auf 8 GB trotzdem.
+¹ Auf simon-pc, wo dieselben Modelle ohne Kopf 3,1 und 4,9 GB brauchen ([Gründlicher Modus](../evaluations/2026-10-gruendlich.md#spekulatives-dekodieren)). Der Kopf kostet also rund 0,2 GB, die Zeilen ohne Kopf sind auf dem Mac gemessen. Die Erkennung ohne Repack ist mit fünf Seiten je Modell gemessen. Qwen3-VL mit Repack lag in einer älteren Messung mit mehr Bild-Tokens bei 6,4 GB, die Schätzung (5,67 GB) liegt dort darunter; gewarnt wird auf 8 GB trotzdem.
 
-Neben jedem Eintrag steht „braucht etwa X GB“. Übersteigt der Bedarf den Arbeitsspeicher abzüglich 3,5 GiB für System und App (auf 8 GiB also 4,5 GiB oder 4,83 GB), ist der Text rot. Gemma 4 E4B (5,47 GB) ist auf 8 GB markiert, GLM-OCR (3,35 GB), Gemma 4 E2B (3,63 GB) und Qwen3-VL (4,5 GB ohne Repack, siehe [Gründlichkeit](#modelle-größer-als-der-speicher)) nicht. Gesperrt wird nichts. Der Einrichtungsdialog nutzt dieselbe Schätzung und nennt das Modell mit dem größten Bedarf.
+Neben jedem Eintrag steht „braucht etwa X GB“. Übersteigt der Bedarf den Arbeitsspeicher abzüglich 3,5 GiB für System und App (auf 8 GiB also 4,5 GiB oder 4,83 GB), ist der Text rot. Gemma 4 E4B (5,68 GB) ist auf 8 GB markiert, GLM-OCR (3,35 GB), Gemma 4 E2B (3,85 GB) und Qwen3-VL (4,5 GB ohne Repack, siehe [Gründlichkeit](#modelle-größer-als-der-speicher)) nicht. Gesperrt wird nichts. Der Einrichtungsdialog nutzt dieselbe Schätzung und nennt das Modell mit dem größten Bedarf.
 
 ### Fehler am Schritt, ein Klick zurück
 
@@ -215,20 +218,46 @@ Nichts wird gesperrt, auch nicht auf 8 GB. Ein Modell über dem freien Speicher 
 - `--repack` kopiert die Gewichte in anonymen Speicher, der nicht aus der Datei nachgeladen werden kann. Die App repackt darum nur, wenn die repackte Kopie in den Speicher passt (Bedarf mit Repack unter Arbeitsspeicher minus 3,5 GiB), sonst startet sie mit `--no-repack`. Gleiche Regel in Rust (`start_options`) und TS (`repacks`). Folge: Qwen3-VL läuft auf 8 GB jetzt ohne Repack (4,5 statt 5,67 GB) und ist dort nicht mehr markiert.
 - Liegt auch der Bedarf ohne Repack über dem Speicher, wartet die App bis zu 12 h statt 15 min auf eine Antwort (`fromDisk` in den Startoptionen).
 
+#### Spekulatives Dekodieren
+
+Ergänzt am 2026-10-23 nach [Gründlicher Modus](../evaluations/2026-10-gruendlich.md#spekulatives-dekodieren) (#73).
+
+Gemma 4 E2B, E4B und 26B A4B laufen mit ihrem MTP-Kopf (Multi-Token-Prediction), sobald er eingerichtet ist: llama-server schlägt mit dem Kopf mehrere Token vor und prüft sie in einem Schritt (`--spec-type draft-mtp --model-draft <Kopf>`). Bei Temperatur 0 ändert das keine Marke und spart 28 bis 51 % der Korrekturzeit. Es ist der einzige Hebel, der auch die Vorgabe Schnell schneller macht.
+
+- **Datei:** Der Kopf steht in `models.json` als `files.draft` des Korrekturmodells, `mtp-gemma-4-*-it-Q4_0.gguf` von ggml-org, gepinnt auf denselben Commit wie das Modell und mit SHA-256 geprüft wie jede Modelldatei. 60 MB für E2B und E4B, 250 MB für 26B A4B. Er wird mit dem Modell geladen, geprüft, aus Datei importiert und gelöscht und zählt in Größe und Speicherbedarf mit (siehe Speicherbedarf). Nur ein geprüftes Korrekturmodell darf einen Kopf haben, Rust und TS lehnen ihn bei Erkennungsmodellen und eigenen Modellen ab.
+- **Nie blockierend:** Ob ein Modell bereit ist, hängt nur an Modell und mmproj. Fehlt der Kopf, ist er unvollständig oder ohne gültige Prüfmarke, läuft das Modell ohne Spekulation weiter. Eine bestehende Installation bekommt den Kopf mit dem nächsten Download des Modells, etwa in der nächsten Einrichtung. Der Downloader überspringt dabei die vorhandenen Dateien. `model_status` meldet `draftReady`.
+- **Start:** Rust gibt den Kopf nur mit, wenn er vollständig ist und eine gültige Prüfmarke hat. Startet der Server mit Kopf nicht, startet er sofort ohne ihn neu, protokolliert `sidecar_draft_failed` und lässt diesen Kopf bis zum nächsten Start der App weg. `sidecar_start` protokolliert, ob ein Kopf dabei war.
+- **Inhalt und Form** nutzt denselben Server und damit auch den Kopf. Ob das dort hilft, ist nicht gemessen, die Antworten sind kurze JSON-Objekte.
+- Cloud-Schritte und eigene Modelle laufen ohne Kopf.
+
+Gemessen mit `src/llm/mtp.integration.test.ts` auf dem Mac (Apple M4 Pro, 12 Kerne, 48 GB, gebündelter llama-server `b11551`, Threads wie in der App), Gemma 4 E2B auf den 8 Seiten aus `eval/samples/texts` (vier Texte mit und ohne Fehler), abwechselnd ohne und mit Kopf, je zweimal:
+
+| Variante  | s je Seite | 8 Seiten     | Marken | angenommene Token    | Peak-RSS |
+| --------- | ---------: | ------------ | ------ | -------------------- | -------: |
+| ohne Kopf | 2,09, 2,11 | 16,8, 16,9 s | 38, 38 |                      | 2,92 GiB |
+| mit Kopf  | 1,16, 1,17 | 9,3, 9,3 s   | 38, 38 | 1109 von 1182 (94 %) | 3,09 GiB |
+
+Die korrigierten Texte sind in allen vier Läufen Zeichen für Zeichen gleich. Der Kopf spart auf dem Mac 45 %, mehr als auf simon-pc mit 4 Threads (28 %), weil das Prüfen mehrerer Token Rechenleistung braucht, die der Mac mit allen Kernen hat. Drei fremde llama-server waren geladen, aber untätig (0,1 % CPU), die Last lag bei 4 von 12 Kernen.
+
 #### Restdauer
 
-Die Schätzung vor dem Start und die Restdauer rechnen je Modell, nicht nur je Schritt (`src/models/speed.ts`). Startwert ist die Faustregel des Schritts (30 s je Seite Erkennung, 15 s je Seite Korrektur, 20 s je Arbeit Inhalt und Form) mal einem Faktor relativ zu GLM-OCR oder Gemma 4 E2B:
+Die Schätzung vor dem Start und die Restdauer rechnen je Modell, nicht nur je Schritt (`src/models/speed.ts`). Startwert ist die Faustregel des Schritts (30 s je Seite Erkennung, 15 s je Seite Korrektur, 20 s je Arbeit Inhalt und Form) mal einem Faktor je Schritt relativ zu GLM-OCR oder Gemma 4 E2B. Die Faktoren stammen seit dem 2026-10-23 aus der Messung auf simon-pc mit 4 Threads ([Faktoren für die Restdauer](../evaluations/2026-10-gruendlich.md#faktoren-für-die-restdauer), #73):
 
-| Modell               | Faktor | Quelle                                         |
-| -------------------- | -----: | ---------------------------------------------- |
-| GLM-OCR, Gemma 4 E2B |      1 | Vorgabe                                        |
-| LightOnOCR-3 0.8B    |   0,65 | ScaDS-Seiten, 9,9 statt 15,5 s (#68)           |
-| Gemma 4 E4B          |    1,8 | Rechtschreibung 7,7 statt 4,2 s (oben)         |
-| Qwen3-VL 4B          |    3,1 | Erkennung genauer                              |
-| Gemma 4 26B A4B      |    3,5 | Inhalt und Form auf dem Mac, 1,9-mal E4B (#68) |
-| eigenes Modell       |  Größe | Dateigröße relativ zur Vorgabe des Schritts    |
+| Modell            | Erkennung | Zweite Lesung | Korrektur | Inhalt und Form |
+| ----------------- | --------: | ------------: | --------: | --------------: |
+| GLM-OCR           |         1 |               |           |                 |
+| Qwen3-VL 4B       |       3,1 |               |           |                 |
+| LightOnOCR-3 0.8B |           |           0,9 |           |                 |
+| Gemma 4 E2B       |           |               |         1 |               1 |
+| Gemma 4 E4B       |           |               |      1,95 |             1,9 |
+| Gemma 4 26B A4B   |           |               |       1,9 |             2,1 |
 
-Die zweite Lesung ist ein eigener Schritt mit eigenem Wert (`confirm`, Startwert 30 s mal Faktor des Zweitlesers), damit der Wert der Erkennung nicht zwischen zwei Modellen pendelt. Ein Modell über dem Speicher bekommt den Faktor 10, bis simon-pc die Zeiten unter einem Deckel liefert. Gelernt wird wie bisher aus dem Lauf, aber getrennt je Schritt und Modell (`rotstift.model-rates`). Die alten Werte je Schritt (`rotstift.step-rates`) gelten beim ersten Start für die Vorgabemodelle. Ab 5 h nennt die Schätzung ganze Stunden („etwa 7 h“).
+Ein eigenes Modell bekommt die Größe seiner Gewichte (Modell und mmproj) relativ zur Vorgabe des Schritts. Dazu kommen zwei Aufschläge:
+
+- **MTP-Kopf:** ×0,7 in der Korrektur, wenn der Kopf des Korrekturmodells eingerichtet ist (`draftReady`). Der gelernte Wert steht dann unter einem eigenen Schlüssel (`correct:gemma-4-e2b-q4+mtp`), damit ein früher ohne Kopf gelernter Wert die Ersparnis nicht verdeckt. Inhalt und Form bekommt keinen Faktor, dort ist Spekulation nicht gemessen.
+- **Modell über dem Speicher:** Der Aufschlag hängt am Anteil `m` der Gewichte, der nicht in den Speicher passt, den die Registry dem Modell lässt (Arbeitsspeicher minus 3,5 GiB): `1 + 11 × (m ÷ ⅔)²`. Passt die Datei, gibt es keinen Aufschlag, auch wenn Kontext und Puffer darüber liegen, denn E4B läuft auf 8 GB per mmap ohne Zeitverlust (gemessen 1,0). 26B A4B fehlen auf 16 GB 8 % (Kurve 1,17, gemessen 1,18) und auf 8 GB 67 % (Kurve 12,1, gemessen 11,9 von einer NVMe). Sehr gründlich auf 8 GB ergibt damit 23 für die Korrektur und 25 für Inhalt und Form wie in der Messung. Die Kurve nimmt die NVMe-Werte. Von einer SATA-SSD dauert es fast fünfmal so lange (57 statt 12), das korrigiert die gelernte Rate nach den ersten Seiten. Den Plattentyp erkennt die App nicht: Unter Linux unterscheidet `rotational` eine SATA-SSD nicht von einer NVMe, und der Weg vom Modellordner zum Gerät führt über btrfs, LVM oder Verschlüsselung; unter Windows bräuchte es WMI. Billig und zuverlässig ist das nicht. Der pauschale Faktor 10 entfällt.
+
+Die zweite Lesung ist ein eigener Schritt mit eigenem Wert (`confirm`, Startwert 30 s mal Faktor des Zweitlesers), damit der Wert der Erkennung nicht zwischen zwei Modellen pendelt. Gelernt wird wie bisher aus dem Lauf, aber getrennt je Schritt und Modell (`rotstift.model-rates`). Die alten Werte je Schritt (`rotstift.step-rates`) gelten beim ersten Start für die Vorgabemodelle. Ab 5 h nennt die Schätzung ganze Stunden („etwa 7 h“).
 
 Gemessen mit `eval/class-run.integration.test.ts` auf dem Mac (Apple M4 Pro, 48 GB, nur CPU), eine gerenderte Seite mit Inhalt und Form (`brief-ohne-rahmen-1`), alle Modelle in den Speicher passend. Der Mac war durch drei fremde llama-server belastet, die Zeiten zeigen das Verhältnis, nicht den schwachen Laptop:
 
@@ -317,4 +346,4 @@ Alle gelisteten Kandidaten stehen unter Apache-2.0 oder MIT, Weitergabe als Down
 - Ohne Messung keine Lesesicherheit für eigene Erkennungsmodelle.
 - MiniCPM-V 4.7 lädt seit dem Update auf llama.cpp `b11551`, liest aber schlechter als GLM-OCR und verbessert Schülerfehler.
 - Offen: Eine Reihenfolge „erst alle Seiten erkennen, dann alle korrigieren“, die Wechsel je Lauf begrenzt, ist nicht Teil dieser Entscheidung.
-- Offen: Faktoren für Modelle über dem Speicher, sobald simon-pc unter einem Deckel gemessen hat.
+- Gemma 4 E2B, E4B und 26B A4B laden ihren MTP-Kopf mit (60 bzw. 250 MB mehr), die Restdauer rechnet mit Faktoren je Schritt und einem Aufschlag nach dem fehlenden Speicher (Gründlichkeit, Restdauer).

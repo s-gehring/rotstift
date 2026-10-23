@@ -124,6 +124,12 @@
           "url": "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/6938c58e698502037401a5f19f6905f2fb2f7dee/gemma-4-E2B-it-Q4_0.gguf",
           "sha256": "8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52",
           "bytes": 2841481184
+        },
+        "draft": {
+          "name": "mtp-gemma-4-E2B-it-Q4_0.gguf",
+          "url": "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/6938c58e698502037401a5f19f6905f2fb2f7dee/mtp-gemma-4-E2B-it-Q4_0.gguf",
+          "sha256": "718d3a44057924d5840c65a0aeedf7929366adeeda92a2006955ccabaf645ef4",
+          "bytes": 59235872
         }
       },
       "server": {
@@ -153,6 +159,12 @@
           "url": "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/a69f018d7678a2b9f5e705f8903d6fb29b9b25dc/gemma-4-E4B-it-Q4_0.gguf",
           "sha256": "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2",
           "bytes": 4590807392
+        },
+        "draft": {
+          "name": "mtp-gemma-4-E4B-it-Q4_0.gguf",
+          "url": "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/a69f018d7678a2b9f5e705f8903d6fb29b9b25dc/mtp-gemma-4-E4B-it-Q4_0.gguf",
+          "sha256": "d19a11e4fd5019967d9296f77f4d3e139c8903909f70c3a9cf009c9af4b9b88d",
+          "bytes": 59678240
         }
       },
       "server": {
@@ -182,6 +194,12 @@
           "url": "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/9cf8c8db0f83fb4582f15381f8fb1a7c1b0b9ca2/gemma-4-26B-A4B-it-Q4_0.gguf",
           "sha256": "d208665ab1cd3a69f7a9a4bc59430e8448c8093d9b06334f566ac59d6d504a03",
           "bytes": 14618145824
+        },
+        "draft": {
+          "name": "mtp-gemma-4-26B-A4B-it-Q4_0.gguf",
+          "url": "https://huggingface.co/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/9cf8c8db0f83fb4582f15381f8fb1a7c1b0b9ca2/mtp-gemma-4-26B-A4B-it-Q4_0.gguf",
+          "sha256": "e00b0ce326d03d8f6f6972ad2320fe90b6ff25a3da5fc51bec15efe283052aa2",
+          "bytes": 251939520
         }
       },
       "server": {

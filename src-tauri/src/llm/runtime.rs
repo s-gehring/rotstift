@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Read};
 use std::net::Ipv4Addr;
@@ -33,6 +33,8 @@ const MAX_EARLY_CANCELS: usize = 32;
 pub struct StartOptions {
     pub model: String,
     pub mmproj: Option<String>,
+    #[serde(default)]
+    pub draft: Option<String>,
     pub context_size: Option<u32>,
     pub threads: Option<u32>,
     pub gpu_layers: Option<u32>,
@@ -223,6 +225,7 @@ pub struct LlmRuntime {
     state: Mutex<State>,
     starting: tokio::sync::Mutex<()>,
     requests: Mutex<Requests>,
+    failed_drafts: Mutex<HashSet<String>>,
     http: reqwest::Client,
     startup_timeout: Duration,
 }
@@ -263,6 +266,7 @@ impl LlmRuntime {
             }),
             starting: tokio::sync::Mutex::new(()),
             requests: Mutex::default(),
+            failed_drafts: Mutex::default(),
             http,
             startup_timeout,
         }
@@ -274,6 +278,39 @@ impl LlmRuntime {
 
     fn requests(&self) -> MutexGuard<'_, Requests> {
         self.requests.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn failed_drafts(&self) -> MutexGuard<'_, HashSet<String>> {
+        self.failed_drafts.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn draft_failed(&self, draft: &str) -> bool {
+        self.failed_drafts().contains(draft)
+    }
+
+    pub async fn start_with_fallback(
+        &self,
+        paths: &RuntimePaths,
+        options: StartOptions,
+    ) -> Result<RuntimeStatus, LlmError> {
+        let Some(draft) = options.draft.clone() else {
+            return self.start(paths, options).await;
+        };
+        match self.start(paths, options.clone()).await {
+            Err(error) => {
+                diagnostics::record(
+                    "sidecar_draft_failed",
+                    json!({ "model": options.model, "error": error_kind(&error) }),
+                );
+                self.failed_drafts().insert(draft);
+                let plain = StartOptions {
+                    draft: None,
+                    ..options
+                };
+                self.start(paths, plain).await
+            }
+            started => started,
+        }
     }
 
     async fn check_exit(&self) -> Option<LlmError> {
@@ -355,6 +392,11 @@ impl LlmRuntime {
             .as_deref()
             .map(|name| resolve_model_file(&paths.models_dir, name))
             .transpose()?;
+        let draft = options
+            .draft
+            .as_deref()
+            .map(|name| resolve_model_file(&paths.models_dir, name))
+            .transpose()?;
         if !paths.sidecar.is_file() {
             return Err(LlmError::SidecarMissing(
                 paths.sidecar.display().to_string(),
@@ -375,7 +417,7 @@ impl LlmRuntime {
         let mut command = process::sidecar_command(
             &paths.sidecar,
             &paths.library_dir,
-            server_args(&model, mmproj.as_deref(), &options),
+            server_args(&model, mmproj.as_deref(), draft.as_deref(), &options),
         );
         command.env("LLAMA_API_KEY", &api_key);
         let mut child = match process::spawn(command) {
@@ -389,6 +431,7 @@ impl LlmRuntime {
             "sidecar_start",
             json!({
                 "model": options.model,
+                "draft": options.draft.is_some(),
                 "contextSize": options.context_size,
                 "threads": options.threads,
                 "imageMaxTokens": options.image_max_tokens,
@@ -700,10 +743,23 @@ pub fn resolve_model_file(models_dir: &Path, name: &str) -> Result<PathBuf, LlmE
     Ok(path)
 }
 
-fn server_args(model: &Path, mmproj: Option<&Path>, options: &StartOptions) -> Vec<OsString> {
+fn server_args(
+    model: &Path,
+    mmproj: Option<&Path>,
+    draft: Option<&Path>,
+    options: &StartOptions,
+) -> Vec<OsString> {
     let mut args: Vec<OsString> = vec!["--model".into(), model.into()];
     if let Some(mmproj) = mmproj {
         args.extend(["--mmproj".into(), mmproj.into()]);
+    }
+    if let Some(draft) = draft {
+        args.extend([
+            "--spec-type".into(),
+            "draft-mtp".into(),
+            "--model-draft".into(),
+            draft.into(),
+        ]);
     }
     let context_size = options.context_size.unwrap_or(DEFAULT_CONTEXT_SIZE);
     args.extend(
@@ -798,6 +854,7 @@ mod tests {
         StartOptions {
             model: model.into(),
             mmproj: None,
+            draft: None,
             context_size: None,
             threads: None,
             gpu_layers: None,
@@ -862,7 +919,12 @@ mod tests {
 
     #[test]
     fn server_binds_an_os_assigned_loopback_port_and_keeps_the_key_off_the_command_line() {
-        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options("m.gguf")));
+        let args = arg_strings(&server_args(
+            Path::new("m.gguf"),
+            None,
+            None,
+            &options("m.gguf"),
+        ));
         let host = args.iter().position(|arg| arg == "--host").unwrap();
         assert_eq!(args[host + 1], "127.0.0.1");
         assert!(args.windows(2).any(|pair| pair == ["--port", "0"]));
@@ -878,7 +940,7 @@ mod tests {
     fn switches_reasoning_off_when_asked() {
         let mut options = options("m.gguf");
         options.reasoning_off = true;
-        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
+        let args = arg_strings(&server_args(Path::new("m.gguf"), None, None, &options));
         assert!(args.windows(2).any(|pair| pair == ["--reasoning", "off"]));
     }
 
@@ -886,7 +948,7 @@ mod tests {
     fn skips_weight_repacking_when_asked() {
         let mut options = options("m.gguf");
         options.no_repack = true;
-        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
+        let args = arg_strings(&server_args(Path::new("m.gguf"), None, None, &options));
         assert!(args.contains(&"--no-repack".into()));
     }
 
@@ -895,7 +957,7 @@ mod tests {
         let mut options = options("m.gguf");
         options.no_repack = true;
         options.from_disk = true;
-        let args = arg_strings(&server_args(Path::new("m.gguf"), None, &options));
+        let args = arg_strings(&server_args(Path::new("m.gguf"), None, None, &options));
         for flag in ["--mlock", "--no-mmap", "--load-mode", "-lm", "--lazy-mode"] {
             assert!(!args.contains(&flag.into()), "{flag}");
         }
@@ -919,6 +981,7 @@ mod tests {
         let args = arg_strings(&server_args(
             Path::new("m.gguf"),
             Some(Path::new("mmproj.gguf")),
+            None,
             &options,
         ));
         for pair in [
@@ -930,6 +993,28 @@ mod tests {
         ] {
             assert!(args.windows(2).any(|window| window == pair), "{pair:?}");
         }
+    }
+
+    #[test]
+    fn speculates_with_the_head_only_when_one_is_given() {
+        let options = options("m.gguf");
+        let plain = arg_strings(&server_args(Path::new("m.gguf"), None, None, &options));
+        assert!(!plain.contains(&"--spec-type".into()));
+        assert!(!plain.contains(&"--model-draft".into()));
+        let args = arg_strings(&server_args(
+            Path::new("m.gguf"),
+            None,
+            Some(Path::new("mtp.gguf")),
+            &options,
+        ));
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--spec-type", "draft-mtp"])
+        );
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--model-draft", "mtp.gguf"])
+        );
     }
 
     #[test]
@@ -1211,6 +1296,61 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn starts_again_without_a_head_the_server_cannot_load() {
+            let port = fake_server(true);
+            let script = format!(
+                "case \"$*\" in *--model-draft*) echo 'failed to load draft' >&2; exit 1;; esac\n{}\nexec sleep 30",
+                listening(port)
+            );
+            let paths = fake_sidecar("draft-fails", &script);
+            std::fs::write(paths.models_dir.join("mtp.gguf"), b"").unwrap();
+            let runtime = LlmRuntime::new();
+            let mut with_head = options("model.gguf");
+            with_head.draft = Some("mtp.gguf".into());
+            let status = runtime
+                .start_with_fallback(&paths, with_head.clone())
+                .await
+                .unwrap();
+            assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
+            assert!(runtime.draft_failed("mtp.gguf"));
+            runtime.stop();
+
+            let missing = fake_sidecar(
+                "draft-missing",
+                &format!("{}\nexec sleep 30", listening(port)),
+            );
+            let runtime = LlmRuntime::new();
+            let status = runtime
+                .start_with_fallback(&missing, with_head)
+                .await
+                .unwrap();
+            assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
+            assert!(runtime.draft_failed("mtp.gguf"));
+            runtime.stop();
+        }
+
+        #[tokio::test]
+        async fn keeps_the_head_when_the_server_starts_with_it() {
+            let port = fake_server(true);
+            let script = format!(
+                "case \"$*\" in *--model-draft*) ;; *) exit 9;; esac\n{}\nexec sleep 30",
+                listening(port)
+            );
+            let paths = fake_sidecar("draft-works", &script);
+            std::fs::write(paths.models_dir.join("mtp.gguf"), b"").unwrap();
+            let runtime = LlmRuntime::new();
+            let mut with_head = options("model.gguf");
+            with_head.draft = Some("mtp.gguf".into());
+            let status = runtime
+                .start_with_fallback(&paths, with_head)
+                .await
+                .unwrap();
+            assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
+            assert!(!runtime.draft_failed("mtp.gguf"));
+            runtime.stop();
+        }
+
+        #[tokio::test]
         async fn gives_up_and_ends_the_sidecar_after_the_startup_timeout() {
             let paths = fake_sidecar("timeout", "exec sleep 30");
             let runtime = LlmRuntime::with_startup_timeout(Duration::from_millis(500));
@@ -1392,7 +1532,12 @@ mod tests {
         };
         let runtime = LlmRuntime::new();
         for entry in &registry.models {
-            let options = crate::llm::commands::start_options(entry, 8 * 1024 * 1024 * 1024);
+            let head = entry
+                .files
+                .draft
+                .as_ref()
+                .is_some_and(|draft| paths.models_dir.join(&draft.name).is_file());
+            let options = crate::llm::commands::start_options(entry, 8 * 1024 * 1024 * 1024, head);
             let status = runtime.start(&paths, options).await.unwrap();
             assert!(matches!(status, RuntimeStatus::Ready { .. }), "{status:?}");
             runtime.stop();

@@ -187,7 +187,7 @@ describe('SettingsDialog static content', () => {
     expect(section('transcriber').textContent).toContain('GLM-OCR (Q8_0)');
     expect(section('transcriber').textContent).toContain('1,4 GB');
     expect(section('corrector').textContent).toContain('Gemma 4 E2B it (Q4_0)');
-    expect(section('corrector').textContent).toContain('2,8 GB');
+    expect(section('corrector').textContent).toContain('2,9 GB');
     expect(section('reviewer').textContent).toContain('Gemma 4 E2B it (Q4_0)');
     expect(stateTexts()).toEqual(['Bereit', 'Nicht eingerichtet', 'Nicht eingerichtet']);
     expect(buttonLabels(section('transcriber'))).toEqual(['Löschen', 'Eigenes Modell …']);
@@ -393,7 +393,7 @@ describe('SettingsDialog with live model state', () => {
     expect(text).toContain('braucht etwa 5,7 GB');
     expect(text).not.toContain('LightOnOCR');
     expect(section('corrector').textContent).toContain('Gemma 4 E4B it (Q4_0)');
-    expect(section('corrector').textContent).toContain('braucht etwa 7,6 GB');
+    expect(section('corrector').textContent).toContain('braucht etwa 7,8 GB');
     expect(container.querySelectorAll('.settings-model-note')).toHaveLength(0);
     expect(warned()).toEqual([]);
     expect(container.querySelectorAll('.settings-model-need .visually-hidden')).toHaveLength(0);
@@ -526,7 +526,7 @@ describe('SettingsDialog with live model state', () => {
     await vi.waitFor(() => expect(radios(section('corrector'))).toHaveLength(3));
     const larger = ['Gemma 4 E4B it (Q4_0)', 'Gemma 4 26B A4B it (Q4_0)'];
     expect(warned()).toEqual([...larger, ...larger]);
-    expect(section('corrector').textContent).toContain('braucht etwa 5,5 GB');
+    expect(section('corrector').textContent).toContain('braucht etwa 5,7 GB');
     expect(section('transcriber').textContent).toContain('braucht etwa 4,5 GB');
     const hidden = [...container.querySelectorAll('.settings-model-need .visually-hidden')];
     expect(hidden.map((note) => note.textContent)).toEqual(

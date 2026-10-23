@@ -628,6 +628,7 @@ fn leaked_entry_with_id(id: &str, model: ModelFile, mmproj: ModelFile) -> &'stat
         files: ModelFiles {
             model,
             mmproj: Some(mmproj),
+            draft: None,
         },
         server: ServerParams {
             context_size: 4096,
@@ -646,6 +647,19 @@ fn leaked_entry_with_id(id: &str, model: ModelFile, mmproj: ModelFile) -> &'stat
         line_mode: None,
         system: None,
         prompt: "p".into(),
+    }))
+}
+
+fn leaked_corrector(model: ModelFile, draft: ModelFile) -> &'static ModelEntry {
+    let base = leaked_entry_with_id("test-corrector", model.clone(), model.clone());
+    Box::leak(Box::new(ModelEntry {
+        role: Role::Corrector,
+        files: ModelFiles {
+            model,
+            mmproj: None,
+            draft: Some(draft),
+        },
+        ..base.clone()
     }))
 }
 
@@ -722,6 +736,55 @@ async fn the_manager_tracks_status_through_download_cancel_and_delete() {
     assert_eq!(stops.load(Ordering::Relaxed), 1);
     let status = manager.status(&dir, entry).await;
     assert_eq!((status.state, status.downloaded_bytes), (State::Missing, 0));
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn a_missing_or_broken_head_never_blocks_its_model() {
+    let (model, head) = (content(18, 8000), content(19, 900));
+    let server = TestServer::start(
+        &[("m.gguf", model.clone()), ("mtp.gguf", head.clone())],
+        Behavior::default(),
+    )
+    .await;
+    let entry = leaked_corrector(
+        file(&server, "m.gguf", &model),
+        file(&server, "mtp.gguf", &head),
+    );
+    let dir = temp_dir("manager-head");
+    let manager = Arc::new(ModelManager::with_downloader(downloader()));
+    let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let emit = move |event: DownloadEvent| {
+        let _ = sender.send(event);
+    };
+    manager
+        .start(&dir, entry, Arc::new(emit.clone()))
+        .await
+        .unwrap();
+    assert_eq!(next_final(&mut events).await, Update::Done);
+    let status = manager.status(&dir, entry).await;
+    assert_eq!((status.state, status.draft_ready), (State::Ready, true));
+    assert_eq!(status.total_bytes, 8900);
+    assert_eq!(status.downloaded_bytes, 8900);
+
+    std::fs::remove_file(dir.join("mtp.gguf")).unwrap();
+    let status = manager.status(&dir, entry).await;
+    assert_eq!((status.state, status.draft_ready), (State::Ready, false));
+    assert_eq!(status.downloaded_bytes, 8000);
+    assert!(is_ready(&dir, entry).await);
+
+    std::fs::write(dir.join("mtp.gguf"), b"short").unwrap();
+    let status = manager.status(&dir, entry).await;
+    assert_eq!((status.state, status.draft_ready), (State::Ready, false));
+    assert!(manager.startable(&dir, entry).await);
+
+    let before = server.requests().len();
+    manager.start(&dir, entry, Arc::new(emit)).await.unwrap();
+    assert_eq!(next_final(&mut events).await, Update::Done);
+    assert_eq!(server.requests().len(), before + 1);
+    assert!(manager.status(&dir, entry).await.draft_ready);
+
+    manager.delete(&dir, entry, || {}, |_| false).await.unwrap();
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
 }
 
