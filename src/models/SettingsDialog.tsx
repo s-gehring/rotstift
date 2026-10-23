@@ -23,7 +23,7 @@ import type { ModelState, ResolvedLink } from './types.ts';
 import { hasRunningJob } from './setup-state.ts';
 import {
   LEVELS,
-  levelExceedsMemory,
+  levelMuchSlower,
   THOROUGHNESS,
   THOROUGHNESS_NAME,
   thoroughnessOf,
@@ -526,7 +526,7 @@ function ThoroughnessSection({ locked }: { readonly locked: boolean }) {
             />
             <span className="settings-model-line">
               <span className="settings-model-name">{THOROUGHNESS_NAME[level]}</span>
-              {levelExceedsMemory(level, ram) && (
+              {levelMuchSlower(level, ram) && (
                 <span className="settings-model-note">dauert deutlich länger</span>
               )}
             </span>

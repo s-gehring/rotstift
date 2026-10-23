@@ -54,9 +54,7 @@ test.describe('on a laptop with 8 GB', () => {
     const review = dialog.getByRole('region', { name: 'Inhalt und Form' });
     await expect(levels.getByRole('radio')).toHaveCount(3);
     await expect(levels.getByRole('radio', { name: 'Schnell', exact: true })).toBeChecked();
-    await expect(
-      levels.getByRole('radio', { name: 'Gründlich dauert deutlich länger', exact: true }),
-    ).toBeVisible();
+    await expect(levels.getByRole('radio', { name: 'Gründlich', exact: true })).toBeVisible();
     await expect(
       levels.getByRole('radio', { name: 'Sehr gründlich dauert deutlich länger', exact: true }),
     ).toBeVisible();

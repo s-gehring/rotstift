@@ -3,10 +3,10 @@ import {
   DEFAULT_CORRECTOR_ID,
   DEFAULT_MODEL_ID,
   DEFAULT_REVIEWER_ID,
-  exceedsMemory,
   SECOND_READER_ID,
   type AnyModelInfo,
 } from './registry.ts';
+import { diskSlowdown } from './speed.ts';
 
 export type Thoroughness = 'fast' | 'thorough' | 'veryThorough';
 
@@ -76,8 +76,10 @@ export function levelModels(level: Thoroughness): AnyModelInfo[] {
   return ALL_MODELS.filter((model) => ids.includes(model.id));
 }
 
-export function levelExceedsMemory(level: Thoroughness, totalRamBytes: number | null): boolean {
-  return levelModels(level).some((model) => exceedsMemory(model, totalRamBytes));
+const MUCH_SLOWER = 2;
+
+export function levelMuchSlower(level: Thoroughness, totalRamBytes: number | null): boolean {
+  return levelModels(level).some((model) => diskSlowdown(model, totalRamBytes) >= MUCH_SLOWER);
 }
 
 export const SECOND_READING_STORAGE_KEY = 'rotstift.second-reading';
