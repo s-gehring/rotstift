@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use super::claude::{self, Claude, SYSTEM_PROMPT};
+use super::locate::candidates;
 use super::runner::{self, Limits, Run, RunError};
 use super::*;
 use crate::cloud::keys::fake::MemoryStore;
@@ -726,4 +727,51 @@ async fn the_cli_is_found_on_the_path_and_in_its_own_folder() {
         found.path,
         own.canonicalize().unwrap().join("claude").to_string_lossy()
     );
+}
+
+fn versioned_cli(dir: &Path, version: &str) {
+    std::fs::create_dir_all(dir).unwrap();
+    let path = dir.join("claude");
+    std::fs::write(
+        &path,
+        format!("#!/bin/sh\necho '{version} (Claude Code)'\n"),
+    )
+    .unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+#[tokio::test]
+async fn node_managers_are_searched_and_the_newest_stable_path_wins() {
+    let home = world().join("managers");
+    let _ = std::fs::remove_dir_all(&home);
+    let fnm = home.join(".local/share/fnm/node-versions");
+    versioned_cli(&fnm.join("v20.1.0/installation/bin"), "2.1.200");
+    versioned_cli(&fnm.join("v22.23.1/installation/bin"), "2.1.309");
+    versioned_cli(&home.join(".nvm/versions/node/v18.0.0/bin"), "2.0.1");
+    versioned_cli(&home.join(".local/bin"), "2.1.250");
+    let shells = home.join(".local/state/fnm_multishells/123_456");
+    std::fs::create_dir_all(shells.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(fnm.join("v20.1.0/installation"), &shells).unwrap();
+    let search_path = OsString::from(shells.join("bin"));
+
+    let found = candidates(&Claude, Some(&search_path), Some(&home));
+    assert_eq!(found.first(), Some(&shells.join("bin").join("claude")));
+    assert_eq!(found.len(), 5);
+
+    let runtime = runtime(Duration::from_secs(10));
+    let newest = locate::newest(&runtime, &Claude, found).await.unwrap();
+    assert_eq!(newest.version, "2.1.309");
+    assert_eq!(
+        newest.path,
+        fnm.canonicalize()
+            .unwrap()
+            .join("v22.23.1/installation/bin/claude")
+            .to_string_lossy()
+    );
+
+    let only_shell = locate::newest(&runtime, &Claude, vec![shells.join("bin").join("claude")])
+        .await
+        .unwrap();
+    assert!(!only_shell.path.contains("fnm_multishells"));
+    assert!(only_shell.path.ends_with("v20.1.0/installation/bin/claude"));
 }

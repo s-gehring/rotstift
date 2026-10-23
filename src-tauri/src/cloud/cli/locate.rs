@@ -60,12 +60,38 @@ pub async fn login_path() -> Option<OsString> {
     LOGIN_PATH.get_or_init(read_login_path).await.clone()
 }
 
+const NODE_VERSION_DIRS: [(&str, &str); 3] = [
+    (".local/share/fnm/node-versions", "installation/bin"),
+    (
+        "Library/Application Support/fnm/node-versions",
+        "installation/bin",
+    ),
+    (".nvm/versions/node", "bin"),
+];
+
+fn node_version_dirs(home: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    for (root, tail) in NODE_VERSION_DIRS {
+        let Ok(entries) = std::fs::read_dir(home.join(root)) else {
+            continue;
+        };
+        let mut versions: Vec<PathBuf> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join(tail))
+            .collect();
+        versions.sort();
+        dirs.extend(versions);
+    }
+    dirs
+}
+
 fn common_dirs(home: Option<&Path>) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(home) = home {
         for tail in [".local/bin", ".npm-global/bin", ".bun/bin", ".volta/bin"] {
             dirs.push(home.join(tail));
         }
+        dirs.extend(node_version_dirs(home));
     }
     #[cfg(unix)]
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map(PathBuf::from));
@@ -96,6 +122,39 @@ pub fn candidates(
     found
 }
 
+fn version_key(version: &str) -> Vec<u64> {
+    version
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse().ok())
+        .collect()
+}
+
+pub async fn newest(
+    runtime: &Runtime,
+    adapter: &dyn Adapter,
+    candidates: Vec<PathBuf>,
+) -> Option<CliInfo> {
+    let mut best: Option<CliInfo> = None;
+    let mut seen: Vec<String> = Vec::new();
+    for path in candidates {
+        let Ok(info) = inspect(runtime, adapter, &path).await else {
+            continue;
+        };
+        if seen.contains(&info.path) {
+            continue;
+        }
+        seen.push(info.path.clone());
+        let newer = best
+            .as_ref()
+            .is_none_or(|best| version_key(&info.version) > version_key(&best.version));
+        if newer {
+            best = Some(info);
+        }
+    }
+    best
+}
+
 pub async fn find(runtime: &Runtime, adapter: &dyn Adapter) -> Option<CliInfo> {
     let search_path = if runtime.login_path {
         login_path().await
@@ -103,10 +162,10 @@ pub async fn find(runtime: &Runtime, adapter: &dyn Adapter) -> Option<CliInfo> {
         (runtime.parent)("PATH")
     };
     let home = (runtime.parent)("HOME").map(PathBuf::from).or_else(home);
-    for path in candidates(adapter, search_path.as_ref(), home.as_deref()) {
-        if let Ok(info) = inspect(runtime, adapter, &path).await {
-            return Some(info);
-        }
-    }
-    None
+    newest(
+        runtime,
+        adapter,
+        candidates(adapter, search_path.as_ref(), home.as_deref()),
+    )
+    .await
 }
