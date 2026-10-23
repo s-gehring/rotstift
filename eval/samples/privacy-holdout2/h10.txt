@@ -1,0 +1,16 @@
+arbeit: Unfallbericht Schulhof 8a.pdf
+klasse: 8
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Bericht über einen Unfall auf dem Schulhof für die Schulleitung.
+---
+Am [5. Dezember]{date} um etwa 10.15 Uhr kam es auf dem
+Schulhof zu einem Unfall. Ein Mitschüler, [Lennard Albers]{person},
+rutschte auf einer gefrorenen Pfütze aus und schlug
+mit dem Kopf auf den Boden. Die Schülerin [Pia]{person}
+sah den Sturz und holte sofort Herrn [Stein]{person}, der Aufsicht
+hatte. Er untersuchte [Lennard]{person} und rief den Krankenwagen.
+Ein Stein lag nicht im Weg, es war nur das Eis.
+Im [Klinikum Westend]{institution} stellte man eine [Schädelprellung]{health} fest.
+Lennard durfte am Abend wieder nach Hause. Ich schlage
+vor, dass der Hausmeister früher Salz streut.

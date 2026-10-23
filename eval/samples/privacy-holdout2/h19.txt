@@ -1,0 +1,15 @@
+arbeit: Fantasie_Drache.pdf
+klasse: 7
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle eine Fantasiegeschichte über einen Drachen.
+---
+Hoch oben auf einem Berg, der immer im Nebel lag,
+lebte ein kleiner Drache. Er war nicht groß und
+gefährlich wie die anderen, sondern fürchtete sich vor Feuer.
+Eines Tages kam ein Ritter ins Tal, der den Drachen
+besiegen wollte. Der Drache versteckte sich in einer Höhle
+und zitterte. Doch der Ritter hatte sich im Nebel
+verlaufen und rief um Hilfe. Da fasste der Drache
+Mut und führte ihn zurück ins Dorf. Die Leute
+staunten, und seit diesem Tag war er der Held.

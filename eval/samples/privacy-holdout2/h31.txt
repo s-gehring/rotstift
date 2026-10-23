@@ -1,0 +1,15 @@
+arbeit: Möbius Charakterisierung.docx
+klasse: 9
+form: Charakterisierung
+fach: Deutsch
+aufgabe: Beschreibe die Figur Möbius in Friedrich Dürrenmatts Komödie Die Physiker.
+---
+[Möbius]{keep} ist in der Komödie „Die Physiker“ von [Friedrich
+Dürrenmatt]{keep} ein genialer Physiker, der in einer Irrenanstalt
+lebt. Er gibt vor, verrückt zu sein, und redet
+mit König Salomo. In Wahrheit will er sein
+gefährliches Wissen vor der Welt verstecken. Die beiden
+Mitpatienten, die sich für [Newton]{keep} und [Einstein]{keep} halten, sind
+in Wirklichkeit Agenten. [Möbius]{keep} tötet seine Krankenschwester, weil sie
+sein Geheimnis erkannt hat. Mein Freund [Bastian]{person} meint, dass
+[Möbius]{keep} ein Held ist, ich finde ihn eher tragisch.

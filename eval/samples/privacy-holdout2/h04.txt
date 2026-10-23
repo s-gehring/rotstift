@@ -1,0 +1,19 @@
+arbeit: Erörterung_Handyverbot_8c.pdf
+klasse: 8
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere, ob an Schulen ein generelles Handyverbot gelten sollte.
+---
+Immer wieder wird diskutiert, ob Handys an Schulen ganz
+verboten werden sollen. Ich finde, dass ein generelles
+Verbot nicht sinnvoll ist. Erstens kann man das Handy
+im Unterricht gut nutzen, zum Beispiel um etwas
+nachzuschlagen. Unser Lehrer Herr [Jung]{person} lässt uns oft
+zum Recherchieren das Handy rausholen. Zweitens ist
+es für viele Kinder wichtig, ihre Eltern zu erreichen.
+Meine Freundin [Hana]{person} muss nach der Schule gleich ihre kleine
+Schwester abholen und braucht es dafür. Auf der anderen
+Seite lenkt das Handy ab, das gebe ich zu. Schon
+2007 kam das erste iPhone raus und seitdem ist alles
+anders. Trotzdem sollte jede Schule selbst entscheiden,
+und an der [Goetheschule]{institution} klappt unsere Regel ganz gut.

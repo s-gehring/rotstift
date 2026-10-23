@@ -1,0 +1,17 @@
+arbeit: Mail Entschuldigung.docx
+klasse: 6
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine E-Mail an deine Klassenlehrerin und entschuldige dein Fehlen.
+---
+Betreff: Entschuldigung für den [11.02.2025]{date}
+Sehr geehrte Frau [Reuter]{person},
+ich möchte mich dafür entschuldigen, dass ich am
+Dienstag gefehlt habe. Ich hatte eine [Magen-Darm-Grippe]{health}
+und musste die ganze Nacht erbrechen. Meine Mutter
+hat mich deshalb zuhause gelassen. Die Hausaufgaben
+habe ich von [Ben Wilhelm]{person} bekommen und schon erledigt.
+Falls Sie noch etwas brauchen, erreichen Sie mich unter
+[noah.steinbrueck@schulmail-nrw.de]{contact}. Meine Schülernummer ist [SN 40321]{number}.
+Mit freundlichen Grüßen
+[Noah Steinbrück]{person}, Klasse 6c

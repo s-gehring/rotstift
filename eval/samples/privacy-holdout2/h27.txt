@@ -1,0 +1,15 @@
+arbeit: Erlebnis Opa 7c.pdf
+klasse: 7
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem traurigen Erlebnis und wie du damit umgegangen bist.
+---
+Im Winter ist Opa [Gerhard]{person} gestorben. Seitdem ist alles anders,
+[weil Opa gestorben ist]{circumstances} und Oma nun allein im Haus
+sitzt. Wir sind [katholisch]{religion}, und die Beerdigung war in der
+[Kirchengemeinde St. Marien]{institution}. Danach sind wir zum [Friedhof Altenbochum]{place}
+gefahren, wo die ganze Familie weinte. Tante [Britta]{person} hat
+mich lange im Arm gehalten. Ich habe Opa
+einen Brief geschrieben und ihn ins Grab gelegt.
+Jetzt besuche ich Oma jede Woche und wir backen
+zusammen, so wie Opa es immer geliebt hat.

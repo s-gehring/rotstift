@@ -1,0 +1,16 @@
+arbeit: Erörterung_Social_Media_10b.pdf
+klasse: 10
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere, ob soziale Medien Jugendlichen eher schaden oder nutzen.
+---
+Soziale Medien sind aus dem Alltag nicht mehr wegzudenken.
+Stars wie [Cristiano Ronaldo]{keep} haben dort hunderte Millionen Follower.
+Auch mein Kumpel [Tarek]{person} folgt ihnen und postet selbst als
+[@der_echte_tarek]{contact} jeden Tag etwas. Einerseits kann man Freundschaften
+pflegen, andererseits entsteht Druck, perfekt auszusehen. Meine
+Schwester hat sich im Netz zum ersten Mal [als lesbisch
+geoutet]{sexuality}, weil sie dort Verständnis fand. Auf der Klassenseite
+[www.klassenchat-10b.de]{contact} tauschen wir Aufgaben aus. Trotzdem sollte
+man nicht stundenlang scrollen, sagt [Selin]{person}. Mein Fazit
+ist, dass es auf den Umgang ankommt.

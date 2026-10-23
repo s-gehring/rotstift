@@ -1,0 +1,17 @@
+arbeit: Leserbrief_Bahn.pdf
+klasse: 9
+form: Leserbrief
+fach: Deutsch
+aufgabe: Schreibe einen Leserbrief zu dem Zeitungsartikel Bahnfahren wird teurer.
+---
+Sehr geehrte Redaktion, Ihr Artikel über die Preise
+der Bahn hat mich wütend gemacht. Ich fahre jeden
+Tag mit dem Zug zur Schule und bezahle viel zu
+viel. Zudem sind die Züge oft zu spät. Neulich
+hat mein Anschluss gefehlt, und ich musste eine Stunde am
+Bahnhof stehen. Wenn Bahnfahren noch teurer wird, steigen
+noch mehr Leute aufs Auto um. Das kann nicht gut
+für das Klima sein. Bitte berichten Sie auch darüber,
+wie Schüler die Preise stemmen sollen.
+[Tobias Reinhardt]{person}, [Marktplatz 3]{place}, [48143 Münster]{place}
+Telefon: [+49 251 7783920]{contact}

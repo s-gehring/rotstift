@@ -1,0 +1,15 @@
+arbeit: Fahrradtour 6d Scan.pdf
+klasse: 6
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Ausflug mit deiner Familie.
+---
+Am Sonntag sind wir mit dem Fahrrad nach Witten
+gefahren, ich, meine Cousine [Rose]{person}, Opa [Heinz]{person} und meine
+Mama. Opa nennt mich immer [Mausi]{person}, das ist mir
+peinlich. Am Wegrand stand eine rote Rose, und
+ich habe sie [Rose]{person} gezeigt, die hat gelacht. Wir wohnen
+in [Hattingen]{place}, und die Strecke am Fluss ist wirklich schön.
+Nach zehn Kilometern hatte [Rose]{person} einen Platten, und Opa musste
+den Schlauch flicken. Er hat ewig gebraucht, aber
+danach gab es Eis. Abends waren wir alle müde.

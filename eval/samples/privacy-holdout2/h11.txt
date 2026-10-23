@@ -1,0 +1,16 @@
+arbeit: Küchenuhr_Inhaltsangabe_Lena_9.pdf
+klasse: 9
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Kurzgeschichte Die Küchenuhr von Wolfgang Borchert zusammen.
+---
+In der Kurzgeschichte „Die Küchenuhr“ von [Wolfgang Borchert]{keep}
+geht es um einen jungen Mann, der nach dem Zweiten
+Weltkrieg in sein zerstörtes Zuhause zurückkehrt. Er
+sitzt auf einer Bank und zeigt einem Zuhörer eine
+Küchenuhr, die er in den Trümmern gefunden hat. Die
+Uhr steht auf halb drei, weil in diesem Moment die
+Bombe fiel. Der Mann erzählt, wie er seine Familie
+verloren hat. Meine Deutschlehrerin Frau [Yılmaz]{person} sagt, dass
+[Borchert]{keep} selbst im Krieg war und viel davon verarbeitet hat.
+Die Geschichte zeigt, wie sehr der Krieg Menschen zerstört.

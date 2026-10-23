@@ -1,0 +1,20 @@
+arbeit: brief_bohdan_6a.pdf
+klasse: 6
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Brief an deinen Brieffreund Elias und erzähle ihm von deinem Hobby.
+---
+[Bohdan Kovalenko]{person}, [Gartenweg 7]{place}, [04109 Leipzig]{place}
+den [17.05.2025]{date}
+Lieber [Elias]{keep},
+vielen Dank für deinen Brief. Du wolltest wissen, was ich
+in meiner Freizeit mache. Ich spiele seit drei Jahren
+Schach im [SC Turm Gohlis]{institution}. Jeden Dienstag trainiert uns
+Herr [Brandt]{person}, der ist streng aber sehr nett. Letzten
+Monat habe ich mein erstes Turnier gewonnen, da war
+ich so aufgeregt, dass mir die Hände gezittert haben.
+Du weißt ja, dass wir wegen dem Krieg aus der Ukraine
+nach Deutschland [geflohen sind]{origin}. Beim Schach muss ich nicht
+viel reden und trotzdem haben mich alle gemocht.
+Spielst du auch etwas? Schreib mir bald zurück, [Elias]{keep}!
+Dein [Bohdan]{person}

@@ -1,0 +1,19 @@
+arbeit: Bewerbung_Ferienjob_von_Hohenrath.pdf
+klasse: 10
+form: Bewerbung
+fach: Deutsch
+aufgabe: Bewirb dich bei Frau Hartung vom Café Lichtblick um einen Ferienjob.
+---
+[Sophie-Charlotte von Hohenrath]{person}
+[Kastanienallee 23]{place}, [50937 Köln]{place}
+[0176 4455 2201]{contact}, [s.hohenrath@posteo.de]{contact}
+[22.04.2025]{date}
+Sehr geehrte Frau [Hartung]{keep},
+mit großem Interesse habe ich gelesen, dass das [Café Lichtblick]{keep}
+für die Sommerferien Aushilfen sucht. Ich bin am
+[09.11.2009]{date} geboren und besuche die zehnte Klasse des
+[Ursulinengymnasiums]{institution}. Ich bin freundlich, zuverlässig und habe
+schon bei Familienfesten bedient. Gern würde ich
+bei Ihnen im [Café Lichtblick]{keep} Erfahrung sammeln. Über eine
+Einladung zum Gespräch freue ich mich sehr.
+Mit freundlichen Grüßen, Ihre [Sophie-Charlotte von Hohenrath]{person}
