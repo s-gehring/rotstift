@@ -1,0 +1,17 @@
+arbeit: Praktikumsbericht Arztpraxis Mara K..pdf
+klasse: 9
+form: Praktikumsbericht
+fach: Deutsch
+aufgabe: Berichte über dein einwöchiges Praktikum und beschreibe einen typischen Tag.
+---
+Vom [03.03.2025]{date} bis zum [14.03.2025]{date} habe ich mein Praktikum
+in der [Hausarztpraxis Dr. Berger]{institution} gemacht. Morgens um acht
+hat mich Schwester [Gülcan]{person} an der Anmeldung begrüßt. Die
+Nummer der Praxis, [0341 5567890]{contact}, musste ich am Telefon
+oft sagen. Ich habe Akten sortiert, Blut abgenommen
+beim Üben und Blutdruck gemessen. Frau Dr. [Berger]{person} hat
+mir viel erklärt. Besonders spannend fand ich das EKG.
+Weil ich selbst [Asthma]{health} habe, kannte ich vieles schon von
+meinem eigenen Arzt. Am Freitag durfte ich sogar
+beim Impfen zusehen. Ich kann mir gut vorstellen, später
+einen medizinischen Beruf zu lernen.

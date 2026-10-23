@@ -1,0 +1,16 @@
+arbeit: Die Welle Zusammenfassung.pdf
+klasse: 8
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse zusammen, wie Herr Wenger im Roman Die Welle von Morton Rhue die Bewegung beginnt.
+---
+In dem Roman „Die Welle“ von [Morton Rhue]{keep} macht der
+Lehrer [Rainer Wenger]{keep} mit seiner Klasse ein Experiment. Er
+will zeigen, wie leicht Menschen einer Bewegung folgen.
+Zuerst führt [Wenger]{keep} nur strenge Regeln ein, etwa gerade
+sitzen und kurz antworten. Die Schüler [Marco]{keep} und [Laura]{keep}
+finden das erst lustig, später wird es ernst.
+Bald gibt es einen Gruß und Mitgliedskarten, und
+die Gruppe grenzt andere aus. Meine Mitschülerin [Laura]{person}
+hat gesagt, dass sie das Buch richtig gruselig fand.
+Zum Schluss beendet [Wenger]{keep} das Experiment vor der ganzen Schule.

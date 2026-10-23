@@ -1,0 +1,16 @@
+arbeit: Charakterisierung Rico 7a.pdf
+klasse: 7
+form: Charakterisierung
+fach: Deutsch
+aufgabe: Charakterisiere Rico aus dem Roman Rico, Oskar und die Tieferschatten von Andreas Steinhöfel.
+---
+[Rico]{keep} ist ein Junge, der sich selbst als tiefbegabt
+bezeichnet. Er braucht länger als andere zum Denken und
+verwechselt manchmal links und rechts. Trotzdem ist er
+sehr neugierig und mutig. Als sein Freund [Oskar]{keep}
+verschwindet, macht er sich auf die Suche, obwohl er
+Angst hat. In dem Buch von [Andreas Steinhöfel]{keep} ist [Rico]{keep}
+außerdem ein guter Beobachter, der seine Nachbarin Frau [Dahling]{keep}
+ernst nimmt. Er ist hilfsbereit und ehrlich. Mein Freund
+[Marlon]{person} sagt, dass [Rico]{keep} ihn an seinen kleinen Bruder erinnert.
+Das Buch ist 2008 erschienen und wurde verfilmt.

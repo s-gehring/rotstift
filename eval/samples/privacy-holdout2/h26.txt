@@ -1,0 +1,15 @@
+arbeit: Spendenaufruf Förderverein.pdf
+klasse: 9
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Spendenaufruf für den Förderverein deiner Schule.
+---
+Liebe Eltern, der Förderverein der [Luisenschule]{institution} bittet um
+Ihre Hilfe. Für den neuen Schulgarten brauchen wir
+Geld für Beete, Werkzeug und Saatgut. Bis zum
+30. Juni sammeln wir Spenden, jeder Euro hilft.
+Sie können auf das Konto [DE02 1203 0000 0000 2020 51]{number}
+überweisen. Bei Fragen wenden Sie sich an die Vorsitzende
+Frau [Meinhardt]{person} unter [foerderverein@luisenschule-oberhausen.de]{contact}.
+Wir danken Ihnen im Namen aller Schülerinnen und
+Schüler und freuen uns auf einen bunten Garten.

@@ -1,0 +1,16 @@
+arbeit: Inhaltsangabe Krabat.docx
+klasse: 7
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse den Anfang des Romans Krabat von Otfried Preußler in eigenen Worten zusammen.
+---
+In dem Roman „[Krabat]{keep}“ von [Otfried Preußler]{keep} geht es um einen
+Jungen, der als Waisenkind durchs Land zieht. Eines
+Nachts hat [Krabat]{keep} einen seltsamen Traum, in dem elf
+Raben ihn rufen. Er folgt dem Ruf zu einer Mühle im
+Koselbruch, wo ein unheimlicher Meister lebt. Dort
+lernt er den Müllerburschen [Tonda]{keep} und den Altgesellen
+[Juro]{keep} kennen. [Krabat]{keep} wird als Lehrling aufgenommen und
+muss hart arbeiten, aber er lernt auch schwarze Magie.
+Mein Bruder [Yannik]{person} hat das Buch auch gelesen und fand
+es zu gruselig, ich fand es richtig spannend.

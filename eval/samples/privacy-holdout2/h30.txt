@@ -1,0 +1,15 @@
+arbeit: Praktikum_Autohaus_8b.pdf
+klasse: 8
+form: Praktikumsbericht
+fach: Deutsch
+aufgabe: Berichte über dein Praktikum und beschreibe, was du gelernt hast.
+---
+Vom [10.03.]{date} bis zum [14.03.]{date} war ich im [Autohaus Kleinschmidt]{institution}
+beim Praktikum. Der Chef, Herr [Kleinschmidt]{person}, hat mich am ersten
+Tag durch die Werkstatt geführt. Meister [Dragan Ilić]{person} hat mir
+gezeigt, wie man Reifen wechselt, und [Dragan]{person} hat mich sogar
+einen Ölwechsel machen lassen. Ein Kunde hat sein
+Auto mit dem Kennzeichen [GL-KS 442]{number} gebracht, das wurde
+auf die Hebebühne gefahren. Ich habe mir viel
+gemerkt und möchte später vielleicht Mechatroniker werden.
+Am Freitag gab es ein gemeinsames Frühstück.

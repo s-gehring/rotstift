@@ -1,0 +1,17 @@
+arbeit: Erörterung Wahlalter.pdf
+klasse: 10
+form: Erörterung
+fach: Politik
+aufgabe: Sollte das Wahlalter bei Bundestagswahlen auf 16 Jahre gesenkt werden?
+---
+Seit Jahren wird darüber gestritten, ob schon Sechzehnjährige
+den Bundestag wählen dürfen. Befürworter sagen, dass
+Jugendliche von politischen Entscheidungen lange betroffen sind,
+etwa beim Klima. Gegner meinen, dass junge Menschen
+noch zu wenig Erfahrung haben. Ich halte das für
+schwach, denn auch viele Ältere informieren sich kaum.
+Schon [Angela Merkel]{keep} sagte in einer Rede, dass Politik
+Vertrauen braucht, und dieses Vertrauen kann man auch
+mit sechzehn schenken. 1989 fiel die Mauer, und
+damals gingen viele Jugendliche auf die Straße. Deshalb
+bin ich für eine Absenkung des Wahlalters.

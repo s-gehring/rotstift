@@ -1,0 +1,15 @@
+arbeit: geburtstag_5c.jpg
+klasse: 5
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von deinem schönsten Geburtstag.
+---
+Am [14. September]{date} wurde ich zehn und das war der
+schönste Geburtstag den ich je hatte. Ich hab
+[fynn]{person}, [Emily]{person} und [Ole]{person} eingeladen. [Emmily]{person} hat mir ein Armband
+geschenkt, das trage ich jetzt immer. Wir haben
+Topfschlagen gespielt und [Ole]{person}'s Fahrrad stand im Garten, da
+sind wir alle drüber gestolpert. Papa hat gegrillt
+und Mama hat den Kuchen gebacken. Er war
+schokoladig und hat nach Himbeere geschmeckt. Als es
+dunkel wurde, haben wir Wunderkerzen angezündet.

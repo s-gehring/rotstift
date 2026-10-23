@@ -1,0 +1,16 @@
+arbeit: Scan_2024-05-17.pdf
+klasse: 5
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Erlebnis im Schwimmbad.
+---
+Letzten Samstag waren ich und [Dilara]{person} im Schwimm-
+bad. Meine Mama hat uns hingefahren und gesagt,
+wir sollen nicht so wild sein. Wir sind erstmal
+zur Rutsche gelaufen, obwohl da ein Schild stand
+das man nicht rennen darf. Dann ist [Dilara]{person} aus-
+gerutscht und hat sich das Knie aufgeschürft. Der
+Bademeister Herr [Kowalczyk]{person} hat ihr ein Pflaster
+gegeben und uns ermahnt. Danach sind wir nur noch
+im Nichtschwimmerbecken geblieben. Am Ende hat
+[Dilara]{person} gesagt, das es trotzdem der beste Tag war.

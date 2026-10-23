@@ -1,0 +1,15 @@
+arbeit: Meine Familie 5a.jpg
+klasse: 5
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle deine Familie vor.
+---
+Meine Familie ist ziemlich groß. Ich habe eine ältere
+Schwester, die heißt [Ilona]{person} und ist dreizehn. Sie ist
+manchmal nervig, aber oft auch nett. Mein Papa
+[Rolf]{person} ist seit einem Jahr [arbeitslos]{circumstances}, und deshalb ist er
+viel zuhause und kocht für uns. Meine Mama
+arbeitet in einer Apotheke. Oma wird am [7. Mai]{date} achtzig,
+da machen wir ein großes Fest. Ich selbst habe
+am [3. April]{date} Geburtstag und bin dann elf. Wir
+haben keinen Hund, aber ich wünsche mir einen.

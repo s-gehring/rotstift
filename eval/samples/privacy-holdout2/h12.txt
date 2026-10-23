@@ -1,0 +1,17 @@
+arbeit: IMG_5530.jpg
+klasse: 10
+form: Erörterung
+fach: Politik
+aufgabe: Sollte in Deutschland ein generelles Tempolimit auf Autobahnen eingeführt werden?
+---
+Die Frage nach einem Tempolimit spaltet das Land. Politiker
+wie [Christian Lindner]{keep} lehnen es ab, während [Greta Thunberg]{keep}
+und viele Klimaschützer es fordern. Ich selbst demonstriere
+[bei Fridays for Future]{politics} und finde, dass ein Limit von 130
+sofort Emissionen sparen würde. Mein Vater [Detlef]{person} sieht das
+anders, er fährt jeden Tag von [Waldkirch]{place} nach Freiburg zur
+Arbeit. Er ist in der [IG Metall]{union} und sagt, dass die
+Autoindustrie Arbeitsplätze sichert. Auch wenn er teilweise recht
+hat, überzeugt mich das Argument der Verkehrssicherheit mehr.
+Länder wie Frankreich haben längst ein Limit, ohne dass
+die Wirtschaft zusammengebrochen ist.

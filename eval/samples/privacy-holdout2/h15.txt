@@ -1,0 +1,16 @@
+arbeit: Bericht Turnier Jule K..pdf
+klasse: 8
+form: Bericht
+fach: Deutsch
+aufgabe: Berichte für die Schülerzeitung über das Handballturnier eurer Mannschaft.
+---
+Am [Samstag, 15.03.]{date} fand in der [Sporthalle Am Hang]{place} das
+Turnier der [HSG Rheinaue]{institution} statt. Unsere Mannschaft trat gegen
+vier andere Teams an. Trainerin [Okonkwo]{person} stellte [Jule Kramer]{person}
+ins Tor und [Merle]{person} auf Rechtsaußen. Im ersten Spiel
+siegten wir mit 21:18, im Finale verloren wir knapp.
+Ich war nicht ganz bei der Sache, weil sich meine
+Eltern gerade [scheiden lassen]{circumstances}. [Merle]{person} hat mich aber aufgemuntert
+und zwei Tore für mich geworfen. Am Ende gab es
+eine Urkunde für den zweiten Platz, und wir freuen uns
+schon aufs nächste Turnier.

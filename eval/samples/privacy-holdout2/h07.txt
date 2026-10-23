@@ -1,0 +1,15 @@
+arbeit: Mein bester Freund 5b.jpg
+klasse: 5
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle deinen besten Freund in einem Steckbrief vor.
+---
+Mein bester Freund heißt [Kaan Yıldız]{person}, aber alle nennen
+ihn [Kaani]{person}. Er ist am [8. Juni]{date} geboren und ist
+zehn Jahre alt. Er wohnt in [Neustadt-Nord]{place}, nur zwei
+Straßen von mir weg. Er spielt Fußball beim
+[SV Hemmerde]{institution} und ist da Torwart. Sein Lieblingsessen ist
+Döner, aber Schweinefleisch isst er nie, [weil er Muslim ist]{religion}.
+Wir sitzen in der Klasse nebeneinander und quatschen
+zu viel. Frau [Albrecht]{person} hat uns deswegen schon getrennt.
+Ich finde [Kaani]{person} toll, weil er immer lustig ist.

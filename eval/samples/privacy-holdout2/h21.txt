@@ -1,0 +1,15 @@
+arbeit: Tagebuch Krankenhaus Scan_0113.pdf
+klasse: 8
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über eine Zeit, in der du Angst hattest.
+---
+Liebes Tagebuch, morgen am [19.06.2025]{date} habe ich meinen OP-Termin
+im [St. Elisabeth-Krankenhaus]{institution}. Ich habe so große Angst, dass
+ich kaum schlafen kann. Bei [Dr. Winkelmann]{person} war ich gestern
+noch einmal zur Besprechung, sie war sehr nett. Seit
+der Diagnose [ADHS]{health} nehme ich außerdem [Medikinet]{health}, aber die
+Mandeln müssen trotzdem raus. Mama hat mir versprochen,
+dass sie die ganze Zeit bei mir bleibt. Meine
+Freundin [Selin]{person} hat mir eine Karte gemalt, die lege ich
+unter mein Kopfkissen. Ich hoffe, dass alles gut geht.
