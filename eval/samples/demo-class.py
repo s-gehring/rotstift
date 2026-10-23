@@ -104,7 +104,7 @@ def main() -> None:
             paper = r.PAPERS[paper_name]
             rendered = r.render(page_text, font, seed, paper, pen, ruling)
             edges = [(paper.left, 0), (paper.left, r.PAGE[1]), (r.PAGE[0] - paper.right, 0), (r.PAGE[0] - paper.right, r.PAGE[1])]
-            image, lines, _, _ = r.scan(rendered.image, rendered.lines, seed, edges)
+            image, lines, _, margin = r.scan(rendered.image, rendered.lines, seed, edges)
             lines = [line for line in lines if line["text"].strip()]
             transcript, corrected = page_lines(lines, page_text.split(), word_pairs(part))
             file_name = f"{text_name}-{paper_name}-{part_number}.jpg"
@@ -114,7 +114,8 @@ def main() -> None:
             width, height = image.size
             boxes = [[round(x / width, 4), round(y / height, 4), round(w / width, 4), round(h / height, 4)]
                      for x, y, w, h in (line["bbox"] for line in lines)]
-            pages.append({"arbeit": name, "file": file_name, "lines": transcript, "corrected": corrected, "boxes": boxes})
+            right = [[round(x / width, 4), round(y / height, 4)] for x, y in margin[2:]] if paper.right else None
+            pages.append({"arbeit": name, "file": file_name, "lines": transcript, "corrected": corrected, "boxes": boxes, "margin": right})
             print(file_name, len(buffer.getvalue()))
     (args.out / "pages.json").write_text(json.dumps(pages, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

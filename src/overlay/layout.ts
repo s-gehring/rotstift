@@ -13,7 +13,15 @@ import {
   type PlacedLine,
 } from './geometry.ts';
 import { proportionalLocator, type TextLocator, type XSpan } from './locator.ts';
-import type { OverlayItem, OverlayModel, PageSize, StrokeItem, TextItem } from './model.ts';
+import { marginX } from './margins.ts';
+import type {
+  OverlayItem,
+  OverlayModel,
+  PageMargins,
+  PageSize,
+  StrokeItem,
+  TextItem,
+} from './model.ts';
 import { fitRow, sizeLadder } from './pack.ts';
 import { createRandom, seedFor, spread } from './random.ts';
 import { caret, clampPath, hand, ring } from './strokes.ts';
@@ -29,6 +37,7 @@ export interface LayoutOptions {
   readonly locator?: TextLocator;
   readonly comments?: readonly PageComment[];
   readonly summary?: string | null;
+  readonly margins?: PageMargins;
 }
 
 type LocatedLine = PlacedLine;
@@ -48,6 +57,8 @@ interface Frame {
   readonly inset: number;
   readonly textLeft: number;
   readonly column: Column;
+  readonly fallback: Column;
+  readonly obstacles: readonly Box[];
 }
 
 interface Entry {
@@ -81,6 +92,10 @@ const EDGE_INSET_FRACTION = 0.1;
 const WIDTH_SAFETY = 1.06;
 const CODE_CENTER = 0.5;
 const CODE_DROP = 0.3;
+const RULED_GAP = 0.2;
+const RULED_MIN_WIDTH = 0.3;
+const RULED_RIGHT_AFTER = 0.5;
+const RULED_RETRIES = 3;
 
 function hasBox(
   line: TranscriptLine,
@@ -98,7 +113,7 @@ export function layoutOverlay(transcript: Transcript, options: LayoutOptions): O
   const skippedLines = transcript.lines
     .filter((line) => !hasBox(line) && line.marks.length > 0)
     .map((line) => line.number);
-  const frame = buildFrame(page, lines);
+  const frame = buildFrame(page, lines, options.margins);
   const items: OverlayItem[] = [];
   let previous: LineFrame | null = null;
   for (const line of lines) {
@@ -110,7 +125,7 @@ export function layoutOverlay(transcript: Transcript, options: LayoutOptions): O
   const placed = items.map((item) => (item.kind === 'text' ? keepInPage(item, frame) : item));
   const taken = placed.flatMap((item) => (item.kind === 'text' ? [textBox(item)] : []));
   const notes = [
-    ...commentItems(lines, frame, options.comments ?? [], taken),
+    ...commentItems(lines, frame, options.comments ?? [], [...taken, ...frame.obstacles]),
     ...summaryItems(lines, frame, options.summary ?? null),
   ];
   return {
@@ -357,16 +372,15 @@ function keepInPage(item: TextItem, frame: Frame): TextItem {
   return x === item.x && y === item.y && size === item.size ? item : { ...item, x, y, size };
 }
 
-function buildFrame(page: PageSize, lines: readonly LocatedLine[]): Frame {
+function buildFrame(
+  page: PageSize,
+  lines: readonly LocatedLine[],
+  margins: PageMargins | undefined,
+): Frame {
   const pad = Math.max(4, page.width * 0.006);
   if (lines.length === 0) {
-    return {
-      page,
-      pad,
-      inset: pad,
-      textLeft: pad,
-      column: { mode: 'edge', right: page.width - pad },
-    };
+    const column: Column = { mode: 'edge', right: page.width - pad };
+    return { page, pad, inset: pad, textLeft: pad, column, fallback: column, obstacles: [] };
   }
   const meanHeight = lines.reduce((sum, line) => sum + line.frame.height, 0) / lines.length;
   const inset = Math.max(pad, meanHeight * EDGE_INSET_FRACTION);
@@ -375,30 +389,65 @@ function buildFrame(page: PageSize, lines: readonly LocatedLine[]): Frame {
     Math.max(...lines.map((line) => line.bbox.x + line.bbox.width)),
     page.width - inset,
   );
+  const obstacles = lines.map((line) => ({
+    left: line.bbox.x,
+    right: line.bbox.x + line.bbox.width,
+    top: line.bbox.y,
+    bottom: line.bbox.y + line.bbox.height,
+  }));
+  const fallback = textColumn(page, inset, textLeft, textRight, meanHeight);
+  const ruled = ruledColumn(page, lines, margins, inset, pad, meanHeight);
+  return { page, pad, inset, textLeft, column: ruled ?? fallback, fallback, obstacles };
+}
+
+function textColumn(
+  page: PageSize,
+  inset: number,
+  textLeft: number,
+  textRight: number,
+  meanHeight: number,
+): Column {
   const needed = Math.max(page.width * 0.04, meanHeight * 1.6);
   const freeRight = page.width - textRight - inset;
   const freeLeft = textLeft - inset;
   if (freeRight >= needed) {
     const left = textRight + Math.min(freeRight * 0.2, meanHeight * 0.8);
-    return {
-      page,
-      pad,
-      inset,
-      textLeft,
-      column: { mode: 'margin', side: 'right', left, right: page.width - inset },
-    };
+    return { mode: 'margin', side: 'right', left, right: page.width - inset };
   }
   if (freeLeft >= needed) {
     const right = textLeft - Math.min(freeLeft * 0.2, meanHeight * 0.8);
-    return {
-      page,
-      pad,
-      inset,
-      textLeft,
-      column: { mode: 'margin', side: 'left', left: inset, right },
-    };
+    return { mode: 'margin', side: 'left', left: inset, right };
   }
-  return { page, pad, inset, textLeft, column: { mode: 'edge', right: textRight } };
+  return { mode: 'edge', right: textRight };
+}
+
+function ruledColumn(
+  page: PageSize,
+  lines: readonly LocatedLine[],
+  margins: PageMargins | undefined,
+  inset: number,
+  pad: number,
+  meanHeight: number,
+): Column | null {
+  if (margins === undefined) return null;
+  const middles = lines.map((line) => line.bbox.y + line.bbox.height / 2);
+  const gap = Math.max(pad, meanHeight * RULED_GAP);
+  const needed = meanHeight * RULED_MIN_WIDTH;
+  if (margins.right !== null) {
+    const line = margins.right;
+    const edge = Math.max(...middles.map((y) => marginX(line, y))) + gap;
+    if (edge > page.width * RULED_RIGHT_AFTER && page.width - inset - edge >= needed) {
+      return { mode: 'margin', side: 'right', left: edge, right: page.width - inset };
+    }
+  }
+  if (margins.left !== null) {
+    const line = margins.left;
+    const edge = Math.min(...middles.map((y) => marginX(line, y))) - gap;
+    if (edge < page.width * (1 - RULED_RIGHT_AFTER) && edge - inset >= needed) {
+      return { mode: 'margin', side: 'left', left: inset, right: edge };
+    }
+  }
+  return null;
 }
 
 function layoutLine(
@@ -716,25 +765,44 @@ function codesItems(
   if (column.mode === 'margin') {
     const minimum = height * MIN_CODE_FRACTION;
     const rowsRoom = Math.floor((height * ROW_ROOM) / (minimum * ROW_HEIGHT_EM));
-    const fitted = fitCodeRows(
-      entries,
-      moved,
-      column.right - column.left,
-      height * CODE_PREFERRED,
-      minimum,
-      Math.min(MAX_CODE_ROWS, Math.max(1, rowsRoom)),
-    );
-    const step = fitted.size * ROW_HEIGHT_EM;
-    const first = baseline(column.left, fitted.size) - (step * (fitted.rows.length - 1)) / 2;
-    return fitted.rows.map((text, row) => ({
-      ...common,
-      rotate: rotate(column.left),
-      text,
-      x: column.left,
-      y: first + row * step,
-      size: fitted.size,
-      anchor: 'start',
-    }));
+    const maxRows = Math.min(MAX_CODE_ROWS, Math.max(1, rowsRoom));
+    const ruled = column !== frame.fallback;
+    const at = (left: number, right: number): TextItem[] | null => {
+      const fitted = fitCodeRows(
+        entries,
+        moved,
+        right - left,
+        height * CODE_PREFERRED,
+        minimum,
+        maxRows,
+      );
+      if (ruled && fitted.size < minimum * 0.99) return null;
+      const step = fitted.size * ROW_HEIGHT_EM;
+      const first = baseline(left, fitted.size) - (step * (fitted.rows.length - 1)) / 2;
+      return fitted.rows.map((text, row) => ({
+        ...common,
+        rotate: rotate(left),
+        text,
+        x: left,
+        y: first + row * step,
+        size: fitted.size,
+        anchor: 'start',
+      }));
+    };
+    if (!ruled) return at(column.left, column.right) ?? [];
+    const gap = Math.max(frame.pad, height * RULED_GAP);
+    let left = column.left;
+    let right = column.right;
+    for (let attempt = 0; attempt <= RULED_RETRIES; attempt += 1) {
+      const items = at(left, right);
+      if (items === null) break;
+      const boxes = items.map(textBox);
+      const blockers = frame.obstacles.filter((other) => boxes.some((box) => overlaps(box, other)));
+      if (blockers.length === 0) return items;
+      if (column.side === 'right') left = Math.max(...blockers.map((other) => other.right)) + gap;
+      else right = Math.min(...blockers.map((other) => other.left)) - gap;
+    }
+    return codesItems(line, entries, moved, { ...frame, column: frame.fallback }, space);
   }
 
   if (!space.bandUsable) {

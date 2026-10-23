@@ -6,6 +6,7 @@ interface DemoPage {
   readonly arbeit: string;
   readonly lines: readonly string[];
   readonly boxes: readonly (readonly number[])[];
+  readonly margin: readonly (readonly number[])[] | null;
 }
 
 const pages: DemoPage[] = JSON.parse(
@@ -47,7 +48,12 @@ test('puts every mark on the line of the page it belongs to', async ({ page }) =
         elements.flatMap((element) => {
           if (!(element instanceof SVGGraphicsElement)) return [];
           const box = element.getBBox();
+          const view = element.ownerSVGElement?.viewBox.baseVal;
           return {
+            left: box.x / (view?.width ?? 1),
+            right: (box.x + box.width) / (view?.width ?? 1),
+            top: box.y / (view?.height ?? 1),
+            bottom: (box.y + box.height) / (view?.height ?? 1),
             line: Number(element.getAttribute('data-line')),
             role: element.getAttribute('data-role') ?? '',
             middle:
@@ -62,6 +68,19 @@ test('puts every mark on the line of the page it belongs to', async ({ page }) =
         const label = `${name}, ${stroke.role} auf Zeile ${stroke.line}`;
         expect(stroke.middle, label).toBeGreaterThan(top - height * 0.1);
         expect(stroke.middle, label).toBeLessThan(top + height * (1 + below));
+      }
+      for (const stroke of strokes.filter((item) => item.role === 'code')) {
+        const label = `${name}, Randzeichen auf Zeile ${stroke.line}`;
+        for (const [x, y, width, height] of entry.boxes) {
+          const sideways = stroke.left < (x ?? 0) + (width ?? 0) && (x ?? 0) < stroke.right;
+          const vertical = stroke.top < (y ?? 0) + (height ?? 0) && (y ?? 0) < stroke.bottom;
+          expect(sideways && vertical, `${label} liegt über Text`).toBe(false);
+        }
+        const [top, bottom] = entry.margin ?? [];
+        if (top === undefined || bottom === undefined) continue;
+        const share = (stroke.middle - (top[1] ?? 0)) / ((bottom[1] ?? 1) - (top[1] ?? 0));
+        const edge = (top[0] ?? 0) + ((bottom[0] ?? 0) - (top[0] ?? 0)) * share;
+        expect(stroke.left, `${label} steht nicht im Heftrand`).toBeGreaterThan(edge);
       }
     }
     await page.keyboard.press('Escape');

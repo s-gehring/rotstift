@@ -1,7 +1,7 @@
 import type { CorrectResult, Corrector } from '../correction/corrector.ts';
 import type { PageReading } from '../correction/uncertain-reading.ts';
 import type { ImportPage } from '../import/pages.ts';
-import type { LayoutResult } from '../layout/types.ts';
+import type { LayoutResult, Ruling } from '../layout/types.ts';
 import { noDiagnostics } from '../pipeline/diagnostics.ts';
 import { createRunner } from '../pipeline/runner.ts';
 import type { PageTranscriber, TranscribeResult } from '../pipeline/transcriber.ts';
@@ -68,6 +68,7 @@ export interface Harness {
   correctGate: Promise<void> | null;
   locateGate: Promise<void> | null;
   layoutFails: boolean;
+  ruling?: Ruling;
   imageFails: boolean;
   correctThrows: boolean;
 }
@@ -139,6 +140,7 @@ export function setupReview(
           })),
           skewDegrees: 0,
           detectedLines: lines.length,
+          ...(h.ruling && { ruling: h.ruling }),
         };
       },
     },

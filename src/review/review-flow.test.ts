@@ -377,6 +377,25 @@ describe('createReviewFlow', () => {
     expect(result?.unplacedLines).toEqual([1]);
   });
 
+  it('keeps the margin lines of the located page', async () => {
+    const { pages, h, flow } = setupReview(['a']);
+    const points = [
+      { x: 900, y: 0 },
+      { x: 905, y: 1400 },
+    ];
+    h.ruling = {
+      kind: 'lined',
+      horizontal: [],
+      vertical: [],
+      pitch: 40,
+      columnPitch: 0,
+      angleDegrees: 0,
+      margins: { left: null, right: { points } },
+    };
+    await flow.start(pages, DEUTSCH);
+    expect(flow.getState().pages.a?.margins).toEqual({ left: null, right: points });
+  });
+
   it('drops pages that left the import', async () => {
     const { pages, flow } = setupReview(['a', 'b']);
     await flow.start(pages, DEUTSCH);

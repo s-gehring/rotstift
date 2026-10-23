@@ -117,6 +117,7 @@ export function ArbeitPage({
               hints={correction.readingHints}
               comments={correction.comments}
               summary={correction.summary}
+              {...(correction.margins && { margins: correction.margins })}
               activeMark={activeMark}
               onMarkHover={onMarkHover}
               onMarkSelect={onMarkSelect}

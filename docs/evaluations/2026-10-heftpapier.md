@@ -162,6 +162,7 @@ Sortiert nach dem Schaden für den Nutzer, nicht nach dem Aufwand.
    Stand Phase 2: Behoben, Regressionstest mit verkleinertem Testbild.
 4. **Randzeichen berücksichtigen den Heftrand nicht.** Selbst auf dem sauberen Scan stehen nur 35 % der Randzeichen im Rand, 45 % über dem Text (`liniert-scan`). `layoutOverlay` leitet die Randspalte aus der Textausdehnung ab.
    Lösungsvorschlag: Den Heftrand aus der Seite erkennen (senkrechte Randlinie, bei Karos die Doppellinie), die Randspalte dorthin legen und nur bei fehlendem Rand auf die Textausdehnung zurückfallen.
+   Stand Phase 2: Gelöst, siehe [Phase 2: Randzeichen](#phase-2-randzeichen). 99,5 % im Rand, 0 % über Text auf Papier mit Rand.
 5. **Strichsuche verwechselt Heftlinien mit Streichungen und umgekehrt.** Recall 13 % auf `liniert-eng`, 25 % mit 7 Fehlalarmen auf Karos, 0–13 % auf Fotos, gegenüber 69 % auf Linienpapier mit Rand.
    Lösungsvorschlag: Heftlinien vor der Suche herausrechnen (Zeilenraster aus der Zeilensuche, Pixel entlang der Heftlinien als Hintergrund behandeln, bei Karos auch senkrechte Linien), dann Schwellen für Strichlänge und Neigung neu messen.
 6. **Lesesicherheit täuscht auf Handyfotos.** 17 % der Wörter mit Sicherheit ≥ 0,99 sind auf GNHK falsch, AUC 0,71. Die Schwelle 0,95 aus ScaDS lässt dort zu viele Lesefehler als Rechtschreibfehler durch.
@@ -296,7 +297,7 @@ Die Prüfung greift nur, wenn eine Seite mindestens vier sichere Zeilen hat. Sie
 
 - **Fotos von `liniert-eng`:** Eine Seite der Ablation (Drehung mit Keystone) bleibt zu großen Teilen grob, auf den zurückgehaltenen Seiten eine ganz. Fremdkandidaten an der Blattkante und einzelne Lochungen werden dort nicht entfernt, weil die Linien bis zum Rand laufen.
 - **Mehr `null` bei fehlenden Zeilen:** 14 von 2573 Varianten-Zeilen im Integrationstest, siehe oben.
-- **Strichsuche und Randzeichen:** Die Punkte 4 und 5 der Fehlerursachen sind nicht angefasst. `ruling.margins` liefert jetzt die Randlinien, `ruling.horizontal` die Heftlinien. Beides können Strichsuche und Overlay nutzen.
+- **Strichsuche und Randzeichen:** Punkt 5 der Fehlerursachen ist nicht angefasst, Punkt 4 ist in [Phase 2: Randzeichen](#phase-2-randzeichen) gelöst. `ruling.horizontal` liefert die Heftlinien für die Strichsuche.
 - **Echte Fotos:** Die Fotos sind weiter simuliert. Die GNHK-Fotos zeigen nur, dass nichts abstürzt und die Lineatur gefunden wird.
 
 ## Phase 2: Kleine Scans
@@ -469,6 +470,57 @@ node --experimental-transform-types eval/heft-measure.ts --ideal --dewarp --imag
 node --experimental-transform-types eval/strike.ts --ocr <ideal.json> --images <Ordner>/images --truth <Ordner>/ground_truth --method ink --dewarp
 node --experimental-transform-types eval/dewarp-pages.ts <Ordner>/images <Ordner-begradigt>
 ```
+
+## Phase 2: Randzeichen
+
+Ziel: Randzeichen stehen im Heftrand, wenn die Seite einen hat, und nie über dem Text. `layoutOverlay` bekommt dazu die Randlinien aus `ruling.margins` ([ADR 0003](../adr/0003-overlay.md#heftrand-ergänzung-vom-2026-10-23)).
+
+### Ergebnis
+
+- Auf allen Papieren mit gezeichnetem Rand (`liniert`, `kariert`, Scan und begradigtes Foto) stehen die Randzeichen jetzt im Heftrand: **99,5 % statt 41,6 %** (634 Randzeichen, 96 Seiten, vier Zufallssätze). Auf den Scans von 6,0 bis 26,6 % auf 98,3 bis 100 %.
+- Über dem Text steht kein Randzeichen mehr (0,0 % statt 7,9 %), gemessen mit der groben Breite aus Phase 1, die Breite der Schrift überschätzt. Mit dem Breitenmodell der Schrift (`estimateTextWidth`) waren es vorher schon 0,0 %.
+- Papier ohne Rand (`liniert-eng`) und Seiten, auf denen keine Randlinie erkannt wird, bleiben unverändert. Die 2,2 bis 4,3 % „über Text“ bei `liniert-eng` sind das alte Verhalten.
+- Die Demo-Klasse im e2e-Test prüft jetzt, dass jedes Randzeichen rechts von der Randlinie der Seite steht und keine Zeilenbox überdeckt. Ohne die Randlinien schlägt der Test fehl.
+
+### Methode
+
+- **Seite:** Rechts hat Vorrang, links nur ohne rechte Randlinie oder bei weniger als 0,3 Zeilenhöhen Platz. Eine belastbare Quelle zur Seitenwahl gibt es nicht. Die Suche fand keine bundesweite Norm und nur den Hinweis, dass Lehrkräfte Korrekturzeichen am Rand setzen und mit Randkommentaren ergänzen ([Friedrich Verlag](https://www.friedrich-verlag.de/deutsch/grammatik/deutschunterricht-korrekturzeichen-und-randkommentare/), [Standardsicherung NRW](https://standardsicherung.schulministerium.nrw.de/cms/zentralabitur-wbk/faecher/getfile.php?file=3316)). Rechts ist die Konvention des Korrekturrands, keine Messung.
+- **Ausweichen:** Die Zeilenboxen sind Hindernisse. Ragt Text in die Spalte, rückt das Randzeichen dahinter (links davor), höchstens dreimal. Passt auch dann nichts bei mindestens 40 % der Zeilenhöhe, gilt das alte Verhalten (Spalte aus der Textausdehnung, kleinere Schrift).
+- **Messung:** `eval/heft-measure.ts --ideal --dewarp --marks` auf den gerenderten Heftseiten (`heft-gerendert` und `heft-strich-s1` bis `s3`, je 24 Seiten: Scans und Fotos, drei Papiere), ideale Transkripte, Gemma 4 E2B für die Marken. Dasselbe korrigierte Transkript wird zweimal gelegt, einmal ohne Randlinien (vorher) und einmal mit (nachher), so unterscheiden sich die Zahlen nur im Layout. Für Fotos liegen Boxen und Randlinien im Koordinatensystem des Originalfotos (`toSource`), die Wahrheit ebenfalls. `--transcripts <Ordner>` merkt sich die korrigierten Transkripte, damit eine neue Layoutversion ohne Modell nachgemessen werden kann.
+- **Maß:** „Im Rand“ zählt ein Randzeichen, das links der linken oder rechts der rechten Randlinie der Wahrheit steht. „Über Text“ zählt es, wenn sein Kasten eine Wahrheitsbox schneidet. Die Breite ist einmal 0,55 em je Zeichen (wie Phase 1, überschätzt Kürzel mit Doppelpunkt und Korrektur um bis zu 60 %), einmal die Breite aus `estimateTextWidth`, mit der auch `layoutOverlay` plant.
+
+### Vorher und nachher
+
+Randzeichen auf Seiten mit gezeichnetem Rand, grobe Breite (wie Phase 1):
+
+| Papier und Aufnahme   | Randzeichen | im Rand vorher | im Rand nachher | über Text vorher | über Text nachher |
+| --------------------- | ----------- | -------------- | --------------- | ---------------- | ----------------- |
+| kariert, Foto         | 162         | 69,6 %         | 100,0 %         | 4,4 %            | 0,0 %             |
+| kariert, Scan         | 172         | 26,6 %         | 98,3 %          | 20,1 %           | 0,0 %             |
+| liniert, Foto         | 144         | 63,9 %         | 100,0 %         | 1,4 %            | 0,0 %             |
+| liniert, Scan         | 156         | 6,0 %          | 100,0 %         | 5,3 %            | 0,0 %             |
+| mit gezeichnetem Rand | 634         | 41,6 %         | 99,5 %          | 7,9 %            | 0,0 %             |
+| liniert-eng, Foto     | 140         | n. a.          | n. a.           | 4,3 %            | 4,3 %             |
+| liniert-eng, Scan     | 134         | n. a.          | n. a.           | 2,2 %            | 2,2 %             |
+
+Mit dem Breitenmodell: im Rand 51,2 % → 99,7 % (alle Papiere mit Rand), über Text 0,0 % → 0,0 %. Bei `liniert-eng` gibt es keinen gezeichneten Rand, die Werte „im Rand“ sind dort nicht zu lesen.
+
+Je Satz (Papiere mit gezeichnetem Rand, grobe Breite):
+
+| Satz             | Randzeichen | im Rand vorher | im Rand nachher | über Text vorher | über Text nachher |
+| ---------------- | ----------- | -------------- | --------------- | ---------------- | ----------------- |
+| `heft-gerendert` | 133         | 53,1 %         | 100,0 %         | 8,6 %            | 0,0 %             |
+| `heft-strich-s1` | 166         | 43,3 %         | 99,4 %          | 8,9 %            | 0,0 %             |
+| `heft-strich-s2` | 164         | 36,8 %         | 100,0 %         | 6,5 %            | 0,0 %             |
+| `heft-strich-s3` | 171         | 35,5 %         | 98,8 %          | 7,8 %            | 0,0 %             |
+
+### Grenzen
+
+- Die Messung nimmt ideale Transkripte. Mit echter Erkennung ändert sich nur, welche Marken es gibt, nicht die Platzierung.
+- Ausgewichen wird den Zeilenboxen, nicht der Tinte. Eine Handschrift, die weit über die Zeilenbox hinausragt, kann ein Randzeichen trotzdem berühren.
+- Schmale Ränder (rund eine Zeilenhöhe, wie auf den Demo-Karoseiten) nehmen nur kurze Kürzel in kleiner Schrift. Lange Korrekturen wandern dort als „R: dass“ in dieselbe Spalte und werden klein.
+- Liegen Text und Randlinie so, dass auch die kleinste Schrift nicht passt, gilt wieder das alte Verhalten. Das kam auf den Messseiten bei 0,5 % der Randzeichen vor.
+- Die Seite wird nicht je Arbeit gewählt. Wer links korrigiert, sieht die Zeichen rechts.
 
 ## Demo-Daten
 

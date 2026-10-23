@@ -38,7 +38,11 @@ export function createReviewExport(
     const corrected = pageCondition(page, review, entries) === 'corrected';
     const transcript = corrected ? review?.result?.transcript : undefined;
     const image = corrected ? review?.image : null;
-    const marks = transcript && { transcript, ...notes };
+    const marks = transcript && {
+      transcript,
+      ...notes,
+      ...(review?.margins && { margins: review.margins }),
+    };
     if (image) {
       return { image: image.blob, width: image.width, height: image.height, ...marks };
     }
