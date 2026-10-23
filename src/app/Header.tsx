@@ -40,14 +40,31 @@ function RunStatus() {
   );
 }
 
+function ReviewAction() {
+  const { privacy } = useApp();
+  if (privacy.works === null) return null;
+  const open = privacy.works.filter(
+    (work) => work.status === 'open' || work.status === 'detecting',
+  ).length;
+  if (open === 0) return null;
+  return (
+    <Button variant="primary" onClick={privacy.show}>
+      {`Vor dem Senden prüfen (${open})`}
+    </Button>
+  );
+}
+
 function MainAction() {
   const { importState, run, navigation, work } = useApp();
   if (importState.arbeiten.length === 0) return null;
   if (run.running) {
     return (
-      <Button disabled={run.stopping} onClick={run.cancel}>
-        Abbrechen
-      </Button>
+      <>
+        <ReviewAction />
+        <Button disabled={run.stopping} onClick={run.cancel}>
+          Abbrechen
+        </Button>
+      </>
     );
   }
   const arbeitId = navigation.route.view === 'arbeit' ? navigation.route.arbeitId : undefined;

@@ -15,7 +15,7 @@ export interface RuledPage {
   readonly margin: readonly (readonly number[])[];
 }
 
-export function ruledPage(name: string, lines: number): RuledPage {
+export function ruledPage(name: string, lines: number, texts: readonly string[] = []): RuledPage {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const context = canvas.getContext('2d');
   context.fillStyle = '#f7f6f0';
@@ -40,7 +40,7 @@ export function ruledPage(name: string, lines: number): RuledPage {
   context.font = '34px sans-serif';
   const boxes: number[][] = [];
   for (let line = 0; line < lines; line += 1) {
-    const text = `Platzhalter dieser Zeile ${line + 1}`;
+    const text = texts[line] ?? `Platzhalter dieser Zeile ${line + 1}`;
     const baseline = FIRST_RULE + line * PITCH - 10;
     const metrics = context.measureText(text);
     context.fillText(text, TEXT_X, baseline);

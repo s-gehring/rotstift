@@ -20,9 +20,11 @@ import type { ReviewPhase, ReviewRun, ReviewState, ReviewStatus } from '../revie
 import { pageCondition, summarizeClass } from '../review/summary.ts';
 import {
   createEstimator,
+  durationText,
   NO_WORK,
   remainingSeconds,
   remainingText,
+  totalSeconds,
   type Estimator,
   type Snapshot,
   type Workload,
@@ -153,7 +155,9 @@ const PAGE_WEIGHT = { transcribing: 0.6, locating: 0.05, correcting: 0.35 } as c
 
 const REVIEW_WEIGHT = 0.15;
 
-function phaseWeights(run: ReviewRun): Readonly<Record<ReviewPhase, number>> {
+type Weights = Readonly<Record<Exclude<ReviewPhase, 'detecting' | 'awaiting'>, number>>;
+
+function phaseWeights(run: ReviewRun): Weights {
   if (run.stages?.pages === false) {
     return { transcribing: 0, locating: 0, correcting: 0, reviewing: 1 };
   }
@@ -176,6 +180,8 @@ const FINISHED: ReadonlySet<ReviewStatus> = new Set([
 ]);
 
 const LOADING_TEXT = 'Modell wird geladen …';
+
+const DETECTING_TEXT = 'Personenbezug wird erkannt …';
 
 export interface RunStart {
   readonly pageIds: readonly string[];
@@ -213,6 +219,10 @@ export function reviewFraction(
   const { run } = review;
   if (run === null) return 0;
   const { transcribing, locating, correcting, reviewing } = phaseWeights(run);
+  if (run.pending !== undefined) {
+    const before = transcribing + locating + (run.pending.withCorrection ? 0 : correcting);
+    return before + (1 - before) * share(run.finished, run.total);
+  }
   if (run.phase === 'transcribing') {
     const transcribed = pageIds.filter((id) => {
       const status = count.entries[id]?.status;
@@ -280,6 +290,14 @@ export function runSnapshot(
       },
     };
   }
+  if (run.pending !== undefined) {
+    if (run.phase !== 'correcting' && run.phase !== 'reviewing') return null;
+    const { correct } = run.pending;
+    return {
+      step: run.phase === 'reviewing' || correct === 0 ? 'review' : 'correct',
+      left: { ...NO_WORK, correct, review: run.pending.review },
+    };
+  }
   const left = Math.max(0, run.total - run.finished);
   if (run.phase === 'locating') {
     return { step: 'correct', left: { ...NO_WORK, correct: run.total, review: reviewLeft } };
@@ -300,6 +318,18 @@ function remainingDetail(
   const snapshot = runSnapshot(review, count, start);
   if (snapshot === null) return null;
   return remainingText(remainingSeconds(estimator, snapshot, now));
+}
+
+function waitingDetail(run: ReviewRun, estimator: Estimator): string | null {
+  const { pending } = run;
+  if (pending === undefined) return null;
+  if (run.phase === 'detecting') return DETECTING_TEXT;
+  if (run.phase !== 'awaiting') return null;
+  const waiting = `Wartet auf Freigabe (${arbeitenText(pending.confirm)})`;
+  const after = durationText(
+    totalSeconds(estimator.rates, { ...NO_WORK, correct: pending.correct, review: pending.review }),
+  );
+  return after === null ? waiting : `${waiting}, danach ${after}`;
 }
 
 function pagesLabel(finished: number, total: number): string {
@@ -323,7 +353,9 @@ export function runProgress(
     const loading = engineText(run, engine) !== null;
     return {
       label: `${percent}\u00a0%`,
-      detail: loading ? LOADING_TEXT : remainingDetail(review, count, start, estimator, now),
+      detail:
+        waitingDetail(run, estimator) ??
+        (loading ? LOADING_TEXT : remainingDetail(review, count, start, estimator, now)),
       value: percent,
       max: 100,
     };

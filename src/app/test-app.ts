@@ -28,6 +28,7 @@ import type {
   ImportPages,
   Models,
   Navigation,
+  PrivacyReview,
   RunController,
   Subject,
   Work,
@@ -134,6 +135,7 @@ export interface TestAppParts {
   readonly grading?: GradingModel;
   readonly work?: Work;
   readonly models?: Partial<Models>;
+  readonly privacy?: Partial<PrivacyReview>;
   readonly toasts?: Toasts;
   readonly preview?: boolean;
 }
@@ -207,6 +209,16 @@ export function testAppModel(parts: TestAppParts = {}): AppModel {
       setup: { open: false, roles: [], pendingRun: null, show: noop, close: noop },
       settings: { open: false, show: noop, close: noop },
       ...parts.models,
+    },
+    privacy: {
+      works: null,
+      open: false,
+      show: noop,
+      close: noop,
+      add: noop,
+      remove: noop,
+      release: noop,
+      ...parts.privacy,
     },
     toasts: parts.toasts ?? testToasts(),
     preview: parts.preview ?? false,

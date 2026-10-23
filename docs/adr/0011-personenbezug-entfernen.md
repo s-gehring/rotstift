@@ -9,7 +9,7 @@
 
 Das reicht nicht. Nach EuGH C-434/16 (Nowak) sind schon die Antworten einer Prüfung personenbezogene Daten, auch ohne Namen. Wer Arbeiten an einen Anbieter schickt, überträgt personenbezogene Daten. Rotstift kann das nicht verhindern, aber es kann die Menge verkleinern: Kennungen, die eine Person erst bestimmbar machen, ersetzt die App lokal durch Platzhalter, bevor Text an einen Cloud-Anbieter geht, und setzt die Originale nach der Antwort wieder ein.
 
-Dieses ADR legt fest, was ersetzt wird, wann der Schutz gilt, wie er sich abschalten lässt und was Rust unabhängig von der Oberfläche durchsetzt. Das Kernmodul (`src/privacy/`) und die Messung der Erkennung (`eval/`) entstehen getrennt, die Verdrahtung im Ablauf und die Prüfansicht folgen danach.
+Dieses ADR legt fest, was ersetzt wird, wann der Schutz gilt, wie er sich abschalten lässt und was Rust unabhängig von der Oberfläche durchsetzt. Das Kernmodul (`src/privacy/`), die Messung der Erkennung (`eval/`) sowie die Verdrahtung im Ablauf mit der Prüfansicht (`src/review/review-flow.ts`, `src/privacy-review/`) entstehen getrennt.
 
 ## Entscheidung
 
@@ -34,15 +34,23 @@ Dieses ADR legt fest, was ersetzt wird, wann der Schutz gilt, wie er sich abscha
 
 ### Ablauf
 
-Mit Schutz gilt für einen Lauf mit Cloud-Textschritten:
+Mit Schutz gilt für einen Lauf, in dem mindestens ein Textschritt in der Cloud mit Schutz läuft (`useCloud().protects(role)`):
 
-1. **Lokal erkennen.** Alle Arbeiten werden mit dem lokalen Erkennungsmodell gelesen. Die Seitenbilder bleiben auf dem Rechner.
-2. **Personenbezug erkennen und schwärzen.** Je Arbeit läuft die Erkennung der Kennungen lokal (drei Schichten), und die App ersetzt sie durch Platzhalter. Sensible Angaben werden nur markiert.
-3. **Prüfansicht.** Die Lehrkraft sieht je Arbeit den geschwärzten Text und die Warnungen, kann Stellen ergänzen oder entfernen und bestätigt die Arbeit. Es gibt keine Sammelbestätigung, die eine ungesehene Arbeit freigäbe.
-4. **Textschritte entfernt.** Erst jetzt gehen die bestätigten, geschwärzten Texte an Rechtschreibung und Grammatik und an Inhalt und Form. Die Anfragen tragen das Flag `pseudonymized`.
-5. **Zurücksetzen und Zeichnen.** Die App setzt die Originale in die Antworten ein, ordnet die Anmerkungen dem Originaltext zu und zeichnet sie wie bisher.
+1. **Lokal erkennen.** Alle Arbeiten werden mit dem lokalen Erkennungsmodell gelesen, samt zweiter Lesung. Danach sucht die App die Zeilen auf den Seiten, ebenfalls lokal. Läuft die Korrektur lokal, korrigiert sie hier schon alle Seiten wie bisher.
+2. **Personenbezug erkennen.** Je Arbeit laufen die Detektoren nacheinander über die sichtbaren Zeilen jeder Seite, danach gibt `propagateSpans` jede gefundene Kennung an alle Vorkommen der Arbeit weiter. Kontext sind der Name der Arbeit, Fach, Sprache und, wenn Inhalt und Form geprüft werden, die Aufgabenstellung. Schlägt die Erkennung einer Arbeit fehl, sendet sie nichts, und ihre Seiten zeigen den Fehler.
+3. **Prüfansicht.** Sie öffnet sich, sobald die Erkennung beginnt, und zeigt die Arbeiten, sobald sie erkannt sind. Die Lehrkraft prüft je Arbeit, ergänzt oder entfernt Stellen und gibt frei. Es gibt keine Sammelfreigabe, die eine ungesehene Arbeit freigäbe.
+4. **Textschritte entfernt.** Jede freigegebene Arbeit geht sofort hinaus, während die Lehrkraft die übrigen prüft. Umhüllt wird nur der Cloud-Schritt mit Schutz: `withPseudonymization(corrector, bestätigte Stellen)` über einem Client mit `pseudonymized: true`. Die Hülle bekommt genau die sichtbaren Zeilen, die auch `correctPage` und `workLines` benutzen, und lehnt andere Zeilen ab, ohne zu senden. Ein lokaler Schritt läuft unverändert.
+5. **Zurücksetzen und Zeichnen.** Die Hülle setzt die Originale in die Antwort ein, die App ordnet die Anmerkungen dem Originaltext zu und zeichnet sie wie bisher.
 
-Läuft ein Schritt lokal oder ist der Schutz aus, entfällt der jeweilige Teil: Ohne Cloud-Textschritt gibt es nichts zu schwärzen, ohne Schutz gehen die Texte nach 0009 ungeschwärzt hinaus.
+Läuft kein Textschritt mit Schutz in der Cloud, läuft der Lauf wie vor diesem ADR: Ohne Cloud-Textschritt gibt es nichts zu schwärzen, ohne Schutz gehen die Texte nach 0009 ungeschwärzt hinaus.
+
+**Abbrechen** beendet die Erkennung und das Warten auf die Lehrkraft. Danach sendet keine Arbeit mehr etwas, auch keine, die gerade freigegeben wird. **Schutz ausschalten** während eines Laufs ändert diesen Lauf nicht: Die App merkt sich beim Start, welche Schritte geschützt sind, und eine noch nicht freigegebene Arbeit wartet weiter auf ihre Freigabe und geht danach pseudonymisiert hinaus. Wer den Schutz während eines ungeschützten Laufs einschaltet, bekommt für die restlichen Seiten den Fehler `notPseudonymized`, es geht nichts ungeschwärzt hinaus.
+
+**Fortschritt und Restdauer.** Während der Erkennung steht „Personenbezug wird erkannt …“, während des Wartens „Wartet auf Freigabe (2 Arbeiten)“, mit der Rechenzeit danach, falls sie über einer Minute liegt. Die Wartezeit zählt nicht als Rechenzeit: Die Restdauer lernt in dieser Zeit nichts, und der Balken steht still.
+
+**Zustand.** Erkannte, ergänzte und entfernte Stellen gelten nur für einen Lauf und liegen im Arbeitsspeicher. Am Ende des Laufs, nach Abbrechen und nach einem Neustart der App sind sie weg. Ein erneuter Lauf derselben Arbeit erkennt neu, und die Lehrkraft gibt wieder frei. Seiten oder Arbeiten, die während der Prüfung wegfallen, verlieren ihre Stellen. Begründung: Die Ergebnisse speichert die App bisher nicht über einen Neustart hinaus, und die Antworten tragen nach dem Zurücksetzen die Originale. Gespeicherte Stellen wären eine Liste der Namen und Kennungen je Arbeit auf der Platte, ohne dass ein späterer Lauf sie bräuchte.
+
+**Weitere Schicht.** Die Detektoren stehen als Liste in `src/privacy-review/detect.ts` (`DETECTORS = [detectRules, detectNames]`). Eine dritte Schicht ist ein weiterer `Detector` in dieser Liste. Ihre Stellen laufen danach wie die übrigen durch `propagateSpans`.
 
 ### Was gesendet wird und was nicht
 
@@ -128,7 +136,17 @@ Tooltip und `aria-label` nennen den Schutz je Schritt, etwa „Texterkennung lok
 - Bei der Cloud-Wahl steht der Schalter „Personenbezug vor dem Senden entfernen“, vorbelegt nach Anbieter und Adresse (an, bei „Eigener Server“ und Loopback aus). Ein Wechsel von Anbieter oder Adresse setzt ihn auf den Standard zurück, damit eine Bestätigung nie für einen anderen Host gilt.
 - Dieselbe Zeile steht bei einer bestehenden Wahl in den Einstellungen und ruft `cloud_set_protection` auf.
 - Eine Cloud-Erkennung, die der Schutz sperrt (durch die Migration oder durch spätes Einschalten), meldet das in den Einstellungen („Bei eingeschaltetem Schutz läuft die Erkennung lokal. Diese Cloud-Erkennung ist gesperrt …“) und an der Hauptaktion, statt still lokal zu rechnen.
-- Schnittstelle für die Verdrahtung: `useCloud().protects(role)` sagt je Schritt, ob der Schutz gilt (Cloud-Schritt mit Schutz an). `cloudLlmClient(step, invoke, { pseudonymized: true })` setzt das Flag, Standard ist `false`.
+- Schnittstelle für die Verdrahtung: `useCloud().protects(role)` sagt je Schritt, ob der Schutz gilt (Cloud-Schritt mit Schutz an). `cloudLlmClient(step, invoke, { pseudonymized: true })` setzt das Flag, Standard ist `false`. Den Client mit Flag baut nur `src/app/use-shields.ts`, und zwar immer innerhalb der Hülle.
+
+**Prüfansicht** („Vor dem Senden prüfen“, ein Dialog nach [0005](0005-bedienkonzept.md)):
+
+- Links die Arbeiten des Laufs mit Zustand: „wird erkannt“, „zu prüfen“, „freigegeben“ oder „nicht erkannt“.
+- Rechts der erkannte Text aller Seiten der gewählten Arbeit. Kennungen sind hinterlegt und zeigen ihren Platzhalter, etwa „Lena [Person 1]“. Sensible Angaben sind gepunktet unterstrichen und tragen „Warnung: Gesundheit“, sie werden nicht ersetzt.
+- „Stelle“ und „Art“ ergänzen eine Kennung. Eine Markierung im Text füllt „Stelle“ vor, Tippen geht auch. Danach läuft `propagateSpans` erneut, die Stelle wird also überall in der Arbeit ersetzt. Ergänzen deckt auch eine sensible Angabe ab, die die Lehrkraft schwärzen will.
+- Das ✕ an einer Kennung („„Lena“ nicht ersetzen“) entfernt sie an allen Stellen der Arbeit, und sie bleibt auch nach einer späteren Ergänzung entfernt.
+- Ein Satz sagt, was gesendet wird: „Gesendet wird nur der Text mit Platzhaltern, also pseudonymisiert, und erst nach der Freigabe.“
+- „Freigeben“ ist die Hauptaktion des Dialogs und springt zur nächsten offenen Arbeit. Ist keine mehr offen, schließt sich der Dialog. Er lässt sich jederzeit schließen, in der Kopfzeile steht dann „Vor dem Senden prüfen (2)“ neben „Abbrechen“.
+- In `pnpm dev:web` zeigt `?schutz` an der Adresse die Prüfansicht mit der Vorschau-Korrektur, ganz ohne Netzwerk.
 
 ### Migration
 
@@ -137,7 +155,7 @@ Eine bestehende `cloud.json` hat das Feld nicht. Beim Lesen gilt der Standard: a
 Folgen für bestehende Wahlen:
 
 - Eine Cloud-Erkennung bei einem Cloud-Anbieter ist nach dem Update gesperrt (`protectionActive`). Die Einstellungen und die Hauptaktion melden das. Die Lehrkraft schaltet den Schutz bewusst aus (mit Hinweis) oder wählt lokal.
-- Ein Cloud-Textschritt braucht ab jetzt das Flag `pseudonymized: true`. Solange die Verdrahtung im Ablauf fehlt, lehnt Rust seine Anfragen mit `notPseudonymized` ab. Das ist gewollt: Es sendet nichts ungeschwärzt. Die Verdrahtung ist der nächste Schritt (siehe „Folgen“).
+- Ein Cloud-Textschritt braucht ab jetzt das Flag `pseudonymized: true`. Es kommt nur aus der Hülle im Ablauf (siehe „Ablauf“), jeder andere Codepfad scheitert in Rust mit `notPseudonymized`.
 - „Eigener Server“ und Loopback laufen unverändert.
 
 ## Erkennung
@@ -157,7 +175,8 @@ Dieser Abschnitt wird nach der Messung (`eval/`, nur mit selbst geschriebenen Be
 - Mit Schutz läuft die Erkennung lokal. Wer wegen eines schwachen Rechners eine Cloud-Erkennung wollte, braucht dafür ein Schulmodell mit Vertrag (Schutz aus) oder einen eigenen Server.
 - Das Flag `pseudonymized` ist eine Sicherung gegen vergessene Codepfade, kein Beweis. Rust prüft nicht, ob der Text geschwärzt ist.
 - Das Zurücksetzen hängt davon ab, dass der Anbieter die Platzhalter unverändert zurückgibt. Wie das Kernmodul mit geänderten oder fehlenden Platzhaltern umgeht, legt es selbst fest und gehört nicht in dieses ADR.
-- Die Migration sperrt bestehende Cloud-Erkennungen und Cloud-Textschritte, bis die Verdrahtung und die Prüfansicht da sind oder die Lehrkraft den Schutz ausschaltet.
+- Die Migration sperrt bestehende Cloud-Erkennungen, bis die Lehrkraft den Schutz ausschaltet. Cloud-Textschritte laufen mit Prüfansicht und Schwärzen.
+- Mit Schutz wartet ein Lauf auf die Lehrkraft. Die lokalen Schritte sind dann schon fertig, die Cloud-Schritte laufen Arbeit für Arbeit nach der Freigabe.
 - Platzhalter verändern, was das Modell sieht. Die Korrekturqualität mit geschwärztem Text ist nicht gemessen und gehört in die Messung.
 
 ## Tests
@@ -169,6 +188,9 @@ Dieser Abschnitt wird nach der Messung (`eval/`, nur mit selbst geschriebenen Be
 - Frontend: Der Schalter ist je Anbieter vorbelegt. „Abbrechen“ im Hinweis lässt ihn an und hat den Fokus. Die Erkennung ist bei Schutz an nicht verwendbar. Der Hinweis nennt bei der Erkennung die Handschrift.
 - Frontend: Client, Hook (`protects`, `setProtection`) und Cloud-Zeichen nennen den Schutz. Eine gesperrte Cloud-Erkennung meldet das in den Einstellungen.
 - E2E: Den Schalter ausschalten, den Hinweis abbrechen: Er bleibt an. Wieder ausschalten und bestätigen: Die Cloud-Erkennung ist wählbar.
+- Ablauf: Phasen in dieser Reihenfolge, vor der Freigabe kein Aufruf des Cloud-Schritts, eine nicht freigegebene Arbeit wird nie gesendet, auch nicht nach Abbrechen oder Ausschalten des Schutzes. Ohne Schutz läuft alles wie bisher.
+- Prüfansicht: Ergänzen mit Weitergabe, Entfernen auf Dauer, Freigeben.
+- E2E: Ein Lauf mit Cloud-Korrektur und Schutz zeigt die Prüfansicht, die Lehrkraft ergänzt eine Stelle und gibt frei. Das nachgebildete `cloud_chat` prüft, dass jede Anfrage `pseudonymized: true` trägt und keinen Originalnamen enthält, und die Marken erscheinen auf dem Original.
 
 ## Doku
 

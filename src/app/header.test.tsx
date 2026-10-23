@@ -29,6 +29,15 @@ afterEach(() => {
 
 const arbeiten: Arbeit[] = [{ id: 'x', name: 'Aufsatz', pages: [page('a'), page('b')] }];
 
+const privacyWork = (id: string, status: 'open' | 'released') => ({
+  id,
+  name: id,
+  status,
+  pages: [],
+  removed: [],
+  message: null,
+});
+
 function render(parts: TestAppParts) {
   act(() =>
     root.render(
@@ -261,6 +270,32 @@ describe('Header', () => {
     expect(subject()).toBeNull();
     click(button('Abbrechen'));
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('reopens the check before sending while works wait for the release', () => {
+    const show = vi.fn<() => void>();
+    render({
+      run: {
+        running: true,
+        progress: {
+          label: '65\u00a0%',
+          detail: 'Wartet auf Freigabe (1 Arbeit)',
+          value: 65,
+          max: 100,
+        },
+      },
+      privacy: { works: [privacyWork('x', 'open'), privacyWork('y', 'released')], show },
+    });
+    click(button('Vor dem Senden prüfen (1)'));
+    expect(show).toHaveBeenCalledOnce();
+    expect(button('Abbrechen')).toBeDefined();
+
+    render({
+      run: { running: true },
+      privacy: { works: [privacyWork('x', 'released')], show },
+    });
+    expect(button('Vor dem Senden prüfen (0)')).toBeUndefined();
+    expect(labels()).not.toContainEqual(expect.stringMatching(/^Vor dem Senden/u));
   });
 
   it('greys out the cancel button while stopping', () => {

@@ -75,7 +75,7 @@ export interface Harness {
 
 export function setupReview(
   ids: readonly string[] = ['a', 'b', 'c'],
-  extra: Pick<ReviewDeps, 'logReview' | 'now'> = {},
+  extra: Pick<ReviewDeps, 'logReview' | 'now' | 'detect'> = {},
 ) {
   const pages = ids.map(page);
   const h: Harness = {
