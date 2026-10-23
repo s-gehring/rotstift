@@ -138,7 +138,7 @@ Alle Beispiele aus den selbst geschriebenen Proben.
 
 ## Zeit und Speicher
 
-Kein Lauf hatte einen freien Rechner: Auf simon-pc (Ryzen 7 5700X, 4 Threads je llama-server) liefen meist zwei Läufe gleichzeitig und fremde Rechenjobs, der Mac (M4 Pro) war ebenfalls belegt. Ein eigener Zeitlauf auf dem Mac brach unter dieser Last ab (173 s für die erste Arbeit, Antwort nach 120 s abgeschnitten) und ist verworfen. Die Zeiten sind darum Obergrenzen, der Holdout-Lauf mit der geringsten Last kommt einem 4-Kern-Rechner am nächsten.
+Kein Lauf hatte einen freien Rechner: Auf simon-pc (Ryzen 7 5700X, 4 Threads je llama-server) liefen meist zwei Läufe gleichzeitig und fremde Rechenjobs, der Mac (M4 Pro) war ebenfalls belegt. Ein eigener Zeitlauf auf dem Mac brach unter dieser Last ab (173 s für die erste Arbeit, Antwort nach 120 s abgeschnitten) und ist verworfen. Die Zeiten sind darum Obergrenzen, der Holdout-Lauf mit der geringsten Last kommt einem 4-Kern-Rechner am nächsten. **Alle Zeiten in diesem Bericht stammen von simon-pc**, keine vom Mac. Belastbarer als die Sekunden sind die Faktoren aus denselben Läufen: E4B braucht etwa das 2-Fache von E2B (Holdout 44 zu 22 s, dev 78 zu 52 s), der Prompt `sensibel` etwa das 0,4-Fache.
 
 | Lauf (simon-pc, 4 Threads, nur CPU) | Arbeiten | Median je Arbeit | 90-%-Quantil | Prompt-Token | erzeugte Token | Peak-RSS |
 | ----------------------------------- | -------: | ---------------: | -----------: | -----------: | -------------: | -------: |
