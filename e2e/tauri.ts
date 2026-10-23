@@ -15,6 +15,8 @@ export interface TauriOptions {
   readonly cloudCheckFails?: boolean;
   readonly transcript?: readonly string[];
   readonly cloudChat?: CloudChatCheck;
+  readonly privacyAnswer?: string;
+  readonly missing?: readonly string[];
 }
 
 declare global {
@@ -38,7 +40,7 @@ function install(options: TauriOptions): void {
     reviewer: null,
   };
   const custom: Args[] = [];
-  const missing = new Set<string>();
+  const missing = new Set<string>(options.missing ?? []);
   let cloudSteps: Record<string, Args> = {};
 
   const status = (modelId: string) => ({
@@ -138,17 +140,30 @@ function install(options: TauriOptions): void {
     llm_start_model: ({ modelId }) => ({ state: 'ready', model: String(modelId), port: 1 }),
     llm_stop_if_idle: () => false,
     llm_cancel: () => null,
-    llm_chat: () =>
-      options.transcript === undefined
-        ? Promise.reject({ kind: 'request', detail: 'not mocked' })
-        : {
+    privacy_unknown_words: () => [],
+    llm_chat: ({ request }) =>
+      JSON.stringify(request).includes('"name":"personenbezug"')
+        ? {
             choices: [
               {
-                message: { role: 'assistant', content: options.transcript.join('\n') },
+                message: {
+                  role: 'assistant',
+                  content: options.privacyAnswer ?? '{"kennungen":[],"sensibel":[]}',
+                },
                 finish_reason: 'stop',
               },
             ],
-          },
+          }
+        : options.transcript === undefined
+          ? Promise.reject({ kind: 'request', detail: 'not mocked' })
+          : {
+              choices: [
+                {
+                  message: { role: 'assistant', content: options.transcript.join('\n') },
+                  finish_reason: 'stop',
+                },
+              ],
+            },
     cloud_cancel: () => null,
     cloud_chat: ({ step, pseudonymized, request }) => {
       const check = options.cloudChat;

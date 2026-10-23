@@ -24,6 +24,7 @@ import { useGrading } from '../stats/use-grading.ts';
 import { useWeighting } from '../stats/use-weighting.ts';
 import { useToast } from '../ui/Toast.tsx';
 import { stepCosts, type StepCosts } from '../models/speed.ts';
+import { expectedPrivacyModels } from '../privacy-review/local-detectors.ts';
 import {
   createEstimator,
   durationText,
@@ -267,6 +268,8 @@ export function useAppModel(): AppModel {
     powerHold?.set(running);
   }, [powerHold, running]);
   useEffect(() => () => powerHold?.set(false), [powerHold]);
+  const totalRamBytes = transcriberSetup.state.hardware?.totalRamBytes ?? null;
+  const detecting = shields.corrector !== undefined || shields.reviewer !== undefined;
   const costs = stepCosts(
     {
       transcriber: transcriberCloud === null ? model : null,
@@ -274,8 +277,19 @@ export function useAppModel(): AppModel {
       corrector: cloud.steps.corrector === undefined ? correctorSetup.model : null,
       reviewer: cloud.steps.reviewer === undefined ? reviewerSetup.model : null,
       correctorDraft: correctorSetup.status?.draftReady === true,
+      detect: detecting
+        ? expectedPrivacyModels(
+            {
+              transcriber: model.id,
+              corrector: correctorSetup.model.id,
+              reviewer: reviewerSetup.model.id,
+              secondReading: secondReading.enabled,
+            },
+            totalRamBytes,
+          )
+        : [],
     },
-    transcriberSetup.state.hardware?.totalRamBytes ?? null,
+    totalRamBytes,
   );
   const {
     start: runStart,
@@ -334,6 +348,7 @@ export function useAppModel(): AppModel {
       profile,
       scope,
       costs.confirm.key !== 'none',
+      costs.detect.key !== 'none',
     );
     return durationText(totalSeconds(rates, work));
   };

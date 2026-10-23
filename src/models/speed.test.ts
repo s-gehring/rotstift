@@ -118,6 +118,7 @@ describe('stepCosts', () => {
     expect(fast).toEqual({
       read: { key: 'glm-ocr-q8', factor: 1 },
       confirm: { key: 'none', factor: 1 },
+      detect: { key: 'none', factor: 1 },
       correct: { key: 'gemma-4-e2b-q4', factor: 1 },
       review: { key: 'gemma-4-e2b-q4', factor: 1 },
     });
@@ -129,6 +130,18 @@ describe('stepCosts', () => {
     expect(thorough.confirm).toEqual({ key: 'lightonocr-3-08b-q8', factor: 0.9 });
     expect(thorough.correct).toEqual({ key: 'gemma-4-e4b-q4', factor: 1.95 });
     expect(thorough.review).toEqual({ key: 'gemma-4-e2b-q4', factor: 1 });
+  });
+
+  it('prices the detection of personal data by every model it asks', () => {
+    const models = { transcriber: GLM, second: null, corrector: E2B, reviewer: E2B };
+    expect(stepCosts({ ...models, detect: [E2B] }, null).detect).toEqual({
+      key: 'gemma-4-e2b-q4',
+      factor: 1,
+    });
+    expect(stepCosts({ ...models, detect: [E2B, E4B] }, null).detect).toEqual({
+      key: 'gemma-4-e2b-q4+gemma-4-e4b-q4',
+      factor: 2.5,
+    });
   });
 
   it('learns the correction with the head apart from the one without', () => {

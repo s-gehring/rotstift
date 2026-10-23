@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrivacySpan } from '../privacy/types.ts';
-import { detectWork } from './detect.ts';
+import { createDetectWork, detectWork } from './detect.ts';
 import {
   addIdentifier,
   dropPages,
@@ -24,7 +24,7 @@ async function work(): Promise<PrivacyWork> {
   const pages = await detectWork(
     [
       { pageId: 'p1', lines: ['Ich bin Mia Schulz.', 'Mia hatte die Grippe.'] },
-      { pageId: 'p2', lines: ['Tom und Mia, Tel. 0561 123456.'] },
+      { pageId: 'p2', lines: ['Udo und Mia, Tel. 0561 123456.'] },
     ],
     { workName: 'Mia Schulz', language: 'de' },
     signal,
@@ -60,14 +60,14 @@ describe('privacy review work', () => {
     expect(shown(await work())).toEqual([
       'Ich bin <Mia Schulz=[Person 1]>.',
       '<Mia=[Person 2]> hatte die {Grippe:health}.',
-      'Tom und <Mia=[Person 2]>, Tel. <0561 123456=[Kontakt 1]>.',
+      'Udo und <Mia=[Person 2]>, Tel. <0561 123456=[Kontakt 1]>.',
     ]);
   });
 
   it('adds a teacher identifier and passes it on to every occurrence', async () => {
     const added = addIdentifier(await work(), 'p2', { line: 1, offset: 0, length: 4 }, 'person');
     expect(shown(added)[2]).toBe(
-      '<Tom=[Person 3]> und <Mia=[Person 2]>, Tel. <0561 123456=[Kontakt 1]>.',
+      '<Udo=[Person 3]> und <Mia=[Person 2]>, Tel. <0561 123456=[Kontakt 1]>.',
     );
   });
 
@@ -79,20 +79,20 @@ describe('privacy review work', () => {
   it('removes every occurrence of an identifier and keeps it removed after an addition', async () => {
     const removed = removeIdentifier(await work(), 'p1', { line: 2, offset: 0, length: 3 });
     expect(removed.removed).toEqual(['mia']);
-    expect(shown(removed)[2]).toBe('Tom und Mia, Tel. <0561 123456=[Kontakt 1]>.');
+    expect(shown(removed)[2]).toBe('Udo und Mia, Tel. <0561 123456=[Kontakt 1]>.');
 
     const added = addIdentifier(removed, 'p2', { line: 1, offset: 0, length: 3 }, 'person');
     expect(shown(added)).toEqual([
       'Ich bin <Mia Schulz=[Person 1]>.',
       'Mia hatte die {Grippe:health}.',
-      '<Tom=[Person 2]> und Mia, Tel. <0561 123456=[Kontakt 1]>.',
+      '<Udo=[Person 2]> und Mia, Tel. <0561 123456=[Kontakt 1]>.',
     ]);
 
     const again = addIdentifier(added, 'p2', { line: 1, offset: 8, length: 3 }, 'person');
     expect(again.removed).toEqual([]);
     expect(shown(again).slice(1)).toEqual([
       '<Mia=[Person 2]> hatte die {Grippe:health}.',
-      '<Tom=[Person 3]> und <Mia=[Person 2]>, Tel. <0561 123456=[Kontakt 1]>.',
+      '<Udo=[Person 3]> und <Mia=[Person 2]>, Tel. <0561 123456=[Kontakt 1]>.',
     ]);
   });
 
@@ -103,6 +103,55 @@ describe('privacy review work', () => {
     expect(added.pages[1]?.spans).toContainEqual(
       expect.objectContaining({ source: 'teacher', offset: 0, length: 3 }),
     );
+  });
+
+  it('takes back a full name with its parts in one click and adds them back together', async () => {
+    const figure: PrivacySpan = {
+      kind: 'identifier',
+      category: 'person',
+      source: 'model',
+      line: 1,
+      offset: 0,
+      length: 16,
+    };
+    const pages = await createDetectWork([async () => [figure]])(
+      [
+        {
+          pageId: 'p1',
+          lines: ['Maik Klingenberg trifft Tschick.', 'Maik und Klingenbergs Vater.'],
+        },
+      ],
+      { workName: 'Aufsatz.pdf', language: 'de' },
+      signal,
+    );
+    const before: PrivacyWork = {
+      id: 'w2',
+      name: 'Aufsatz',
+      status: 'open',
+      pages,
+      removed: [],
+      message: null,
+    };
+    expect(shown(before)).toEqual([
+      '<Maik Klingenberg=[Person 1]> trifft Tschick.',
+      '<Maik=[Person 2]> und <Klingenberg=[Person 3]>s Vater.',
+    ]);
+
+    const removed = removeIdentifier(before, 'p1', { line: 1, offset: 0, length: 16 });
+    expect(shown(removed)).toEqual([
+      'Maik Klingenberg trifft Tschick.',
+      'Maik und Klingenbergs Vater.',
+    ]);
+
+    const again = addIdentifier(removed, 'p1', { line: 1, offset: 0, length: 16 }, 'person');
+    expect(again.removed).toEqual([]);
+    expect(shown(again)).toEqual(shown(before));
+  });
+
+  it('keeps a full name when only one of its parts is taken back', async () => {
+    const before = await work();
+    const removed = removeIdentifier(before, 'p1', { line: 2, offset: 0, length: 3 });
+    expect(shown(removed)[0]).toBe('Ich bin <Mia Schulz=[Person 1]>.');
   });
 
   it('changes nothing once the work is released', async () => {

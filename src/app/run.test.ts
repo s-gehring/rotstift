@@ -723,6 +723,7 @@ describe('startWorkload', () => {
     expect(work('count', runState({}), plain)).toEqual({
       read: 3,
       confirm: 0,
+      detect: 0,
       correct: 0,
       review: 0,
     });
@@ -732,6 +733,7 @@ describe('startWorkload', () => {
     expect(work('correct', runState({}), plain)).toEqual({
       read: 3,
       confirm: 0,
+      detect: 0,
       correct: 3,
       review: 0,
     });
@@ -740,7 +742,13 @@ describe('startWorkload', () => {
 
   it('leaves out pages that are already read', () => {
     const count = runState({ a: entry('x'), b: entry('y') });
-    expect(work('correct', count, plain)).toEqual({ read: 1, confirm: 0, correct: 3, review: 0 });
+    expect(work('correct', count, plain)).toEqual({
+      read: 1,
+      confirm: 0,
+      detect: 0,
+      correct: 3,
+      review: 0,
+    });
   });
 
   it('adds one second reading for every page that still has to be read', () => {
@@ -755,7 +763,22 @@ describe('startWorkload', () => {
       plain,
       true,
     );
-    expect(secondly).toEqual({ read: 2, confirm: 2, correct: 3, review: 0 });
+    expect(secondly).toEqual({ read: 2, confirm: 2, detect: 0, correct: 3, review: 0 });
+  });
+
+  it('adds the detection of personal data once per work', () => {
+    const guarded = startWorkload(
+      'correct',
+      pages,
+      arbeiten,
+      runState({}),
+      reviewState({}),
+      DEUTSCH,
+      plain,
+      false,
+      true,
+    );
+    expect(guarded.detect).toBe(2);
   });
 });
 
@@ -834,7 +857,7 @@ describe('runs that wait for the release of protected works', () => {
   const protectedRun = (
     phase: ReviewPhase,
     finished: number,
-    left: { confirm: number; correct: number; review: number },
+    left: { detect?: number; confirm: number; correct: number; review: number },
   ) =>
     reviewState(pages, {
       run: { phase, total: 2, finished, pending: { ...left, withCorrection: true } },
@@ -853,18 +876,26 @@ describe('runs that wait for the release of protected works', () => {
   });
 
   it('says that personal data is being detected', () => {
-    const detecting = protectedRun('detecting', 0, { confirm: 2, correct: 2, review: 0 });
+    const detecting = protectedRun('detecting', 0, {
+      detect: 2,
+      confirm: 2,
+      correct: 2,
+      review: 0,
+    });
     expect(runProgress(detecting, queued, IDLE_ENGINE, 0)?.detail).toBe(
       'Personenbezug wird erkannt …',
     );
-    expect(runSnapshot(detecting, queued, null)).toBeNull();
+    expect(runSnapshot(detecting, queued, null)).toEqual({
+      step: 'detect',
+      left: { read: 0, confirm: 0, detect: 2, correct: 2, review: 0 },
+    });
   });
 
   it('counts the remaining protected work while a released work is corrected', () => {
     const correcting = protectedRun('correcting', 1, { confirm: 1, correct: 1, review: 2 });
     expect(runSnapshot(correcting, queued, null)).toEqual({
       step: 'correct',
-      left: { read: 0, confirm: 0, correct: 1, review: 2 },
+      left: { read: 0, confirm: 0, detect: 0, correct: 1, review: 2 },
     });
     const reviewing = protectedRun('reviewing', 1, { confirm: 0, correct: 0, review: 1 });
     expect(runSnapshot(reviewing, queued, null)?.step).toBe('review');

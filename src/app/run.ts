@@ -137,17 +137,20 @@ export function startWorkload(
   profile: CorrectionProfile,
   scope: CorrectionScope,
   secondReading = false,
+  detecting = false,
 ): Workload {
   const open = openPages(kind, pages, count, review, profile);
   const read = open.filter((page) => count.entries[page.id]?.status !== 'done').length;
   const confirm = secondReading ? read : 0;
   if (kind === 'count') return { ...NO_WORK, read, confirm };
   const ids = new Set(open.map((page) => page.id));
+  const touched = worksTouching(arbeiten, ids);
   return {
     read,
     confirm,
+    detect: detecting ? touched : 0,
     correct: scope.spelling || scope.grammar ? open.length : 0,
-    review: reviewsContent(scope) ? worksTouching(arbeiten, ids) : 0,
+    review: reviewsContent(scope) ? touched : 0,
   };
 }
 
@@ -276,6 +279,7 @@ export function runSnapshot(
   const pageIds = start?.pageIds ?? activePageIds(review);
   const pagesStage = run.stages?.pages !== false;
   const reviewLeft = run.stages?.review === true ? (start?.works ?? 0) : 0;
+  const detectLeft = run.stages?.detect === true ? (start?.works ?? 0) : 0;
   const status = (id: string) => count.entries[id]?.status;
   if (run.phase === 'transcribing') {
     const read = pageIds.filter((id) => status(id) !== 'done' && status(id) !== 'error').length;
@@ -285,25 +289,39 @@ export function runSnapshot(
       left: {
         read,
         confirm,
+        detect: detectLeft,
         correct: pagesStage ? pageIds.filter((id) => status(id) !== 'error').length : 0,
         review: reviewLeft,
       },
     };
   }
   if (run.pending !== undefined) {
-    if (run.phase !== 'correcting' && run.phase !== 'reviewing') return null;
     const { correct } = run.pending;
+    const left = {
+      ...NO_WORK,
+      detect: run.pending.detect ?? 0,
+      correct,
+      review: run.pending.review,
+    };
+    if (run.phase === 'detecting') return { step: 'detect', left };
+    if (run.phase !== 'correcting' && run.phase !== 'reviewing') return null;
     return {
       step: run.phase === 'reviewing' || correct === 0 ? 'review' : 'correct',
-      left: { ...NO_WORK, correct, review: run.pending.review },
+      left,
     };
   }
   const left = Math.max(0, run.total - run.finished);
   if (run.phase === 'locating') {
-    return { step: 'correct', left: { ...NO_WORK, correct: run.total, review: reviewLeft } };
+    return {
+      step: 'correct',
+      left: { ...NO_WORK, detect: detectLeft, correct: run.total, review: reviewLeft },
+    };
   }
   if (run.phase === 'correcting') {
-    return { step: 'correct', left: { ...NO_WORK, correct: left, review: reviewLeft } };
+    return {
+      step: 'correct',
+      left: { ...NO_WORK, detect: detectLeft, correct: left, review: reviewLeft },
+    };
   }
   return { step: 'review', left: { ...NO_WORK, review: left } };
 }

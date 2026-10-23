@@ -27,6 +27,7 @@ sysinfo = { version = "0.39", default-features = false, features = ["system", "d
 tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "sync", "time"] }
 keyring = "4"
+spellbook = "0.3"
 url = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]

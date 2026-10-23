@@ -8,14 +8,14 @@ import {
   type AnyModelInfo,
 } from './registry.ts';
 
-export type CostStep = 'read' | 'confirm' | 'correct' | 'review';
+export type CostStep = 'read' | 'confirm' | 'detect' | 'correct' | 'review';
 
 const RELATIVE_TIME: Readonly<Record<string, Readonly<Partial<Record<CostStep, number>>>>> = {
   'glm-ocr-q8': { read: 1 },
   'qwen3-vl-4b-q4': { read: 3.1 },
   'lightonocr-3-08b-q8': { confirm: 0.9 },
-  'gemma-4-e2b-q4': { correct: 1, review: 1 },
-  'gemma-4-e4b-q4': { correct: 1.95, review: 1.9 },
+  'gemma-4-e2b-q4': { detect: 1, correct: 1, review: 1 },
+  'gemma-4-e4b-q4': { detect: 1.5, correct: 1.95, review: 1.9 },
   'gemma-4-26b-a4b-q4': { correct: 1.9, review: 2.1 },
 };
 
@@ -78,6 +78,7 @@ export interface ChosenModels {
   readonly corrector: AnyModelInfo | null;
   readonly reviewer: AnyModelInfo | null;
   readonly correctorDraft?: boolean;
+  readonly detect?: readonly AnyModelInfo[];
 }
 
 export const CLOUD_COST: StepCost = { key: 'cloud', factor: 1 };
@@ -96,11 +97,21 @@ function single(
 }
 
 export function stepCosts(models: ChosenModels, totalRamBytes: number | null): StepCosts {
-  const { transcriber, second, corrector, reviewer, correctorDraft = false } = models;
+  const { transcriber, second, corrector, reviewer, correctorDraft = false, detect = [] } = models;
   return {
     read: single(transcriber, 'read', totalRamBytes),
     confirm:
       transcriber === null || second === null ? NO_COST : single(second, 'confirm', totalRamBytes),
+    detect:
+      detect.length === 0
+        ? NO_COST
+        : {
+            key: detect.map((model) => model.id).join('+'),
+            factor: detect.reduce(
+              (sum, model) => sum + relativeTime(model, 'detect', totalRamBytes),
+              0,
+            ),
+          },
     correct: single(corrector, 'correct', totalRamBytes, correctorDraft),
     review: single(reviewer, 'review', totalRamBytes),
   };

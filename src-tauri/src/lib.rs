@@ -6,8 +6,11 @@ mod menu;
 mod models;
 mod power;
 mod save;
+mod spelling;
 
 use std::sync::Arc;
+
+pub use spelling::unknown_words;
 
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -70,6 +73,7 @@ pub fn run() {
             power::commands::power_hold,
             power::commands::power_release,
             save::save_file,
+            spelling::privacy_unknown_words,
         ])
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Started {

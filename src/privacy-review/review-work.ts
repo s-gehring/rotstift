@@ -1,3 +1,4 @@
+import { editDistance } from '../correction/edit-distance.ts';
 import { propagateSpans } from '../privacy/propagate.ts';
 import { normalizeForm, pseudonymizeWork } from '../privacy/pseudonymize.ts';
 import type { PrivacyWorkPage } from '../privacy/pseudonymizing-corrector.ts';
@@ -68,6 +69,38 @@ function keyOf(page: PrivacyWorkPage, span: PrivacySpan): string {
   return normalizeForm(textAt(page.lines, span));
 }
 
+const MIN_FUZZY_WORD = 5;
+
+function wordsOf(key: string): string[] {
+  return key.match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function sameWord(word: string, wanted: string): boolean {
+  if (word === wanted) return true;
+  return (
+    wanted.length >= MIN_FUZZY_WORD &&
+    word.charAt(0) === wanted.charAt(0) &&
+    Math.abs(word.length - wanted.length) <= 1 &&
+    editDistance(word, wanted) <= 1
+  );
+}
+
+export function inGroup(key: string, chosen: string): boolean {
+  const own = wordsOf(chosen);
+  const words = wordsOf(key);
+  return words.length > 0 && words.every((word) => own.some((wanted) => sameWord(word, wanted)));
+}
+
+function identifierKeys(pages: readonly PrivacyWorkPage[]): string[] {
+  return [
+    ...new Set(
+      pages.flatMap((page) =>
+        page.spans.filter((span) => span.kind === 'identifier').map((span) => keyOf(page, span)),
+      ),
+    ),
+  ];
+}
+
 function withoutRemoved(
   pages: readonly PrivacyWorkPage[],
   removed: readonly string[],
@@ -100,7 +133,7 @@ export function addIdentifier(
   const chosen = trimmed(page.lines, range);
   if (chosen === null) return work;
   const key = normalizeForm(textAt(page.lines, chosen));
-  const removed = work.removed.filter((entry) => entry !== key);
+  const removed = work.removed.filter((entry) => !inGroup(entry, key));
   const added: IdentifierSpan = { kind: 'identifier', category, source: 'teacher', ...chosen };
   const pages = work.pages.map((candidate) =>
     candidate.pageId === pageId
@@ -127,10 +160,13 @@ export function addIdentifier(
 export function removeIdentifier(work: PrivacyWork, pageId: string, range: TextRange): PrivacyWork {
   const page = work.pages.find((candidate) => candidate.pageId === pageId);
   if (work.status !== 'open' || page === undefined) return work;
-  const keys = page.spans
+  const chosen = page.spans
     .filter((span) => span.kind === 'identifier' && overlaps(span, range))
     .map((span) => keyOf(page, span));
-  if (keys.length === 0) return work;
+  if (chosen.length === 0) return work;
+  const keys = identifierKeys(work.pages).filter((key) =>
+    chosen.some((entry) => inGroup(key, entry)),
+  );
   const removed = [...new Set([...work.removed, ...keys])];
   return { ...work, removed, pages: withoutRemoved(work.pages, removed) };
 }

@@ -2,15 +2,15 @@ import { z } from 'zod';
 import { DEFAULT_CORRECTOR_ID, DEFAULT_MODEL_ID, DEFAULT_REVIEWER_ID } from '../models/registry.ts';
 import type { StepCosts } from '../models/speed.ts';
 
-export type Step = 'read' | 'confirm' | 'correct' | 'review';
+export type Step = 'read' | 'confirm' | 'detect' | 'correct' | 'review';
 
 export type Rates = Readonly<Record<Step, number>>;
 
 export type Workload = Readonly<Record<Step, number>>;
 
-export const DEFAULT_RATES: Rates = { read: 30, confirm: 30, correct: 15, review: 20 };
+export const DEFAULT_RATES: Rates = { read: 30, confirm: 30, detect: 15, correct: 15, review: 20 };
 
-export const NO_WORK: Workload = { read: 0, confirm: 0, correct: 0, review: 0 };
+export const NO_WORK: Workload = { read: 0, confirm: 0, detect: 0, correct: 0, review: 0 };
 
 const SMOOTHING = 0.3;
 
@@ -74,6 +74,7 @@ export function totalSeconds(rates: Rates, work: Workload): number {
   return (
     rates.read * work.read +
     rates.confirm * work.confirm +
+    rates.detect * work.detect +
     rates.correct * work.correct +
     rates.review * work.review
   );
@@ -124,7 +125,7 @@ const STORED_RATES = z.record(z.string(), rate);
 
 const LEGACY_RATES = z.object({ read: rate, correct: rate, review: rate });
 
-const STEPS: readonly Step[] = ['read', 'confirm', 'correct', 'review'];
+const STEPS: readonly Step[] = ['read', 'confirm', 'detect', 'correct', 'review'];
 
 const rateKey = (step: Step, key: string) => `${step}:${key}`;
 
@@ -134,6 +135,7 @@ export function ratesFor(learned: LearnedRates, costs: StepCosts): Rates {
   return {
     read: rateOf('read'),
     confirm: rateOf('confirm'),
+    detect: rateOf('detect'),
     correct: rateOf('correct'),
     review: rateOf('review'),
   };

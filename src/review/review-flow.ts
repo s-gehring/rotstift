@@ -32,6 +32,7 @@ import { describeError } from '../pipeline/transcriber.ts';
 import type { PrivacyWorkPage } from '../privacy/pseudonymizing-corrector.ts';
 import type { IdentifierCategory } from '../privacy/types.ts';
 import { detectWork, type DetectWork } from '../privacy-review/detect.ts';
+import { DetectSetupError } from '../privacy-review/detect-error.ts';
 import {
   addIdentifier,
   dropPages,
@@ -116,9 +117,11 @@ export interface ContentReviewLog {
 export interface RunStages {
   readonly pages: boolean;
   readonly review: boolean;
+  readonly detect?: boolean;
 }
 
 export interface PendingWork {
+  readonly detect?: number;
   readonly confirm: number;
   readonly correct: number;
   readonly review: number;
@@ -789,14 +792,21 @@ export function createReviewFlow(deps: ReviewDeps) {
       review: reviews ? groups.length : 0,
     };
     const updateRun = () => {
-      const confirm = (state.privacy ?? []).filter(
+      const privacy = state.privacy ?? [];
+      const confirm = privacy.filter(
         (work) => work.status === 'detecting' || work.status === 'open',
       ).length;
+      const stillDetecting = privacy.filter((work) => work.status === 'detecting').length;
       setRun({
         phase: busy ?? (detecting ? 'detecting' : 'awaiting'),
         total,
         finished,
-        pending: { confirm, ...left, withCorrection: guard.corrector !== undefined },
+        pending: {
+          detect: stillDetecting,
+          confirm,
+          ...left,
+          withCorrection: guard.corrector !== undefined,
+        },
       });
     };
     const step = (kind: 'correct' | 'review') => {
@@ -825,19 +835,19 @@ export function createReviewFlow(deps: ReviewDeps) {
           language: profile.language,
           ...(scope.content && { task: cleanAssignment(scope.assignment) }),
         };
+        let message = DETECT_FAILED;
         const found = await abortable(
           track(detect(privacyPages(work), context, signal)),
           signal,
-        ).catch(() => null);
+        ).catch((error: unknown) => {
+          if (error instanceof DetectSetupError) message = error.message;
+          return null;
+        });
         if (found === ABORTED) return;
         if (found === null) {
-          patchPrivacy(work.id, (entry) => ({
-            ...entry,
-            status: 'failed',
-            message: DETECT_FAILED,
-          }));
+          patchPrivacy(work.id, (entry) => ({ ...entry, status: 'failed', message }));
           for (const { page } of pages) {
-            patch(page.id, { status: 'failed', message: DETECT_FAILED, detail: null });
+            patch(page.id, { status: 'failed', message, detail: null });
             step('correct');
           }
           if (reviews) step('review');
@@ -927,8 +937,12 @@ export function createReviewFlow(deps: ReviewDeps) {
           : { ...existing, status: 'waiting', message: null, detail: null };
     }
     lastScope = scope;
-    stages = { pages: targets.length > 0, review: reviewsContent(scope) && works.length > 0 };
     const guard = guardFor(profile, scope);
+    stages = {
+      pages: targets.length > 0,
+      review: reviewsContent(scope) && works.length > 0,
+      ...(guard !== null && { detect: true }),
+    };
     commit({ ...state, pages, profile, outcome: null, stopping: false, privacy: null });
     try {
       let readable: Readable[] = [];

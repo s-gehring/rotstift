@@ -1,6 +1,6 @@
 # 0011: Personenbezug vor dem Senden entfernen
 
-- Status: Angenommen (Abschnitt „Erkennung“ wird nach der Messung ergänzt)
+- Status: Angenommen
 - Datum: 2026-10-23
 
 ## Kontext
@@ -30,14 +30,14 @@ Dieses ADR legt fest, was ersetzt wird, wann der Schutz gilt, wie er sich abscha
 4. **Prüfansicht vor dem Senden.** Erkennung und Schwärzen laufen lokal für alle Arbeiten. Danach bestätigt die Lehrkraft je Arbeit den geschwärzten Text und kann Stellen ergänzen oder entfernen. Erst dann wird gesendet.
 5. **Der Schutz ist standardmäßig an und je Anbieter abschaltbar**, nach einem eigenen Hinweis. Für „Eigener Server“ und Loopback ist er standardmäßig aus. Ist er aus, geht auch die Cloud-Erkennung wieder, wie nach 0009 (für Schulen mit Vertrag zur Auftragsverarbeitung).
 6. **Wortwahl.** Der Text ist nach dem Schwärzen pseudonymisiert, nicht anonym: Nach C-434/16 sind schon die Prüfungsantworten personenbezogen, und die Detektoren sind nicht vollständig. Die Verantwortung bleibt bei der Lehrkraft.
-7. **Die Erkennung läuft in drei Schichten:** Regeln, eine Namensliste aus dem Namen der Arbeit und ein lokales Modell (siehe „Erkennung“).
+7. **Die Erkennung läuft in drei Schichten:** Regeln, Namenslisten mit Wörterbuch und ein lokales Modell (siehe „Erkennung“).
 
 ### Ablauf
 
 Mit Schutz gilt für einen Lauf, in dem mindestens ein Textschritt in der Cloud mit Schutz läuft (`useCloud().protects(role)`):
 
 1. **Lokal erkennen.** Alle Arbeiten werden mit dem lokalen Erkennungsmodell gelesen, samt zweiter Lesung. Danach sucht die App die Zeilen auf den Seiten, ebenfalls lokal. Läuft die Korrektur lokal, korrigiert sie hier schon alle Seiten wie bisher.
-2. **Personenbezug erkennen.** Je Arbeit laufen die Detektoren nacheinander über die sichtbaren Zeilen jeder Seite, danach gibt `propagateSpans` jede gefundene Kennung an alle Vorkommen der Arbeit weiter. Kontext sind der Name der Arbeit, Fach, Sprache und, wenn Inhalt und Form geprüft werden, die Aufgabenstellung. Schlägt die Erkennung einer Arbeit fehl, sendet sie nichts, und ihre Seiten zeigen den Fehler.
+2. **Personenbezug erkennen.** Je Arbeit laufen die Detektoren einmal über die sichtbaren Zeilen aller Seiten hintereinander, danach gibt `propagateSpans` jede gefundene Kennung an alle Vorkommen der Arbeit weiter. Kontext sind der Name der Arbeit, Fach, Sprache und, wenn Inhalt und Form geprüft werden, die Aufgabenstellung. Schlägt die Erkennung einer Arbeit fehl, sendet sie nichts, und ihre Seiten zeigen den Fehler.
 3. **Prüfansicht.** Sie öffnet sich, sobald die Erkennung beginnt, und zeigt die Arbeiten, sobald sie erkannt sind. Die Lehrkraft prüft je Arbeit, ergänzt oder entfernt Stellen und gibt frei. Es gibt keine Sammelfreigabe, die eine ungesehene Arbeit freigäbe.
 4. **Textschritte entfernt.** Jede freigegebene Arbeit geht sofort hinaus, während die Lehrkraft die übrigen prüft. Umhüllt wird nur der Cloud-Schritt mit Schutz: `withPseudonymization(corrector, bestätigte Stellen)` über einem Client mit `pseudonymized: true`. Die Hülle bekommt genau die sichtbaren Zeilen, die auch `correctPage` und `workLines` benutzen, und lehnt andere Zeilen ab, ohne zu senden. Ein lokaler Schritt läuft unverändert.
 5. **Zurücksetzen und Zeichnen.** Die Hülle setzt die Originale in die Antwort ein, die App ordnet die Anmerkungen dem Originaltext zu und zeichnet sie wie bisher.
@@ -46,11 +46,11 @@ Läuft kein Textschritt mit Schutz in der Cloud, läuft der Lauf wie vor diesem 
 
 **Abbrechen** beendet die Erkennung und das Warten auf die Lehrkraft. Danach sendet keine Arbeit mehr etwas, auch keine, die gerade freigegeben wird. **Schutz ausschalten** während eines Laufs ändert diesen Lauf nicht: Die App merkt sich beim Start, welche Schritte geschützt sind, und eine noch nicht freigegebene Arbeit wartet weiter auf ihre Freigabe und geht danach pseudonymisiert hinaus. Wer den Schutz während eines ungeschützten Laufs einschaltet, bekommt für die restlichen Seiten den Fehler `notPseudonymized`, es geht nichts ungeschwärzt hinaus.
 
-**Fortschritt und Restdauer.** Während der Erkennung steht „Personenbezug wird erkannt …“, während des Wartens „Wartet auf Freigabe (2 Arbeiten)“, mit der Rechenzeit danach, falls sie über einer Minute liegt. Die Wartezeit zählt nicht als Rechenzeit: Die Restdauer lernt in dieser Zeit nichts, und der Balken steht still.
+**Fortschritt und Restdauer.** Während der Erkennung steht „Personenbezug wird erkannt …“, die Restdauer rechnet dafür einen eigenen Schritt je Arbeit (siehe „Erkennung“), während des Wartens „Wartet auf Freigabe (2 Arbeiten)“, mit der Rechenzeit danach, falls sie über einer Minute liegt. Die Wartezeit zählt nicht als Rechenzeit: Die Restdauer lernt in dieser Zeit nichts, und der Balken steht still.
 
 **Zustand.** Erkannte, ergänzte und entfernte Stellen gelten nur für einen Lauf und liegen im Arbeitsspeicher. Am Ende des Laufs, nach Abbrechen und nach einem Neustart der App sind sie weg. Ein erneuter Lauf derselben Arbeit erkennt neu, und die Lehrkraft gibt wieder frei. Seiten oder Arbeiten, die während der Prüfung wegfallen, verlieren ihre Stellen. Begründung: Die Ergebnisse speichert die App bisher nicht über einen Neustart hinaus, und die Antworten tragen nach dem Zurücksetzen die Originale. Gespeicherte Stellen wären eine Liste der Namen und Kennungen je Arbeit auf der Platte, ohne dass ein späterer Lauf sie bräuchte.
 
-**Weitere Schicht.** Die Detektoren stehen als Liste in `src/privacy-review/detect.ts` (`DETECTORS = [detectRules, detectNames]`). Eine dritte Schicht ist ein weiterer `Detector` in dieser Liste. Ihre Stellen laufen danach wie die übrigen durch `propagateSpans`.
+**Schichten.** Die Detektoren ohne Modell stehen als Liste in `src/privacy-review/detect.ts` (`DETECTORS`), Wörterbuch und Modell kommen in der App über `src/privacy-review/local-detectors.ts` dazu. Jeder ist ein `Detector`, ihre Stellen laufen gemeinsam durch `propagateSpans`.
 
 ### Was gesendet wird und was nicht
 
@@ -143,7 +143,7 @@ Tooltip und `aria-label` nennen den Schutz je Schritt, etwa „Texterkennung lok
 - Links die Arbeiten des Laufs mit Zustand: „wird erkannt“, „zu prüfen“, „freigegeben“ oder „nicht erkannt“.
 - Rechts der erkannte Text aller Seiten der gewählten Arbeit. Kennungen sind hinterlegt und zeigen ihren Platzhalter, etwa „Lena [Person 1]“. Sensible Angaben sind gepunktet unterstrichen und tragen „Warnung: Gesundheit“, sie werden nicht ersetzt.
 - „Stelle“ und „Art“ ergänzen eine Kennung. Eine Markierung im Text füllt „Stelle“ vor, Tippen geht auch. Danach läuft `propagateSpans` erneut, die Stelle wird also überall in der Arbeit ersetzt. Ergänzen deckt auch eine sensible Angabe ab, die die Lehrkraft schwärzen will.
-- Das ✕ an einer Kennung („„Lena“ nicht ersetzen“) entfernt sie an allen Stellen der Arbeit, und sie bleibt auch nach einer späteren Ergänzung entfernt.
+- Das ✕ an einer Kennung („„Lena“ nicht ersetzen“) entfernt sie an allen Stellen der Arbeit, und sie bleibt auch nach einer späteren Ergänzung entfernt. Bei einem ganzen Namen nimmt es seine Teile und ihre Schreibvarianten mit: Ein Klick auf „Maik Klingenberg“ lässt auch „Maik“ und „Klingenbergs“ stehen. Ein Klick auf „Maik“ allein lässt den ganzen Namen ersetzt. Ergänzen holt die ganze Gruppe zurück.
 - Ein Satz sagt, was gesendet wird: „Gesendet wird nur der Text mit Platzhaltern, also pseudonymisiert, und erst nach der Freigabe.“
 - „Freigeben“ ist die Hauptaktion des Dialogs und springt zur nächsten offenen Arbeit. Ist keine mehr offen, schließt sich der Dialog. Er lässt sich jederzeit schließen, in der Kopfzeile steht dann „Vor dem Senden prüfen (2)“ neben „Abbrechen“.
 - In `pnpm dev:web` zeigt `?schutz` an der Adresse die Prüfansicht mit der Vorschau-Korrektur, ganz ohne Netzwerk.
@@ -160,17 +160,62 @@ Folgen für bestehende Wahlen:
 
 ## Erkennung
 
-Die Erkennung der Kennungen läuft in drei Schichten, die sich ergänzen:
+Grundlage ist die Messung [Personenbezug lokal erkennen](../evaluations/2026-10-personenbezug.md) mit 69 selbst geschriebenen Schülertexten. Alle Schichten laufen lokal, auch wenn die Korrektur in der Cloud läuft. Ihre Stellen werden vereinigt: Was eine Schicht findet, wird ersetzt.
 
-1. **Regeln** für Kennungen mit fester Form, etwa Kontaktdaten, Nummern und Konten.
-2. **Namensliste aus dem Namen der Arbeit:** Die Namen, die der Name der Arbeit liefert, werden im Text gesucht. Die Liste verlässt den Rechner nie.
-3. **Lokales Modell** für den Rest, etwa Namen von Mitschülerinnen, Schulen, Vereine und Orte mit Wohnbezug, sowie für die sensiblen Angaben.
+### Schichten
 
-Dieser Abschnitt wird nach der Messung (`eval/`, nur mit selbst geschriebenen Beispielen) ergänzt: Muster der Regeln, Reihenfolge und Zusammenführung der Schichten, Schwellen, Modellwahl und die Trefferquote je Art der Kennung. Bis dahin ist nichts über die Güte der Erkennung ermittelt.
+1. **Regeln** (`src/privacy/rules.ts`, `src/privacy/patterns.ts`): Kontaktdaten, Konten, Kennzeichen und Ziffernfolgen, Datumsangaben („12.03.2012“, „12. Mai“), Straßen mit Hausnummer, Schulen, Vereine und Kirchengemeinden nach ihrer Form („Käthe-Kollwitz-Realschule“, „TSV Eintracht“, „Gemeinde St. Johannes“).
+2. **Namen der Arbeit** (`src/privacy/names.ts`): Die Wörter aus dem Namen der Arbeit werden im Text gesucht.
+3. **Vornamen** (`src/privacy/first-names.ts`): Eine Liste häufiger Vornamen, auch türkischer, arabischer und osteuropäischer, dazu Auslöser wie „Frau“, „Onkel“, „mein Freund“, „Liebe“ oder „Grüße“ vor einem großgeschriebenen Wort. Nach „heiße“ und „Name ist“ zählt auch ein kleingeschriebenes Wort. Kurze Namen unter vier Buchstaben zählen nur großgeschrieben, Wörter der Aufgabenstellung nie.
+4. **Wörterbuch** (`src/privacy/dictionary.ts`, `src-tauri/src/spelling.rs`): Großgeschriebene Wörter ab drei Buchstaben, die das deutsche Wörterbuch in keiner Form kennt (auch kleingeschrieben und ohne Genitiv-s), gelten als Name. Das Wörterbuch ist `dictionary-de` (igerman98, GPL-2.0 oder GPL-3.0, 1,1 MB) und wird mit `spellbook` (MPL-2.0, reines Rust) in die App eingebaut. Es braucht kein Netz.
+5. **Lokales Modell** (`src/privacy/model-detector.ts`): Gemma 4 E2B mit dem Prompt `beispiele` aus der Messung, Temperatur 0, Antwort per JSON-Schema als Listen aus Zitat (höchstens 48 Zeichen) und Kategorie, getrennt nach Kennungen und sensiblen Angaben. Längere Arbeiten gehen in Stücken von höchstens 3000 Zeichen an das Modell.
+
+Vor der Suche fügen alle Schichten Wörter zusammen, die am Zeilenende getrennt sind und klein weitergehen („Bau-⏎er“).
+
+### Modellwahl
+
+- Standard ist **Gemma 4 E2B**. Es läuft über dieselbe Engine und Modellverwaltung wie die Korrektur. Ist ein anderes lokales Modell geladen, fragt die App zuerst dieses, um einen Wechsel zu sparen.
+- **E2B und E4B zusammen**, wenn die lokale Gründlichkeit „Gründlich“ oder „Sehr gründlich“ ist, der Rechner mindestens 16 GB Arbeitsspeicher hat (gemessen ab 15 GiB) und E4B eingerichtet ist. Die Kennungen beider Modelle werden vereinigt, die sensiblen Angaben kommen dann nur von E4B. Fehlt E4B, läuft E2B allein.
+- **Fehlt E2B**, schwärzt die App nicht ohne Modell, sondern meldet an der Arbeit: „Zum Entfernen des Personenbezugs braucht Rotstift das lokale Modell Gemma 4 E2B, auch wenn die Korrektur in der Cloud läuft. …“ Von der Arbeit geht nichts hinaus. Begründung: Ohne Modell bleibt laut Messung in rund drei von vier Arbeiten mindestens eine Kennung stehen.
+
+### Nachbearbeitung der Zitate
+
+- Rollenwörter am Anfang („Frau“, „Onkel“, „mein Freund“) werden abgeschnitten.
+- Zitate über der Wortgrenze je Kategorie werden verworfen (Person 4 Wörter, Ort und Einrichtung 8, sonst 12). Längere Zitate sind meist ganze Sätze.
+- Personennamen, deren Wörter alle in der Aufgabenstellung stehen, werden verworfen (Entscheidung 2).
+- Jedes Zitat wird im Text gesucht, erst genau, dann mit kleinen Abweichungen, auch über Zeilenumbrüche. Jedes Vorkommen wird ersetzt. Ein Zitat, das nicht im Text steht, fällt weg.
+- Sensible Angaben werden nicht zusätzlich als Kennung ersetzt (Entscheidung 3): Liegt eine Kennung in einem sensiblen Zitat, fällt sie weg, wenn die Kennung Kontaktdaten sind, ein Ort bei Herkunft oder eine Einrichtung bei Gewerkschaft oder politischer Meinung. Personen, Daten und Nummern bleiben immer ersetzt.
+
+### Weitergabe
+
+`propagateSpans` gibt jede Kennung an alle Vorkommen der Arbeit weiter:
+
+- **Ganze Wörter mit Bindestrich:** Eine Person, ein Ort oder eine Einrichtung wird über den Bindestrich hinaus erweitert („Münster-Hiltrup“, „Anne-Sophie“), nicht aber über einen Trennstrich am Zeilenende.
+- **Teile:** Die Teile eines Personennamens ab zwei Buchstaben, bei Orten und Einrichtungen ab vier Buchstaben und nur aus Kennungen mit mindestens zwei Teilen („34127 Kassel“ gibt „Kassel“ weiter). Allerweltswörter (`COMMON_WORDS`) und allgemeine Wörter wie „Schule“ oder „Straße“ werden bei Orten und Einrichtungen nicht weitergegeben, bei Personen nur an großgeschriebene Vorkommen („Klein“, nicht „klein“).
+- **Unscharf:** Teile ab fünf Buchstaben, die keine Allerweltswörter sind, finden auch Wörter mit gleichem Anfangsbuchstaben und einem Tippfehler Abstand, mit Genitiv-s („Johanna“ findet „Johana“ und „Johannas“).
+
+### Restdauer
+
+Die Erkennung ist ein eigener Schritt der Restdauer, einmal je Arbeit. Der Startwert ist 15 s je Arbeit für E2B (gemessen 9 s auf einem Ryzen 7 5700X mit 4 Threads, dazu Luft für schwächere Rechner). E4B zählt das 1,5-Fache, beide zusammen das 2,5-Fache. Danach lernt die Restdauer den Wert je Modellkombination wie bei den übrigen Schritten.
+
+### Güte
+
+Gegenprobe der eingebauten Kette auf den 23 zurückgehaltenen Arbeiten der Messung (Anteil der Arbeiten ohne ein einziges durchgerutschtes Vorkommen einer Kennung, siehe [Nachtrag](../evaluations/2026-10-personenbezug.md#nachtrag-gegenprobe-der-eingebauten-kette)):
+
+| Kette           | sauberer Text | von GLM-OCR erkannt | mit Lesefehlern wie Handschrift | sensible Angaben gefunden |
+| --------------- | ------------: | ------------------: | ------------------------------: | ------------------------: |
+| E2B             |         100 % |               100 % |                            78 % |                      50 % |
+| E2B und E4B     |         100 % |               100 % |                            83 % |                     100 % |
+| Messung mit E2B |          87 % |                96 % |                            74 % |                      50 % |
+
+Die Regelschicht wurde an den Lecks des Holdouts nachgeschärft, die 100 % sind deshalb eine Obergrenze. Auf den Entwicklungsdaten (46 Arbeiten) erreicht E2B 98 %. Die Kette ersetzt rund 5 % der Wörter zu viel, auf Text mit Lesefehlern rund 10 %. Zeit je Arbeit auf einem Ryzen 7 5700X mit 4 Threads: E2B 9 s, E4B 14 s (Median).
 
 ## Folgen und Grenzen
 
-- Kein Detektor ist vollständig. Eine übersehene Kennung geht hinaus. Deshalb bestätigt die Lehrkraft in der Prüfansicht je Arbeit den geschwärzten Text, und die Hinweise sprechen von „pseudonymisiert“, nicht von „anonym“. Die Verantwortung bleibt bei der Lehrkraft.
+- Kein Detektor ist vollständig. Eine übersehene Kennung geht hinaus. Am häufigsten sind das zerlesene Namen auf schlecht gelesener Handschrift und einzelne Vorkommen in langen Arbeiten.
+- Die Erkennung ersetzt zu viel, vor allem Figuren, Autoren und Prominente in Inhaltsangaben. Die Prüfansicht ist dafür die Schwelle: Die Lehrkraft nimmt sie dort mit einem Klick je Name zurück. Eine Liste bekannter Figuren gibt es nicht.
+- Sensible Angaben sind ein Hinweis „möglicherweise sensibel“ ohne Anspruch auf Vollständigkeit. Mit E2B allein findet die Erkennung laut Messung etwa die Hälfte.
+- Die Erkennung braucht E2B auch dann, wenn alle Textschritte in der Cloud laufen, also rund 3 GB Platte und Arbeitsspeicher und 10 bis 20 s je Arbeit auf einem Rechner ohne GPU. Deshalb bestätigt die Lehrkraft in der Prüfansicht je Arbeit den geschwärzten Text, und die Hinweise sprechen von „pseudonymisiert“, nicht von „anonym“. Die Verantwortung bleibt bei der Lehrkraft.
 - Auch der geschwärzte Text ist personenbezogen (C-434/16): Der Inhalt der Antworten, der Schreibstil und seltene Umstände können eine Person bestimmbar machen. Das Schwärzen verkleinert das Risiko, es beseitigt es nicht.
 - Mit Schutz läuft die Erkennung lokal. Wer wegen eines schwachen Rechners eine Cloud-Erkennung wollte, braucht dafür ein Schulmodell mit Vertrag (Schutz aus) oder einen eigenen Server.
 - Das Flag `pseudonymized` ist eine Sicherung gegen vergessene Codepfade, kein Beweis. Rust prüft nicht, ob der Text geschwärzt ist.
@@ -189,7 +234,9 @@ Dieser Abschnitt wird nach der Messung (`eval/`, nur mit selbst geschriebenen Be
 - Frontend: Client, Hook (`protects`, `setProtection`) und Cloud-Zeichen nennen den Schutz. Eine gesperrte Cloud-Erkennung meldet das in den Einstellungen.
 - E2E: Den Schalter ausschalten, den Hinweis abbrechen: Er bleibt an. Wieder ausschalten und bestätigen: Die Cloud-Erkennung ist wählbar.
 - Ablauf: Phasen in dieser Reihenfolge, vor der Freigabe kein Aufruf des Cloud-Schritts, eine nicht freigegebene Arbeit wird nie gesendet, auch nicht nach Abbrechen oder Ausschalten des Schutzes. Ohne Schutz läuft alles wie bisher.
-- Prüfansicht: Ergänzen mit Weitergabe, Entfernen auf Dauer, Freigeben.
+- Prüfansicht: Ergänzen mit Weitergabe, Entfernen auf Dauer, ein ganzer Name samt Teilen mit einem Klick, Freigeben.
+- Erkennung: Jede Schicht für sich mit eigenen Beispielen, Nachbearbeitung und Suche der Zitate, Modellwahl, Weitergabe mit Bindestrich, Teilen und Tippfehlern. `eval/privacy-score.ts` misst mit der Option `app` die eingebaute Kette gegen die Gold-Markierungen.
+- E2E: Ein fehlendes E2B meldet sich an der Arbeit, und es geht nichts hinaus.
 - E2E: Ein Lauf mit Cloud-Korrektur und Schutz zeigt die Prüfansicht, die Lehrkraft ergänzt eine Stelle und gibt frei. Das nachgebildete `cloud_chat` prüft, dass jede Anfrage `pseudonymized: true` trägt und keinen Originalnamen enthält, und die Marken erscheinen auf dem Original.
 
 ## Doku

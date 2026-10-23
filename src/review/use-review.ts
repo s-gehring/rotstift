@@ -6,6 +6,7 @@ import { createLayoutLocator, observeLocate } from '../layout/layout-client.ts';
 import { browserDiagnostics, logLayout } from '../pipeline/diagnostics.ts';
 import type { Runner } from '../pipeline/runner.ts';
 import { loadPageImage } from './page-image.ts';
+import { appDetectWork } from '../privacy-review/local-detectors.ts';
 import { createReviewFlow } from './review-flow.ts';
 
 export function useReview(
@@ -18,6 +19,7 @@ export function useReview(
   const [{ flow, locator }] = useState(() => {
     const created = createLayoutLocator();
     const diagnostics = browserDiagnostics();
+    const detect = appDetectWork();
     return {
       locator: created,
       flow: createReviewFlow({
@@ -27,6 +29,7 @@ export function useReview(
         }),
         loadImage: loadPageImage,
         logReview: (entry) => diagnostics.log('content_review', { ...entry }),
+        ...(detect !== undefined && { detect }),
       }),
     };
   });
