@@ -33,7 +33,7 @@ Geplant:
 
 Rotstift arbeitet mit KI-Modellen, die auf dem eigenen Rechner laufen. Sie werden einmalig heruntergeladen, wenn sie zum ersten Mal gebraucht werden:
 
-1. Arbeiten laden und auf „Korrigieren“ klicken. Fehlen Modelle, öffnet sich „Einmalige Einrichtung“ mit der Gesamtgröße: GLM-OCR (rund 1,4 GB) für die Texterkennung und Gemma 4 E2B (rund 2,8 GB) für die Korrektur. „Nur Wörter zählen“ braucht nur GLM-OCR.
+1. Arbeiten laden und auf „Korrigieren“ klicken. Fehlen Modelle, öffnet sich „Einmalige Einrichtung“ mit der Gesamtgröße: GLM-OCR (rund 1,4 GB) für die Texterkennung und Gemma 4 E2B mit seinem Kopf für spekulatives Dekodieren (zusammen rund 2,9 GB) für die Korrektur. „Nur Wörter zählen“ braucht nur GLM-OCR.
 2. „Herunterladen“ lädt alles in einem Schritt, mit Fortschritt und Restzeit. Ein abgebrochener Download setzt später an derselben Stelle fort. Rotstift prüft jede Datei per SHA256, bevor sie benutzt wird. Danach startet der Lauf von selbst, und Rotstift arbeitet offline. Es werden keine Schülerdaten übertragen.
 3. Unter ⚙ „Einstellungen“ lassen sich die Modelle ansehen, löschen oder aus Dateien importieren.
 

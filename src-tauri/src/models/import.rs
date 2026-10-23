@@ -142,6 +142,7 @@ mod tests {
             files: ModelFiles {
                 model: file("model.gguf", b"model bytes"),
                 mmproj: Some(file("mmproj.gguf", b"projector")),
+                draft: None,
             },
             server: ServerParams {
                 context_size: 4096,

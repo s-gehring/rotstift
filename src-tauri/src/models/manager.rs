@@ -36,6 +36,7 @@ pub struct ModelStatus {
     pub state: State,
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
+    pub draft_ready: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -128,7 +129,7 @@ pub async fn installed_bytes(dir: &Path, file: &ModelFile) -> Option<u64> {
 }
 
 pub async fn is_ready(dir: &Path, entry: &ModelEntry) -> bool {
-    for file in entry.file_list() {
+    for file in entry.required_files() {
         if installed_bytes(dir, file).await != Some(file.bytes) {
             return false;
         }
@@ -141,29 +142,45 @@ pub async fn is_ready(dir: &Path, entry: &ModelEntry) -> bool {
     true
 }
 
+pub async fn draft_ready(dir: &Path, entry: &ModelEntry) -> bool {
+    match &entry.files.draft {
+        Some(draft) => {
+            installed_bytes(dir, draft).await == Some(draft.bytes) && has_valid_marker(dir, draft)
+        }
+        None => false,
+    }
+}
+
+async fn present_bytes(dir: &Path, file: &ModelFile) -> u64 {
+    match installed_bytes(dir, file).await {
+        Some(len) if len == file.bytes => len,
+        Some(_) => 0,
+        None => file_len(&part_path(dir, file))
+            .await
+            .map_or(0, |len| len.min(file.bytes)),
+    }
+}
+
 async fn inspect(dir: &Path, entry: &ModelEntry) -> ModelStatus {
-    let mut present = 0;
+    let mut complete = true;
     let mut corrupt = false;
     let mut unverified = false;
-    for file in entry.file_list() {
+    for file in entry.required_files() {
         match installed_bytes(dir, file).await {
-            Some(len) if len == file.bytes => {
-                present += len;
-                unverified |= !has_valid_marker(dir, file);
-            }
+            Some(len) if len == file.bytes => unverified |= !has_valid_marker(dir, file),
             Some(_) => corrupt = true,
-            None => {
-                present += file_len(&part_path(dir, file))
-                    .await
-                    .map_or(0, |len| len.min(file.bytes));
-            }
+            None => complete = false,
         }
+    }
+    let mut present = 0;
+    for file in entry.file_list() {
+        present += present_bytes(dir, file).await;
     }
     let state = if corrupt {
         State::Corrupt
-    } else if present == entry.total_bytes() && unverified {
+    } else if complete && unverified {
         State::Unverified
-    } else if present == entry.total_bytes() {
+    } else if complete {
         State::Ready
     } else {
         State::Missing
@@ -173,6 +190,7 @@ async fn inspect(dir: &Path, entry: &ModelEntry) -> ModelStatus {
         state,
         downloaded_bytes: present,
         total_bytes: entry.total_bytes(),
+        draft_ready: draft_ready(dir, entry).await,
     }
 }
 
@@ -248,17 +266,12 @@ impl ModelManager {
             )
         });
         match running {
-            Some((JobKind::Download, progress)) => ModelStatus {
-                model_id: entry.id.clone(),
-                state: State::Downloading,
-                downloaded_bytes: progress.downloaded_bytes,
-                total_bytes: progress.total_bytes,
-            },
             Some((kind, progress)) => ModelStatus {
                 model_id: entry.id.clone(),
                 state: kind.state(),
                 downloaded_bytes: progress.downloaded_bytes,
                 total_bytes: progress.total_bytes,
+                draft_ready: false,
             },
             None => inspect(dir, entry).await,
         }

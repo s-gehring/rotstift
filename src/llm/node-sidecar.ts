@@ -1,10 +1,10 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import { ALL_MODELS, type AnyModelInfo } from '../models/registry.ts';
+import { ALL_MODELS, draftFile, type AnyModelInfo } from '../models/registry.ts';
 import { LlmCallError, type Completion } from './client.ts';
 import type { EngineClient } from './engine.ts';
 import type { ChatRequest, ChatResponse, RuntimeStatus } from './types.ts';
@@ -18,6 +18,14 @@ export const NO_REPACK =
   process.env['ROTSTIFT_NO_REPACK'] === undefined
     ? totalmem() < 12 * GIB
     : process.env['ROTSTIFT_NO_REPACK'] === '1';
+const ACCEPTANCE = /draft acceptance = [\d.]+ \(\s*(\d+) accepted \/\s*(\d+) generated\)/u;
+
+export function usableDraft(model: AnyModelInfo): string | null {
+  const draft = draftFile(model);
+  if (draft === null) return null;
+  const path = join(MODELS_DIR, draft.name);
+  return existsSync(path) ? path : null;
+}
 
 function sidecarPath(): string {
   const stamp: { target: string } = JSON.parse(
@@ -27,7 +35,7 @@ function sidecarPath(): string {
   return join(BINARIES, `rotstift-llama-server-${stamp.target}${suffix}`);
 }
 
-function serverArguments(model: AnyModelInfo): string[] {
+function serverArguments(model: AnyModelInfo, speculate: boolean): string[] {
   const { server, request } = model;
   const args = [['--model', join(MODELS_DIR, model.files.model.name)]];
   if (model.role === 'transcriber') {
@@ -36,6 +44,8 @@ function serverArguments(model: AnyModelInfo): string[] {
       args.push(['--image-max-tokens', String(model.server.imageMaxTokens)]);
     }
   }
+  const draft = speculate ? usableDraft(model) : null;
+  if (draft !== null) args.push(['--spec-type', 'draft-mtp'], ['--model-draft', draft]);
   args.push(
     ['--host', '127.0.0.1'],
     ['--port', '0'],
@@ -81,6 +91,13 @@ export class NodeSidecar implements EngineClient {
   readonly events: string[] = [];
   readonly peakBytes = new Map<string, number>();
   readonly startSeconds = new Map<string, number[]>();
+  readonly drafts = { accepted: 0, generated: 0 };
+
+  private readonly speculate: boolean;
+
+  constructor(speculate = process.env['ROTSTIFT_MTP'] !== '0') {
+    this.speculate = speculate;
+  }
 
   status = (): Promise<RuntimeStatus> =>
     Promise.resolve(
@@ -95,7 +112,7 @@ export class NodeSidecar implements EngineClient {
     if (this.child !== null) await this.stop();
     this.events.push(`start ${modelId}`);
     const started = performance.now();
-    const child = spawn(sidecarPath(), serverArguments(model), {
+    const child = spawn(sidecarPath(), serverArguments(model, this.speculate), {
       cwd: join(BINARIES, 'llama'),
       env: { ...process.env, [LIBRARY_VAR]: join(BINARIES, 'llama'), LLAMA_API_KEY: this.key },
       stdio: ['ignore', 'ignore', 'pipe'],
@@ -114,8 +131,18 @@ export class NodeSidecar implements EngineClient {
     }, 200);
     this.port = await new Promise<number>((resolve, reject) => {
       let log = '';
+      let partial = '';
       child.stderr.on('data', (chunk: Buffer) => {
-        log += chunk.toString();
+        const text = chunk.toString();
+        log += text;
+        const lines = (partial + text).split('\n');
+        partial = lines.pop() ?? '';
+        for (const line of lines) {
+          const counts = ACCEPTANCE.exec(line);
+          if (counts?.[1] === undefined || counts[2] === undefined) continue;
+          this.drafts.accepted += Number(counts[1]);
+          this.drafts.generated += Number(counts[2]);
+        }
         const match = /listening on http:\/\/127\.0\.0\.1:(\d+)/u.exec(log);
         if (match?.[1] !== undefined) resolve(Number(match[1]));
       });

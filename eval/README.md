@@ -207,7 +207,7 @@ ROTSTIFT_INTEGRATION=1 ROTSTIFT_CLASS=<Ordner> ROTSTIFT_CLASS_LABEL=t4-voll ROTS
 ```
 
 - `render.py --content-form` teilt jeden Text aus `samples/content-form/` in zwei Seiten, das ergibt 10 Arbeiten zu je 2 Seiten. Eine Arbeit sind alle Bilder mit gleichem Namen vor `-1.jpg`, `-2.jpg`.
-- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. `ROTSTIFT_CLASS_TEXT_MODEL=<id>` nimmt ein anderes Textmodell aus `models.json` für Rechtschreibung und Inhalt und Form, `ROTSTIFT_CLASS_REVIEW_MODEL=<id>` nimmt für Inhalt und Form ein anderes Modell als für die Rechtschreibung, `ROTSTIFT_CLASS_SECOND=1` schaltet die zweite Lesung ein (als eigener Durchgang nach allen ersten Lesungen wie in der App), `ROTSTIFT_CLASS_PAGEWISE=1` liest stattdessen wie früher je Seite beide Male nacheinander, zum Vergleich. So misst man die Stufen der Gründlichkeit (Gründlich: `ROTSTIFT_CLASS_TEXT_MODEL=gemma-4-e4b-q4` mit zweiter Lesung, Sehr gründlich: `gemma-4-26b-a4b-q4` mit zweiter Lesung, Inhalt und Form jeweils mit dem Vorgabemodell). Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
+- `ROTSTIFT_THREADS` setzt `--threads`, `ROTSTIFT_NO_REPACK=1` verhält sich wie ein Rechner unter 12 GiB, `ROTSTIFT_MTP=0` startet Gemma ohne MTP-Kopf (sonst nutzt der Sidecar ihn wie die App, wenn er im Modellordner liegt), `ROTSTIFT_CLASS_CONTENT=0` lässt Inhalt und Form weg. `ROTSTIFT_CLASS_TEXT_MODEL=<id>` nimmt ein anderes Textmodell aus `models.json` für Rechtschreibung und Inhalt und Form, `ROTSTIFT_CLASS_REVIEW_MODEL=<id>` nimmt für Inhalt und Form ein anderes Modell als für die Rechtschreibung, `ROTSTIFT_CLASS_SECOND=1` schaltet die zweite Lesung ein (als eigener Durchgang nach allen ersten Lesungen wie in der App), `ROTSTIFT_CLASS_PAGEWISE=1` liest stattdessen wie früher je Seite beide Male nacheinander, zum Vergleich. So misst man die Stufen der Gründlichkeit (Gründlich: `ROTSTIFT_CLASS_TEXT_MODEL=gemma-4-e4b-q4` mit zweiter Lesung, Sehr gründlich: `gemma-4-26b-a4b-q4` mit zweiter Lesung, Inhalt und Form jeweils mit dem Vorgabemodell). Das Ergebnis steht in `<Ordner>/results/<Label>.json` (oder `ROTSTIFT_CLASS_OUT`).
 
 ## Heftpapier (liniert und kariert)
 
@@ -250,6 +250,12 @@ node --experimental-transform-types eval/gruendlich-zweite-lesung.ts --ocr <GLM-
 - `profiles.ts --passes N` lässt das Modell seine eigene Korrektur N-mal überarbeiten. Die Marken entstehen wie in der App aus dem Vergleich von Original und letzter Fassung.
 - `gruendlich-union.ts` vereinigt die Marken mehrerer `profiles.ts`-Läufe (`--votes 1`) oder behält nur Marken, die mindestens `--votes` Läufe an derselben Stelle setzen, und wertet neu aus.
 - `gruendlich-zweite-lesung.ts` nimmt eine zweite Erkennung derselben Seiten (`--second`, aus `ocr-run.ts`) und richtet sie Wort für Wort am Transkript aus (Levenshtein über Wörter). Eine Regel `a/b` macht eine Marke zum Hinweis „unsicher gelesen“, wenn ein berührtes Wort von der zweiten Lesung bestätigt ist und seine Lesesicherheit unter `a` liegt oder unbestätigt ist und unter `b` liegt. `0.95/0.95` ist die App heute, `b` über 1 heißt „unbestätigt ist immer ein Hinweis“. Kennzahlen wie bei `hints.ts`.
+- **MTP in der App:** `src/llm/mtp.integration.test.ts` korrigiert die 8 Seiten aus `samples/texts` mit Gemma 4 E2B über denselben Sidecar wie die Integrationstests, abwechselnd ohne und mit Kopf, prüft, dass die Marken gleich bleiben, und nennt Zeit je Seite, angenommene Token aus dem Server-Log und Peak-RSS. `ROTSTIFT_MTP_ROUNDS` wiederholt die Abfolge, `ROTSTIFT_MTP_OUT` schreibt die Läufe als JSON.
+
+  ```bash
+  ROTSTIFT_INTEGRATION=1 ROTSTIFT_MTP_ROUNDS=2 pnpm vitest run src/llm/mtp.integration.test.ts
+  ```
+
 - **Speicherdeckel** (Linux mit systemd und cgroup v2, ohne Root): Modelldatei vorher aus dem Seitencache werfen, sonst zählen ihre Seiten nicht zum Deckel, dann den Lauf in einem eigenen Scope starten:
 
   ```bash

@@ -18,9 +18,11 @@ import {
   parseRegistry,
   customEntry,
   customSource,
+  draftFile,
   estimateRamBytes,
   exceedsMemory,
   findModel,
+  modelFiles,
   modelSource,
   recommendModel,
   repacks,
@@ -31,6 +33,8 @@ import {
 } from './registry.ts';
 
 const GIB = 1024 ** 3;
+
+const urlCommit = (url: string) => url.split('/').at(-2);
 const model = recommendModel();
 
 const TEMPLATES = { transcriber: DEFAULT_MODEL_ID, corrector: DEFAULT_CORRECTOR_ID };
@@ -103,8 +107,8 @@ describe('registry', () => {
     const e2b = findCorrector(DEFAULT_CORRECTOR_ID);
     const e4b = findCorrector('gemma-4-e4b-q4');
     if (e2b === undefined || e4b === undefined) throw new Error('missing corrector');
-    expect(estimateRamBytes(e2b, 8 * GIB) / 1e9).toBeCloseTo(3.63, 2);
-    expect(estimateRamBytes(e4b, 8 * GIB) / 1e9).toBeCloseTo(5.47, 2);
+    expect(estimateRamBytes(e2b, 8 * GIB) / 1e9).toBeCloseTo(3.85, 2);
+    expect(estimateRamBytes(e4b, 8 * GIB) / 1e9).toBeCloseTo(5.68, 2);
     expect(estimateRamBytes(e4b, 16 * GIB)).toBeGreaterThan(estimateRamBytes(e4b, 8 * GIB));
     expect(estimateRamBytes(model, 8 * GIB)).toBe(estimateRamBytes(model, 16 * GIB));
   });
@@ -126,7 +130,7 @@ describe('registry', () => {
     if (large === undefined || qwen === undefined) throw new Error('missing model');
     expect(repacks(large, 16 * GIB)).toBe(false);
     expect(repacks(large, 48 * GIB)).toBe(true);
-    expect(estimateRamBytes(large, 16 * GIB) / 1e9).toBeCloseTo(15.97, 1);
+    expect(estimateRamBytes(large, 16 * GIB) / 1e9).toBeCloseTo(16.38, 1);
     expect(exceedsMemory(large, 16 * GIB)).toBe(true);
     expect(exceedsMemory(large, 32 * GIB)).toBe(false);
     expect(repacks(qwen, 8 * GIB)).toBe(false);
@@ -154,6 +158,7 @@ describe('registry', () => {
       server: { ...defaultCorrector().server, cpuRepack: false },
     });
     expect(entry.files).not.toHaveProperty('mmproj');
+    expect(draftFile(entry)).toBeNull();
     expect(customSource(entry)).toEqual(custom.source);
     expect(customSource(defaultCorrector())).toBeNull();
   });
@@ -247,7 +252,7 @@ describe('registry', () => {
       /^Du korrigierst die Fehler in einer Schülerarbeit\. Fach: \{subject\}\. Der Text ist auf \{language\} geschrieben\.\n/u,
     );
     expect(corrector.system).toContain('Gib nur die Zeilen aus, ohne Erklärung.');
-    expect(totalBytes(corrector)).toBe(2_841_481_184);
+    expect(totalBytes(corrector)).toBe(2_841_481_184 + 59_235_872);
     expect(recommendModel(CORRECTORS).id).toBe(DEFAULT_CORRECTOR_ID);
     expect(findCorrector('gemma-4-e4b-q4')).toMatchObject({
       recommendedRamGb: 16,
@@ -296,6 +301,28 @@ describe('registry', () => {
     });
   });
 
+  it('loads every Gemma corrector together with its pinned head from the same commit', () => {
+    for (const corrector of CORRECTORS) {
+      const draft = draftFile(corrector);
+      if (draft === null) throw new Error(`${corrector.id} has no head`);
+      expect(draft.name).toMatch(/^mtp-gemma-4-.*-it-Q4_0\.gguf$/u);
+      expect(urlCommit(draft.url)).toBe(urlCommit(corrector.files.model.url));
+      expect(modelFiles(corrector)).toEqual([corrector.files.model, draft]);
+      expect(totalBytes(corrector)).toBe(corrector.files.model.bytes + draft.bytes);
+    }
+    for (const transcriber of [...MODELS, ...SECOND_READERS]) {
+      expect(draftFile(transcriber)).toBeNull();
+    }
+  });
+
+  it('counts about 0.2 GB of memory for the head', () => {
+    const corrector = defaultCorrector();
+    const { draft: _head, ...files } = corrector.files;
+    const extra =
+      estimateRamBytes(corrector, 8 * GIB) - estimateRamBytes({ ...corrector, files }, 8 * GIB);
+    expect(extra / 1e9).toBeCloseTo(0.21, 2);
+  });
+
   it('rejects entries that mix up the two roles', () => {
     const transcriber = recommendModel();
     const corrector = defaultCorrector();
@@ -304,6 +331,8 @@ describe('registry', () => {
     expect(parse({ ...transcriber, role: 'painter' }, corrector)).toThrow(ZodError);
     const withProjector = { ...corrector.files, mmproj: transcriber.files.mmproj };
     expect(parse(transcriber, { ...corrector, files: withProjector })).toThrow(ZodError);
+    const withHead = { ...transcriber.files, draft: corrector.files.draft };
+    expect(parse({ ...transcriber, files: withHead }, corrector)).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, prompt: 'Korrigiere.' })).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, lineMode: 'diff' })).toThrow(ZodError);
     expect(parse(transcriber, { ...corrector, system: null })).toThrow(ZodError);
