@@ -459,11 +459,12 @@ def load_paper(path: Path) -> Image.Image:
 
 
 def render_heft(out: Path, only: set[str], strike: int, seed: int, paper_image: Path | None = None,
-                geometry: tuple[int, int, int] | None = None, effects: frozenset[str] = frozenset(EFFECTS)) -> None:
+                geometry: tuple[int, int, int] | None = None, effects: frozenset[str] = frozenset(EFFECTS),
+                texts_dir: Path = HERE / "texts", one_page: bool = False) -> None:
     for sub in ("images", "ground_truth", "markup", "lines"):
         (out / sub).mkdir(parents=True, exist_ok=True)
     fonts, pens, rulings = list(FONTS), list(PENS), list(RULINGS)
-    texts = sorted((HERE / "texts").glob("*.txt"))
+    texts = sorted(texts_dir.glob("*.txt"))
     count = 0
     papers = dict(PAPERS)
     base = None
@@ -477,6 +478,8 @@ def render_heft(out: Path, only: set[str], strike: int, seed: int, paper_image: 
                 variant = paper_index + 3 * look_index + text_index
                 name = f"{text_path.stem}--{paper_name}-{look}"
                 if only and paper_name not in only and look not in only:
+                    continue
+                if one_page and (paper_index + 3 * look_index) % 6 != text_index % 6:
                     continue
                 markup = text_path.read_text(encoding="utf-8").strip()
                 text = written_text(markup)
@@ -531,13 +534,15 @@ def main() -> None:
     parser.add_argument("--heft", nargs="*", metavar="FILTER")
     parser.add_argument("--effects", default=",".join(EFFECTS))
     parser.add_argument("--paper-image", type=Path)
+    parser.add_argument("--texts", type=Path, default=HERE / "texts")
+    parser.add_argument("--one-page", action="store_true")
     parser.add_argument("--paper-geometry", nargs=3, type=int, metavar=("TOP", "PITCH", "LEFT"))
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     if args.heft is not None:
         render_heft(args.out, set(args.heft), args.strike, args.seed, args.paper_image,
                     tuple(args.paper_geometry) if args.paper_geometry else None,
-                    frozenset(filter(None, args.effects.split(","))))
+                    frozenset(filter(None, args.effects.split(","))), args.texts, args.one_page)
         return
     if args.content_form:
         render_class(args.out)

@@ -1,0 +1,19 @@
+arbeit: jamal_krabat.jpg
+klasse: 7
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse den Anfang des Romans „Krabat“ von Otfried Preußler in einer Inhaltsangabe zusammen.
+---
+In dem Roman „[Krabat]{keep}“ von [Otfried Preuß-
+ler]{keep}, der 1971 erschienen ist, geht es um einen Jungen,
+der [Krabat]{keep} heißt. Er ist ein Waisenjunge und zieht im
+Winter mit zwei anderen Bettlern durch das Land. Eines
+Nachts träumt er von elf Raben, die ihn rufen. Er
+folgt dem Traum zu einer Mühle in der Lausitz. Dort
+wird er Lehrling beim Müller, vor dem alle Angst
+haben. Die anderen Gesellen, zum Beispiel [Tonda]{keep} und [Lyschko]{keep},
+zeigen ihm die Arbeit. [Krabat]{keep} merkt bald, dass in der Mühle
+schwarze Magie gelehrt wird und dass die Raben ihm Angst
+machen sollen. Bei uns in der Klasse liest Frau
+[Rabe]{person} das Buch vor, und mein Banknachbar [Dschey]{person} findet es
+voll gruselig. Ich finde es auch spannend.

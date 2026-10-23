@@ -1,0 +1,21 @@
+arbeit: 7a_Nguyen_Aufsatz_Fahrkarte.pdf
+klasse: 7
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einer peinlichen Situation, die du erlebt hast.
+---
+Letzten Samstag wollte ich mit meiner Freundin [Mai Linh]{person}
+in die Stadt fahren. Ich wohne in [Marzahn]{place} und fahre
+jeden Tag mit der S-Bahn. Wir haben uns total
+beeilt und dann habe ich gemerkt, dass ich meine
+Monatskarte vergessen hatte. In der S-Bahn kam ein
+Kontrolleur und mir ist fast schlecht geworden. Ich hatte
+nur meinen Schülerausweis dabei, darauf steht die Nummer
+[40817]{number}. Er hat sie auf einen Zettel geschrieben und gesagt,
+ich muss die Karte später zeigen. [Mai Linh]{person}s Bruder [Minh]{person}
+saß zwei Reihen weiter und hat sich kaputt gelacht.
+Mai Linh nennt mich immer [Lanni]{person}, und sie hat gesagt
+„[Lanni]{person}, das merkt sich jetzt jeder“. Am Montag hat
+Frau [Stern]{person} nur gesagt, ich soll mehr auf meine Sachen
+achten. Abends hat man schon den ersten Stern gesehen
+und ich war froh, dass der Tag vorbei war.

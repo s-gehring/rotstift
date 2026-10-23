@@ -1,0 +1,20 @@
+arbeit: Erlkönig Zusammenfassung 9b.pdf
+klasse: 9
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Ballade „Der Erlkönig“ von Johann Wolfgang von Goethe zusammen.
+---
+Hausaufgabe bis Donnerstag, [13.02.2025]{date}
+Die Ballade „Der [Erlkönig]{keep}“ von [Johann Wolfgang von
+Goethe]{keep} wurde 1782 geschrieben und handelt von einem
+Vater, der mit seinem Sohn nachts durch den Wald reitet.
+Der Junge hat Angst, weil er den [Erlkönig]{keep} sieht und hört,
+der ihn mit schönen Versprechen zu sich locken will.
+Der Vater beruhigt ihn und sagt, es seien nur Nebel,
+Wind und alte Weiden. Der Sohn wird aber immer
+verzweifelter und schreit, dass ihm der [Erlkönig]{keep} etwas
+antut. Der Vater reitet schneller und erreicht den
+Hof, doch das Kind ist in seinen Armen tot.
+Meine Banknachbarin [Johanna
+Berger]{person} findet das Ende viel zu gruselig, ich
+finde aber, dass es genau deshalb so gut ist.

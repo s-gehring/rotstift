@@ -1,0 +1,20 @@
+arbeit: Aufsatz Lasse B..pdf
+klasse: 8
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Erlebnis auf einer Klassenfahrt.
+---
+Unsere Klasse 8b von der [Realschule plus Hachenburg]{institution} war
+im Herbst auf Klassenfahrt in Boppard. Wir hatten
+Zimmer in der Jugendherberge und ich habe mit
+[Dominik]{person} und [Elias]{person} in einem Raum geschlafen. Am zweiten
+Abend gab es eine Nachtwanderung mit Herrn [Fuchs]{person},
+unserem Mathelehrer. Es war stockdunkel und [Dominick]{person}
+hatte eine Taschenlampe, die immer flackerte. Auf
+einmal stand mitten auf dem Weg ein echter Fuchs
+und hat uns angestarrt. Herr [Fuchs]{person} hat laut geschrien
+und ist fast hingefallen. Wir konnten uns kaum
+halten vor Lachen. Der Fuchs ist dann in den Wald
+gerannt und wir sind schnell zurück. Später haben
+wir noch lange im Zimmer geflüstert. Das war die
+beste Nacht der ganzen Fahrt.

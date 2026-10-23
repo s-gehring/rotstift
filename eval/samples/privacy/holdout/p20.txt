@@ -1,0 +1,20 @@
+arbeit: Erörterung Fußball 7e.pdf
+klasse: 7
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere, ob Fußballprofis zu viel Geld verdienen.
+---
+Viele Leute sagen, dass Fußballer viel zu viel Geld
+verdienen. Mein Bruder [Tom]{person} findet das auch, obwohl er
+selber gern Profi werden will. Ein Argument dafür ist,
+dass sie viel Verantwortung tragen und nur kurze
+Zeit spielen können. Ein Star wie [Thomas Müller]{keep} bringt dem
+Verein außerdem viel Geld durch Trikots und Fernsehen.
+Dagegen sagt mein Opa [Heinz
+Lorenz]{person}, der [seit Jahren in der SPD ist]{politics}, dass eine
+Krankenschwester viel mehr verdienen müsste. Das Geld
+wäre in Schulen besser aufgehoben. 1954 wurde Deutschland
+das erste Mal Weltmeister und die Spieler bekamen noch
+kaum was. Der Torwart [Manuel Neuer]{keep} verdient heute in einer
+Woche mehr als ein Lehrer in einem Jahr. Ich finde,
+ein bisschen weniger würde auch reichen.

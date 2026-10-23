@@ -1,0 +1,20 @@
+arbeit: Erörterung SV Kasia-Klasse 9.pdf
+klasse: 9
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere die Frage, ob die SV an deiner Schule mehr Rechte bekommen sollte.
+---
+Ich finde, dass die Schüler mehr mitbestimmen sollten,
+weil die Schule ja für uns da ist. An unserer
+[Heinrich-Böll-Gesamtschule]{institution} gibt es zwar eine SV,
+aber die darf fast nichts wirklich entscheiden. Unsere
+Klassensprecherin [Kasia Nowak]{person} hat letztes Jahr vorgeschlagen,
+dass es mehr Pausen im Freien gibt. Frau [Jung]{person} hat nur
+gesagt, wir sind noch zu jung um das zu beurteilen.
+Das finde ich nicht fair. Natürlich sagen viele,
+Jugendliche wären nicht reif genug. Aber [Greta Thunberg]{keep}
+war auch noch jung, als sie angefangen hat. Mein Vater
+ist [bei der SPD aktiv]{politics} und sagt, Demokratie muss in der
+Schule anfangen. Auch [Angela Merkel]{keep} hat sich schon früh für
+Politik interessiert. Deshalb bin ich dafür, dass die SV
+mehr Rechte bekommt, zum Beispiel beim Schulhof.

@@ -1,0 +1,19 @@
+arbeit: Nathan Inhaltsangabe Maja Lang.pdf
+klasse: 9
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Handlung von Lessings „Nathan der Weise“ zusammen.
+---
+Das Drama von [Gotthold Ephraim Lessing]{keep} spielt zur Zeit der
+Kreuzzüge in Jerusalem. Der reiche Jude [Nathan]{keep} kommt von
+einer Reise zurück und erfährt, dass seine Tochter [Recha]{keep}
+von einem Tempelherrn aus dem Feuer gerettet wurde. Der Sultan
+[Saladin]{keep} braucht Geld und fragt [Nathan]{keep}, welche Religion die
+wahre ist. Darauf antwortet er mit der Ringparabel.
+Am Ende stellt sich heraus, dass alle verwandt sind,
+auch [Recha]{keep} und der Tempelherr. Die Handlung zieht sich
+manchmal lang, aber die Botschaft ist wichtig. Meine Lehrerin
+Frau [Lang]{person} sagt, dass man die Ringparabel unbedingt kennen muss.
+Mein Banknachbar [Eli-
+as]{person} fand den Text zu lang und
+hat nur die Hälfte gelesen.

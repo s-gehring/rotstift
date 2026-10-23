@@ -1,0 +1,19 @@
+arbeit: Praktikumsbericht 9a.pdf
+klasse: 9
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Bericht über dein Betriebspraktikum.
+---
+Ich habe mein Praktikum vom [5. bis 9. Mai 2025]{date} in der
+[Bäckerei Engel]{institution} in [Köpenick]{place} gemacht. Wir mussten schon um vier
+Uhr morgens anfangen, das war am Anfang sehr hart.
+Der Chef, Herr [Engel]{person}, war aber nett und hat mir alles
+erklärt. Meine Kollegin [Olha]{person} hat mir gezeigt, wie man
+Brötchen formt. Sie ist [in der Gewerkschaft NGG]{union} und hat
+mir erzählt, dass sie dadurch bessere Arbeitszeiten haben.
+[Taras]{person}, der Azubi, durfte mich zum Glück immer fragen.
+Der Tag war manchmal sehr lang, vor allem wenn
+Frau [Lang]{person} vom Verkauf noch Extrawünsche hatte. Am letzten Tag
+hätte mich fast der heiße Ofen erwischt, da hatte ich
+einen Schutzengel. Insgesamt hat mir das Praktikum gut gefallen
+und ich weiß jetzt, dass ich lieber im Büro arbeite.

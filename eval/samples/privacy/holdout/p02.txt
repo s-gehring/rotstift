@@ -1,0 +1,20 @@
+arbeit: IMG_2041.jpg
+klasse: 6
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über einen Tag, an dem viel passiert ist.
+---
+Montag, den [12.03.2024]{date}. Liebes Tagebuch, heute war
+ein richtig blöder Tag, denn es hat die ganze
+zeit geregnet und es war kalt wie im Winter.
+In der Pause hat mich [Fabi]{person} geärgert, weil er
+mich Brillenschlange genannt hat. Da hab ich ihm
+eine gescheuert, aber ich und [jonas]{person} haben dann
+trotzdem mit [Lu]{person} Fußball gespielt. Danach hat
+uns Frau [Winter]{person} zum Direktor geschickt.
+Der war sauer, aber unsere Klassensprecherin [Emma Kö-
+nig]{person} hat alles erklärt. Zuhause war es auch
+still, weil [Papa nicht mehr bei uns wohnt]{circumstances}.
+Mama ist dann immer traurig, aber der kleine
+[Mo]{person} hat mich getröstet und mir sein Eis gegeben.
+Morgen wird es hoffentlich besser. Gute Nacht

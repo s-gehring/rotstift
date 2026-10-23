@@ -1,0 +1,18 @@
+arbeit: Vorstellung 6d Zeynep Tekin.pdf
+klasse: 6
+form: Vorstellung
+fach: Deutsch
+aufgabe: Stelle dich für die Klassenzeitung vor.
+---
+Hallo, ich bin [Zeynep Tekin]{person}, aber alle nennen mich
+[Zey]{person}. Ich bin 12 Jahre alt und habe am
+[09.01.2013]{date} Geburtstag. Ich gehe in die 6d vom
+[Goethe-Gymnasium Wiesbaden]{institution}. Unsere Klassenlehrerin
+heißt Frau [Sonne]{person}. Der Name passt zu ihr, weil sie
+immer gute Laune hat wie die Sonne. [Ich bin Muslimin und
+faste im Ramadan]{religion}, aber nur ein bisschen, weil ich noch
+zu klein bin. In meiner Freizeit turne ich beim
+[Turnverein Biebrich 1884]{institution} und male gerne. Auf TikTok
+bin ich unter [@zey.tekin_]{contact}, aber meine Mama sagt, ich darf
+nur eine halbe Stunde. Mein Lieblingsessen ist Pizza.
+Meine beste Freundin [Marie]{person} sitzt neben mir.

@@ -1,0 +1,22 @@
+arbeit: Öztürk_Aylin_6d.pdf
+klasse: 6
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Brief an deinen Onkel Karim und lade ihn zu deinem Geburtstag ein.
+---
+[Köln]{place}, den [03.05.2025]{date}
+Lieber Onkel [Karim]{keep},
+ich möchte dich ganz doll zu meinem Geburtstag
+einladen. Er ist am [17. Mai]{date} und ich werde dann
+zwölf Jahre alt. Wir feiern bei uns zuhause in der
+[Gartenstraße 7]{place}, es gibt Pizza und Kuchen. Mama
+kocht aber auch noch was, weil wir [zuhause nur
+türkisch]{origin} reden und sie sagt ein Fest ohne Essen ist
+kein Fest. Es kommen meine Cousins [Mohamad]{person} und
+[Mohammed]{person} und meine beste Freundin [Lu]{person}. [Mohammed]{person}s
+Hund darf auch mit, wenn du nichts dagegen hast.
+Bring bitte wieder deine Gitarre mit. Wenn du mir
+was schenken willst, geht auch Geld aufs Konto von
+Mama: [DE62 1203 0000 0011 4725 38]{number}. Ruf mich
+an unter [0221 4471826]{contact}.
+Deine Nichte [Aylin]{person}

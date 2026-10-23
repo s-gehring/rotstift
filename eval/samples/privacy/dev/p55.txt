@@ -1,0 +1,20 @@
+arbeit: scan_0043.pdf
+klasse: 8
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine E-Mail an einen Verein, in der du dich abmeldest und höflich bleibst.
+---
+Betreff: Abmeldung aus dem Verein
+Sehr geehrte Frau [Nowak]{person},
+hiermit möchte ich mich zum Ende des Monats
+aus dem [Tennisclub Grün-Weiß Rodgau]{institution} abmelden. Meine
+Mitgliedsnummer ist die [TC-20418]{number} und der Beitrag wurde bisher
+von dem Konto [DE17 5005 0201 0200 3817 46]{number} abgebucht. Ich habe
+leider nicht mehr genug Zeit für das Training,
+weil ich nächstes Jahr die Schule wechsle und
+viel mehr lernen muss. Mein Trainer [Jörg Becker]{person} weiß
+schon Bescheid. Bitte bestätigen Sie mir die Abmeldung
+per E-Mail an [lukas.berger.08@web.de]{contact} oder rufen Sie mich
+unter [06106 482 193]{contact} an. Vielen Dank für die schöne Zeit.
+Mit freundlichen Grüßen
+[Lukas Berger]{person}

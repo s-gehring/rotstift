@@ -1,0 +1,20 @@
+arbeit: 8c_Inhaltsangabe_Welle_Köhler.pdf
+klasse: 8
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Schreibe eine Inhaltsangabe zum Roman „Die Welle“ von Morton Rhue.
+---
+Dienstag, [21.01.2025]{date}
+Der Roman „Die Welle“ von [Morton Rhue]{keep} erschien 1981
+und handelt von einem Experiment an einer Schule in
+Amerika. Der Geschichtslehrer [Ben Ross]{keep} will seiner Klasse
+zeigen, wie die Menschen im Nationalsozialismus so
+mitlaufen konnten. Er führt Regeln ein, zum Beispiel
+dass man gerade sitzen muss und nur mit „Herr [Ross]{keep}“
+antworten darf. Die Gruppe nennt sich „Die Welle“
+und wird immer größer. Schüler wie [Robert]{keep} machen
+alles mit, obwohl sie vorher Außenseiter waren.
+Nur [Laurie]{keep}, die die Schülerzeitung schreibt, hat
+Angst vor der Entwicklung. Mein Banknachbar [Tim
+Fuchs]{person} meint, dass [Ben Ross]{keep} schlau wie ein Fuchs
+vorgeht. Am Schluss beendet der Lehrer das Experiment.

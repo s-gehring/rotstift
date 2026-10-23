@@ -1,0 +1,20 @@
+arbeit: Scan 2025-11-03 0815.pdf
+klasse: 10
+form: Erörterung
+fach: Deutsch
+aufgabe: Sollten Hausaufgaben abgeschafft werden? Erörtere die Frage.
+---
+In der Diskussion um die Schule taucht immer wieder
+die Frage auf, ob Hausaufgaben abgeschafft werden sollten.
+Befürworter argumentieren, dass Schüler nach einem langen Schultag
+Zeit zur Erholung brauchen. Zudem gibt es Studien, die
+zeigen, dass der Nutzen von Hausaufgaben in der Grundschule
+gering ist. Auch führt der Druck oft dazu, dass
+Eltern die Aufgaben erledigen und nicht die Kinder.
+Gegner halten dagegen, dass Hausaufgaben den Stoff festigen
+und selbstständiges Arbeiten fördern. Wer zu Hause nie
+übt, verliert schnell den Anschluss, besonders in Mathematik
+oder Fremdsprachen. Meiner Meinung nach sollte man Hausaufgaben
+nicht komplett abschaffen, sondern sinnvoller gestalten, etwa
+durch weniger Aufgaben, die dafür freiwillig vertiefen.
+Dadurch würden beide Seiten profitieren.

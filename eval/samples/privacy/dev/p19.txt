@@ -1,0 +1,19 @@
+arbeit: Scan_0042.jpg
+klasse: 6
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Bericht über euren Klassenausflug.
+---
+Am [14.05.2025]{date} sind wir mit der Klasse 6a von der
+[Gesamtschule Eppendorf]{institution} nach Hamburg ins Planetarium
+gefahren. Der Busfahrer Herr [Stern]{person} hat uns pünktlich
+abgeholt und viele Witze erzählt. Frau [Engel]{person} hat die ganze
+Zeit gezählt ob alle da sind. Im Planetarium war es
+dunkel und man hat tausende Sterne an der Decke
+gesehen. Der Mann hat erklärt, dass das Planetarium schon
+1930 eröffnet wurde. [felix]{person} hat gefragt, ob es auch einen
+Stern gibt der Engel heißt, da haben alle gelacht.
+Danach haben [Ni-
+colas]{person} und ich Eis gekauft, aber [felix]{person}s Eis ist
+runtergefallen. Auf der Rückfahrt sind fast alle
+eingeschlafen. Es war ein richtig schöner Ausflug.

@@ -1,0 +1,19 @@
+arbeit: Wunder Inhaltsangabe Lilly Engel 5a.pdf
+klasse: 5
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Schreibe eine Inhaltsangabe zum Buch „Wunder“ von R. J. Palacio.
+---
+In dem Buch von [R. J. Palacio]{keep} geht es um
+einen Jungen der [August]{keep} heißt, aber alle sagen [Auggie]{keep}. Er
+hat ein ganz anderes Gesicht als die anderen,
+weil er mit einer Krankheit geboren wurde. Bis
+jetzt hat er zuhause gelernt, doch jetzt kommt er
+in die fünfte Klasse einer richtigen Schule. Dort ist
+[Julian]{keep} gemein zu ihm und [Jack Will]{keep} wird sein Freund.
+Seine große Schwester [Via]{keep} hat auch Probleme, weil sich
+alle nur um [Auggie]{keep} kümmern. Am Ende bekommt er
+eine Medaille und alle klatschen. Meine beste Freundin
+[Lilly]{person} hat das Buch zuerst gelesen und mir erzählt.
+Ich fand es traurig und lustig, dass so ein
+Junge so viel Mut hat.

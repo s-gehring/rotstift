@@ -1,0 +1,17 @@
+arbeit: Steckbrief Paul H..jpg
+klasse: 5
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle dich in einem Steckbrief für die neue Klasse vor.
+---
+Hallo, ich heiße [Paul Hahn]{person} und bin 10 Jahre alt.
+Mein Nachname ist wie das Tier, ein Hahn. Meine Oma
+hat auf dem Bauernhof auch einen Hahn, der heißt Gockel
+und kräht jeden Morgen um fünf Uhr. Mein Geburtstag
+ist am [17.06.2015]{date}. Ich wohne in [Weilburg]{place} und
+gehe jetzt aufs [Gymnasium Weilburg]{institution}. Mein
+Klassenlehrer ist Herr [Schneider]{person}, der ist ganz nett.
+Mein Hobby ist Fußball, ich spiele beim [SV Waldhausen]{institution}
+als Stürmer. Mein bester Freund heißt [Mat-
+this]{person}, er geht auch in die 5a. Am liebsten esse
+ich Nudeln mit Tomatensoße, aber keinen Spinat.

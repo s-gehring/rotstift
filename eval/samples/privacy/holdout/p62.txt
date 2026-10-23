@@ -1,0 +1,21 @@
+arbeit: Bewerbung Praktikum Mehmet Yildiz 10c.pdf
+klasse: 10
+form: E-Mail
+fach: Deutsch
+aufgabe: Bewirb dich bei Frau Lindner um einen Praktikumsplatz in ihrem Betrieb.
+---
+Betreff: Bewerbung um einen Praktikumsplatz
+Sehr geehrte Frau [Lindner]{keep},
+ich besuche die 10c der [Käthe-Kollwitz-Realschule]{institution}
+und suche für den Zeitraum vom [02.02.]{date} bis zum
+[13.02.2026]{date} einen Praktikumsplatz in Ihrer [Bäckerei Hoffmann]{institution}.
+Ich backe schon lange gerne zu Hause und
+arbeite sorgfältig. Frau [Lindner]{keep}, meine Eltern haben mir
+erzählt, dass Sie sehr nett zu Praktikanten sind. Eine Kopie
+meines Schülerausweises mit der Nummer [SA-77204]{number} füge ich bei.
+Ich wohne in der [Ahornallee 21]{place}, [70597 Stuttgart]{place}, und bin
+am besten unter [0711 5503842]{contact} oder per E-Mail
+unter [m.yildiz2009@gmail.com]{contact} erreichbar.
+Über eine Einladung zum Gespräch würde ich mich freuen.
+Mit freundlichen Grüßen
+[Mehmet Yildiz]{person}

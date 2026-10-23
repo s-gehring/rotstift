@@ -1,0 +1,18 @@
+arbeit: Tagebuch Sophie-Marie.pdf
+klasse: 10
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über einen besonderen Tag.
+---
+Samstag, den [22.03.2025]{date}
+Liebes Tagebuch, heute war ich mit [Mark]{person} im Kino und
+danach noch bei meinen Großeltern. Opa erzählt jedes Mal,
+dass früher alles in D-Mark bezahlt wurde und dass er
+1989 am Tag des Mauerfalls in Berlin war. Er fährt
+immer noch seinen alten Golf mit dem Kennzeichen
+[HH-OP 1989]{number}, obwohl Oma sagt, das sei Schrott. Meine
+beste Freundin [Oksana Kravets]{person} hat mir geschrieben, dass sie
+nächste Woche vorbeikommt. Ihr Account ist [@oksi.kravets]{contact}, falls
+du sie suchen willst, Tagebuch. [Mark]{person}s Mutter hat uns zum
+Essen eingeladen, ich war ein bisschen aufgeregt. Vielleicht
+mag sie mich nicht. Aber das wird schon, glaube ich.

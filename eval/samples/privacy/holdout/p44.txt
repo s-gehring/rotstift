@@ -1,0 +1,20 @@
+arbeit: 7d Steckbrief Layla.pdf
+klasse: 7
+form: Steckbrief
+fach: Deutsch
+aufgabe: Interviewe eine Mitschülerin und schreibe einen Steckbrief für die Klassenzeitung.
+---
+Steckbrief: [Anna-Lena Lang]{person}
+Interview von [Layla Haddad]{person}
+Alter: 12, Geburtstag am [30.01.2013]{date}
+Wohnort: [Münster-Hiltrup]{place}, [Rosenweg 5]{place}
+Telefon: [0251 90417]{contact}
+Spitzname: [Lena]{person}, so nennen sie alle außer ihrer Oma
+Verein: [Reitverein Hiltrup]{institution}, sie reitet seit drei Jahren
+Beste Freunde: [Kai]{person} und [Hana]{person}
+Lieblingsfach: Kunst, weil sie gerne lange Geschichten malt
+Lieblingssängerin: [Taylor Swift]{keep}
+Ich habe sie gefragt, was sie später werden will,
+und sie sagt, Tierärztin. Wenn man [Lang]{person} fragt, wie sie
+sich in drei Wörtern beschreibt, sagt sie: lustig, ehrlich
+und manchmal zu laut. Das Interview war richtig nett.

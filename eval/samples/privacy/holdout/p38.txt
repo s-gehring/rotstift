@@ -1,0 +1,19 @@
+arbeit: Tagebuch Mats K. Kl5.jpg
+klasse: 5
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über deinen Tag.
+---
+Freitag, der [07.02.2025]{date}
+Liebes Tagebuch, heute war ein doofer tag. Ich muss
+[wegen meinem ADHS]{health} jeden Morgen eine Tablette nehmen und
+heute hab ich es vergessen. Dann konnte ich nicht still
+sitzen und Frau [Sonne]{person} hat mich zwei mal ermahnt. Draußen
+hat die Sonne geschienen und ich wollte so gerne
+raus. In der Pause hab ich mit [Kewin]{person} Fangen
+gespielt, aber dann hat [Kevin]{person} mich gehauen und ich
+musste weinen. Nach der Schule bin ich nach Hause
+in [Bornheim]{place} gelaufen. Mit Papa hab ich Videos von
+[Cristiano Ronaldo]{keep} geguckt, das war das beste vom Tag.
+Mama hat Nudeln gekocht und ich durfte noch
+eine Stunde zocken. Gute Nacht.

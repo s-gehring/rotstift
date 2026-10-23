@@ -1,0 +1,20 @@
+arbeit: 9c_Zielinska_Schimmelreiter.pdf
+klasse: 9
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Novelle „Der Schimmelreiter“ von Theodor Storm für deinen Mitschüler Piotr zusammen, der gefehlt hat.
+---
+Hallo [Piotr]{keep}, hier ist die Zusammenfassung zu der Novelle
+„Der Schimmelreiter“ von [Theodor Storm]{keep}, die 1888 erschienen
+ist. Erzählt wird von dem Deichgrafen [Hau-
+ke Haien]{keep}, der als Junge aus einfachen Verhältnissen
+sehr klug ist. Er heiratet [Elke Volkerts]{keep} und wird
+Deichgraf, obwohl der Knecht [Ole Peters]{keep} ihn nicht leiden
+kann. [Hauke]{keep} baut einen neuen Deich, aber die Leute
+im Dorf glauben, er sei mit dem Teufel im Bund,
+weil er auf einem Schimmel reitet. Sein Vater [Tede
+Haien]{keep} ist da schon lange tot. Bei einer Sturmflut
+bricht der alte Deich und [Hauke]{keep} stürzt sich mit seinem
+Pferd in die Fluten. Mein Opa [Henryk]{person} hat mir die
+Novelle zum Geburtstag am [18. Mai]{date} geschenkt, sonst hätte ich
+sie nie gelesen.

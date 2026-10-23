@@ -1,0 +1,18 @@
+arbeit: Scan 0912.pdf
+klasse: 10
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über ein besonderes Wochenende.
+---
+Samstag, [14.06.2025]{date}
+Liebes Tagebuch, gestern war das Konzert von [Taylor Swift]{keep}
+und ich war endlich dabei, zusammen mit meiner Schwester
+[lotta]{person}. Wir haben ewig auf die Tickets gewartet. [lotta]{person}s
+Freundin [Jo]{person} wollte auch mitkommen, hat aber keine
+bekommen. Als das Lied vom Album 1989 kam, haben alle
+mitgesungen. Auf dem Heimweg hat [lotta]{person} mir erzählt,
+dass [sie mit [Jo]{person} zusammen ist und sie sich ineinander
+verliebt haben]{sexuality}. Ich hab mich echt gefreut,
+dass sie es mir gesagt hat. Unsere Eltern wissen es
+noch nicht. Ihr Insta ist [@lotta_k_]{contact}, ich folge ihr
+gleich, wenn ich es nicht vergesse. Jetzt bin ich müde.

@@ -1,0 +1,20 @@
+arbeit: Tagebuch Nele Pohl 7a.pdf
+klasse: 7
+form: Tagebuch
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über einen Tag, an dem du dich verändert hast.
+---
+Freitag, den [21.11.2025]{date}
+Liebes Tagebuch, ich muss dir was erzählen aber
+du darfst es keinem sagen. Heute in Mathe hat
+[hana]{person} mich angelächelt und ich wurde rot wie eine
+Tomate. Ich glaube, [ich bin in [Hana]{person} verliebt]{sexuality}, und
+ich weiß nicht was ich machen soll. Mit [lilly]{person}
+kann ich nicht drüber reden, die erzählt alles
+sofort weiter. Frau [Winter]{person} hat gesagt, dass es im
+Winter schneller dunkel wird, da hab ich nur
+auf [Hana]{person}s Zopf geguckt. Nach der Schule bin ich
+mit dem Bus 61 nach Hause gefahren und
+hab meine Lieblingsmusik von [Billie Eilish]{keep} gehört.
+[Billie Eilish]{keep} singt auch ganz offen über sowas.
+Vielleicht sag ich es Mama wenn ich mich traue.

@@ -1,0 +1,18 @@
+arbeit: 8a Vorstellung Kovalenko.pdf
+klasse: 8
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle dich und dein Hobby der Klasse vor.
+---
+Ich heiße [Oleksandr Kovalenko]{person}, aber alle nennen mich
+[Sasha]{person}. Ich bin 13 Jahre alt und mein Geburtstag
+ist am [28.02.2012]{date}. [Vor drei Jahren bin ich mit meiner Mama
+aus der Ukraine geflüchtet]{origin}. Jetzt wohne ich in
+[Berlin-Zehlendorf]{place} und gehe auf die [Mildred-Scheel-Schule]{institution}.
+Mein Hobby ist Judo, ich trainiere beim [Judoclub Zehlendorf]{institution}
+und meine Mitgliedsnummer ist [JC-40712]{number}. Unser Trainer
+heißt [Mark]{person}, er sammelt alte D-Mark Münzen und zeigt sie
+uns manchmal. In der Klasse sitze ich neben
+[Nguyen Thi Lan]{person}, wir machen oft Hausaufgaben zusammen und
+spielen mit [Lan]{person}s Hund. Auf Instagram bin ich unter
+[@sasha_k_2012]{contact} zu finden.

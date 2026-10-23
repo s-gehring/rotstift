@@ -1,0 +1,21 @@
+arbeit: Praktikumsbericht Hahn Finn 9d.pdf
+klasse: 9
+form: Bericht
+fach: Deutsch
+aufgabe: Berichte über dein Betriebspraktikum.
+---
+Mein Praktikum war vom [03.03.]{date} bis [14.03.2025]{date} in
+der Kfz-Werkstatt [Autohaus Lehmann]{institution} in der
+[Industriestraße 8]{place}. Mein Chef Herr [Bau-
+er]{person} hat mich am ersten Tag freundlich begrüßt.
+Ich musste erst mal die Werkstatt fegen und Reifen
+sortieren. Der Geselle [Mark]{person} hat mir dann gezeigt wie
+man einen Ölwechsel macht. Am Mittwoch kam ein Kunde
+mit dem Kennzeichen [KS-AL 4417]{number}, der Wagen hatte einen
+Motorschaden. Neben der Werkstatt war ein Feld, wo
+ein Bauer mit dem Traktor gefahren ist.
+Mein Papa ist [in der Gewerkschaft IG Metall]{union}, er fand
+es gut dass ich mal in einen Betrieb reinschnuppere.
+Für Rückfragen erreicht man mich unter [0561 77410]{contact}.
+Das Praktikum hat mir gefallen und ich überlege
+jetzt, ob ich eine Ausbildung dort machen will.

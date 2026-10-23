@@ -1,0 +1,23 @@
+arbeit: Brandt_Lena_8a_Inhaltsangabe.pdf
+klasse: 8
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Schreibe für deinen Mitschüler Jonas, der krank war, eine Inhaltsangabe zum Roman „Tschick“ von Wolfgang Herrndorf.
+---
+Der Roman von [Wolfgang Herrndorf]{keep} erschien 2010 und erzählt
+von dem vierzehnjährigen [Maik Klingenberg]{keep}, der ein
+Außenseiter in seiner Klasse ist, weil er sehr
+schüchtern ist. Dann kommt der neue Mitschüler
+[Andrej Tschichatschow]{keep}, genannt [Tschick]{keep}, in die Klasse.
+Er ist immer dreckig und riecht nach Alkohol aber
+[Maik]{keep} findet in trotzdem interessant. Als die Sommerferien
+beginnen, ist [Maik]{keep} allein, weil [Tschick]{keep} plötzlich mit einem
+geklauten Lada vor der Tür steht. Sie fahren ohne
+Ziel los Richtung Walachei und treffen unterwegs viele
+Menschen, zum Beispiel das Mädchen [Isa]{keep}, die sie
+mit zu sich nimmt. Am Ende kommen die beiden
+vor Gericht, aber [Maik]{keep} hat einen echten Freund
+gefunden. Mein Banknachbar [Luca]{person} meint, das das
+Ende traurig ist, aber ich finde es eher
+schön. [Jonas]{keep}, ich hoffe das du jetzt weißt
+worum es geht und das Buch bald liest.

@@ -1,0 +1,19 @@
+arbeit: klassenarbeit_3_seite1.pdf
+klasse: 8
+form: Erörterung
+fach: Deutsch
+aufgabe: Erörtere, ob Schüler zu viele Hausaufgaben bekommen.
+---
+Viele Schüler sagen, dass sie zu viele Hausaufgaben
+haben. Ich finde, dass man das nicht pauschal sagen
+kann, denn es kommt auf die Menge an. Für
+Hausaufgaben spricht, dass man den Stoff dadurch wiederholt
+und besser behält. Schon [Albert Einstein]{keep} hat gesagt, dass man
+nicht aufhören darf zu fragen. Außerdem lernt man dabei
+selbstständig zu arbeiten. Gegen Hausaufgaben spricht, dass
+viele nach der Schule noch Sport machen oder im Verein
+sind und dann keine Zeit mehr haben. Auch die Freizeit
+ist wichtig, damit man sich erholen kann. Wenn
+zu viel aufgegeben wird, schreibt man oft einfach ab.
+Meiner Meinung nach sollten Hausaufgaben kurz sein und
+nur wenn es wirklich nötig ist aufgegeben werden.

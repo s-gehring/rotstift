@@ -1,0 +1,18 @@
+arbeit: Inhaltsangabe 8b Zeynep Arslan.pdf
+klasse: 8
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Schreibe für deine Freundin Nele eine Inhaltsangabe zu „Das Tagebuch der Anne Frank“.
+---
+In dem Tagebuch schreibt [Anne Frank]{keep} von 1942 bis 1944
+über ihr Leben im Hinterhaus in Amsterdam. Weil die
+Nazis Juden verfolgen, muss sich ihre Familie mit der
+Familie [van Pels]{keep} verstecken. [Anne]{keep} streitet oft mit ihrer Mutter
+und versteht sich besser mit ihrem Vater [Otto]{keep}. Später
+verliebt sie sich in [Peter]{keep}, den Sohn der van Pels.
+Ihre Schwester [Margot]{keep} ist ruhiger und schlauer als [Anne]{keep}. Am
+Ende werden alle entdeckt und in Lager gebracht. Nur
+[Otto Frank]{keep} überlebt. Das Buch hat mir meine Oma [Gisela]{person}
+zum Geburtstag am [04.02.]{date} geschenkt, und ich habe es in
+drei Tagen gelesen. [Nele]{keep}, du solltest es unbedingt auch lesen,
+es ist traurig aber auch wichtig.

@@ -1,0 +1,18 @@
+arbeit: Steckbrief Rojda D..jpg
+klasse: 5
+form: Steckbrief
+fach: Deutsch
+aufgabe: Stelle dich mit einem Steckbrief vor.
+---
+Mein Steckbrief
+Name: [Rojda Demir]{person}, alle nennen mich [Rojy]{person}
+Ich bin 10 Jahre alt und habe am [14. Oktober]{date} Geburtstag.
+Ich wohne in [Duisburg-Marxloh]{place} in der [Weseler Straße 31]{place}.
+Meine Muttersprache ist [Kurdisch]{origin}, aber in der Schule
+spreche ich Deutsch. Mein Hobby ist schwimmen, ich bin im
+Verein [SV Neptun Marxloh]{institution}, da habe ich die
+Mitgliedsnummer [88213]{number}. Mein Bruder [Azad]{person} spielt lieber
+Fußball, [Azad]{person}s Mannschaft hat letzte Woche gewonnen.
+Meine besten Freundinnen sind [Lilly]{person} und [lara]{person}.
+Am liebsten esse ich Pizza und Eis. Mein Lieblingstier
+ist der Hund, aber wir dürfen keinen haben.

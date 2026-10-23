@@ -1,0 +1,19 @@
+arbeit: 5b Berivan Bericht Bauernhof.pdf
+klasse: 5
+form: Bericht
+fach: Deutsch
+aufgabe: Schreibe einen Bericht über euren Ausflug zum Bauernhof.
+---
+Am [16.06.2025]{date} sind wir mit der Klasse 5b der
+[Erich-Kästner-Schule]{institution} zu einem Bauernhof gefahren. Unsere Lehrerin
+Frau [Bach]{person} und Herr [Hahn]{person} sind mitgekommen. Zuerst haben
+wir Kühe gesehen und durften sie streicheln. Danach
+sind wir zu einem kleinen Bach gelaufen und haben
+Steine gesammelt. [Azad]{person} ist fast ins Wasser gefalen und
+[Mo]{person} hat ihn festgehalten. Alle nennen ihn der kleine [Mo]{person}.
+Dann hat uns der Bauer die Hühner gezeigt, und ein
+Hahn hat ganz laut gekräht. Herr [Hahn]{person} hat gelacht als
+der Hahn ihn jagen wollte. Zum Mittag gab es
+Würstchen, aber [Be-
+rivan]{person} durfte keine essen, weil [azad]{person}s Brotdose
+vertauscht war. Es war ein toller Ausflug.

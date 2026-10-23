@@ -1,0 +1,19 @@
+arbeit: 6a_Yildiz_Email.pdf
+klasse: 6
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine E-Mail an deinen Austauschpartner Mohammed und stelle dich vor.
+---
+Betreff: Hallo aus Duisburg
+Hallo [Mohammed]{keep},
+ich bin [Emre]{person} und freue mich das wir uns bald
+schreiben. Ich bin 12 Jahre alt und wohne in
+[Duisburg-Hamborn]{place}. Meine Schwester [Ayşe]{person} geht auch
+auf die [Gesamtschule Hamborn]{institution}, aber in die 9. Zuhause
+[sprechen wir meistens Türkisch]{origin}, in der Schule rede
+ich aber nur Deutsch. Mein Geburtstag ist am [03.11.2013]{date}.
+Mein bester Freund heißt [Kewin]{person}, aber alle sagen [Kev]{person}
+zu ihm. Er spielt auch Fußball so wie ich.
+Hast du auch Geschwister, [Mohamad]{keep}? Schreib mir bitte
+zurück an [emre.yildiz13@web.de]{contact}.
+Bis bald dein [Emre]{person}
