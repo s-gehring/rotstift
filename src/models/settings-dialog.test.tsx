@@ -919,17 +919,17 @@ describe('SettingsDialog thoroughness', () => {
     expect(calls).toEqual(['clear:corrector', `select:${corrector.id}`]);
   });
 
-  it('notes the levels whose models exceed the memory as taking much longer', () => {
+  it('notes the levels that read so much from disk that they take much longer', () => {
     const notes = () =>
       [...thoroughness().querySelectorAll('label')].map(
         (label) => label.querySelector('.settings-model-note')?.textContent ?? null,
       );
     renderModels({ transcriber: testModelSetup(transcriber, undefined, { state: withRam(8) }) });
-    expect(notes()).toEqual([null, 'dauert deutlich länger', 'dauert deutlich länger']);
+    expect(notes()).toEqual([null, null, 'dauert deutlich länger']);
     expect(radios(thoroughness()).every((radio) => !radio.disabled)).toBe(true);
 
     renderModels({ transcriber: testModelSetup(transcriber, undefined, { state: withRam(16) }) });
-    expect(notes()).toEqual([null, null, 'dauert deutlich länger']);
+    expect(notes()).toEqual([null, null, null]);
   });
 
   it('blocks the levels while a step cannot switch', () => {

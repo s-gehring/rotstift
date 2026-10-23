@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_MODELS, SECOND_READER_ID } from './registry.ts';
 import {
   LEVELS,
-  levelExceedsMemory,
+  levelMuchSlower,
   levelModels,
   loadSecondReading,
   saveSecondReading,
@@ -22,8 +22,8 @@ const memoryStorage = () => {
   };
 };
 
-const exceeding = (gib: number | null) =>
-  THOROUGHNESS.filter((level) => levelExceedsMemory(level, gib === null ? null : gib * GIB));
+const slower = (gib: number | null) =>
+  THOROUGHNESS.filter((level) => levelMuchSlower(level, gib === null ? null : gib * GIB));
 
 describe('thoroughness levels', () => {
   it('maps every level to pinned models of the registry', () => {
@@ -73,11 +73,11 @@ describe('thoroughness levels', () => {
     ]);
   });
 
-  it('flags the levels that exceed the memory of the machine', () => {
-    expect(exceeding(8)).toEqual(['thorough', 'veryThorough']);
-    expect(exceeding(16)).toEqual(['veryThorough']);
-    expect(exceeding(48)).toEqual([]);
-    expect(exceeding(null)).toEqual([]);
+  it('flags the levels that read so much from disk that they take much longer', () => {
+    expect(slower(8)).toEqual(['veryThorough']);
+    expect(slower(16)).toEqual([]);
+    expect(slower(48)).toEqual([]);
+    expect(slower(null)).toEqual([]);
   });
 });
 
