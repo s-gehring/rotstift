@@ -386,7 +386,7 @@ export interface ModelDetectorOptions {
 const MIN_NOUN_LENGTH = 7;
 
 const NAME_CUE =
-  /(?:^|[^\p{L}])(?:frau|herr|herrn|familie|fam\.|dr\.|prof\.|bei|liebe|lieber|geehrte|geehrter)\s+$/iu;
+  /(?:^|[^\p{L}])(?:frau|herr|herrn|familie|fam\.|dr\.|prof\.|bei|liebe|lieber|geehrte|geehrter|vater|mutter|papa|mama|opa|oma|onkel|tante|bruder|schwester|cousin|cousine|freund|freundin|nachbar|nachbarin|trainer|trainerin|lehrer|lehrerin)\s+$/iu;
 
 function surnameWord(word: string): boolean {
   const lower = word.toLocaleLowerCase('de');
