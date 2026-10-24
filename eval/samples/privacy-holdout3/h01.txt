@@ -1,0 +1,18 @@
+arbeit: Zoo Ausflug.pdf
+klasse: 5
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Klassenausflug.
+---
+Am Donnerstag ist die 5c mit dem Bus in den Zoo gefahren.
+Unsere Klassenlehrerin Frau [Brandt]{person} hat uns schon um acht
+Uhr vor der [Gesamtschule Eversburg]{institution} gesammelt. Ich
+saß neben [Mehmet]{person}, der die ganze Fahrt Witze erzählt
+hat. Er wollte unbedingt zu den Löwen, weil er [Simba]{keep}
+aus dem Film so liebt. Danach wollten wir zu den Elefanten,
+aber [Lena Hofmann]{person} hat ihr Brot verloren und wir mussten
+suchen. Der Tierpfleger hat uns erklärt, dass die Elefantenkuh
+schon über vierzig Jahre alt ist. Auf dem Rückweg war ich so
+müde, dass ich im Bus eingeschlafen bin. Meine Mama hat
+mich abgeholt und gefragt, ob es schön war. Es war der beste
+Ausflug bisher.

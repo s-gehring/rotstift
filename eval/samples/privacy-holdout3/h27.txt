@@ -1,0 +1,18 @@
+arbeit: Zeitungsbericht Schulfest.pdf
+klasse: 8
+form: Zeitungsbericht
+fach: Deutsch
+aufgabe: Schreibe einen Zeitungsbericht über das Schulfest.
+---
+Großer Andrang beim Sommerfest
+
+Am Samstag fand an der [Humboldt-Schule]{institution} in [Bremerhaven]{place}
+das jährliche Sommerfest statt. Über 500 Besucher kamen
+laut Schulleiter Herrn [Dreyer]{person} auf das Gelände. Höhepunkt
+war das Konzert der Schulband, bei dem die Sängerin
+[Mia Johannsen]{person} aus der Klasse 9a begeisterte. Am Stand
+des Elternvereins gab es Waffeln für zwei Euro. Der
+Erlös soll an die Hilfsorganisation [Ärzte ohne Grenzen]{keep}
+gehen. Die Bürgermeisterin hat auch ein paar Worte
+gesprochen und die Arbeit der Schüler gelobt. Spät am Abend
+spielte die Band noch ein Lied von [Billie Eilish]{keep}.

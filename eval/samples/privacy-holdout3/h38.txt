@@ -1,0 +1,17 @@
+arbeit: Erörterung Klimaschutz.pdf
+klasse: 11
+form: Erörterung
+fach: Politik
+aufgabe: Muss die Politik beim Klimaschutz strengere Vorgaben machen?
+---
+Die Klimakrise zwingt Politik und Gesellschaft zum Handeln.
+Ich bin seit zwei Jahren Mitglied bei [Fridays for Future
+Oldenburg]{politics} und war schon bei vielen Demonstrationen.
+[Greta Thunberg]{keep} hat gezeigt, dass junge Menschen etwas
+bewirken können. Die Bundesregierung unter [Olaf Scholz]{keep} hat
+vieles beschlossen, aber nach meiner Meinung zu wenig.
+Mein Vater [Rüdiger]{person} arbeitet bei VW und sorgt sich um seinen
+Job. Er ist [in der IG Metall]{union}, und wir streiten oft darüber.
+Trotzdem glaube ich, dass strengere Regeln nötig sind, weil
+Freiwilligkeit nicht reicht. Länder wie [Norwegen]{keep} zeigen mit
+Elektroautos, dass es geht.

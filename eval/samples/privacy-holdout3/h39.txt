@@ -1,0 +1,16 @@
+arbeit: Woyzeck Szene Barbier.pdf
+klasse: 12
+form: Szenenanalyse
+fach: Deutsch
+aufgabe: Analysiere die Szene "Beim Hauptmann" aus Büchners "Woyzeck".
+---
+In der Szene "Beim Hauptmann" rasiert [Woyzeck]{keep} seinen
+Vorgesetzten, der ihn mit Belehrungen über Moral und Zeit
+überhäuft. Der Hauptmann nennt ihn einen guten Menschen, aber
+dumm. [Georg Büchner]{keep} zeigt damit die soziale Ungleichheit:
+Woyzeck hat keine Bildung, kein Geld und muss sich vom Staat
+benutzen lassen. Als er auf [Marie]{keep} zu sprechen kommt, wird er
+verlegen. Ich habe das Stück im Theater in [Bochum]{place} gesehen,
+mit meiner Freundin [Merve Yılmaz]{person}, und die Darstellerin hat
+mich sehr beeindruckt. Wir haben nach der Aufführung lange
+diskutiert, ob Woyzeck wirklich schuldig ist.

@@ -321,6 +321,75 @@ node --experimental-transform-types eval/privacy-score.ts --set dev,holdout,eval
   --detector "E2B=$R/chain-all-e2b.json:app"
 ```
 
+## Nachtrag: Blinder Holdout 3
+
+Nach der Lektüreliste und den neuen Regeln sind alle bisherigen Sätze verbraucht. Für die Zahl der verbesserten Kette entstand ein dritter Satz, `eval/samples/privacy-holdout3`. Er wurde geschrieben, ohne `src/privacy`, `src/privacy-review`, `eval/privacy-rules.ts`, `eval/privacy-names.ts`, `eval/privacy-llm.ts` oder die Fehlerteile dieses Berichts zu lesen, und danach nicht mehr an Texten oder Zielen verändert. Die Messung lief genau einmal. Für die Messung wurde nur geprüft, dass sich die Anfragen an das Modell zwischen vorher und nachher nicht ändern (Diff von `eval/privacy-chain.ts` und `src/privacy/model-detector.ts`).
+
+**Satz:** 40 selbst geschriebene Schülertexte der Klassen 5 bis 13 (3807 Wörter, im Schnitt 95 je Arbeit), 182 Vorkommen von Kennungen (`person` 81, `place` 40, `institution` 33, `date` 14, `contact` 12, `number` 2), 73 zu behaltende Namen (`keep`) und 14 sensible Angaben (`religion` 4, `health` 3, `politics` 2, `circumstances` 2, `origin`, `sexuality`, `union` je 1). Breite statt Fallen: Erlebniserzählung, Brief, E-Mail, Bericht, Zeitungsbericht, Referat, Versuchsprotokoll, Bewerbung, Motivationsschreiben, Lebenslauf (Tabellenform), Praktikumsbericht, Inhaltsangabe, Interpretation und Szenenanalyse zu Schullektüre (Faust, Woyzeck, Werther, Kabale und Liebe, Nathan, Der Vorleser, Tschick, Schachnovelle, Der Besuch der alten Dame, Das Brot), Erörterung, ein englischer Brief. Namen verschiedener Herkunft, Einrichtungen, Wohnadressen, Telefonnummern, Handles, Aktenzeichen, IBAN, Daten über Briefkopf und Termine, Namen über einen Zeilenumbruch. Zu behalten sind 73 Namen: Figuren und Autoren der Lektüre, Prominente, Namen aus der Aufgabe sowie 15 Länder, Reiseziele und Schauplätze ohne Wohnbezug. Texte wie bisher: `sauber`, `erkannt` (`render.py --heft --one-page`, GLM-OCR `glm-ocr-q8`) und `rauschen` (`ocr-noise.ts`, `noise1`).
+
+**Verfahren:** Mac (M4 Pro), llama-server `b11537` aus `src-tauri/binaries`, `beispiele`, 4 Threads. Modelle und GLM-OCR liefen mit Metal (`--device MTL0 --n-gpu-layers 99`) statt nur auf der CPU, weil die OCR sonst Stunden gebraucht hätte. Das kann einzelne Antworten leicht ändern, die Zeitspalten sind nicht vergleichbar und stehen hier nicht. Ein Lauf liefert die Antworten (E2B und E4B), `privacy-score.ts` spielt daraus die Kette von main vor #90 (`f5264e3`, vorher) und die Kette von `aac88c2` (nachher) nach. Die Anfragen an das Modell sind in beiden gleich, #90 ändert nur die Verarbeitung.
+
+**Gold-Korrektur nach der Messung.** Fünf Namen in h34, h36, h37 und h40 trugen die Anrede in der Markierung (`[Herr Kaltenbach]`, `[Frau Brückner]`, `[Dr. Hassan Farouk]`, `[Herr Santos]`, `[Frau Neumann]`), was das Gold-Format ausschließt. Die Kette lässt die Anrede richtig weg und galt dann als Leck. Die Dateien im Repo haben die Anrede außerhalb der Markierung, Text, Aufgaben und Antworten des Modells blieben gleich. Wie gemessen, also mit den fünf Spannen, standen E2B nachher bei 83 % (sauber), 80 % (erkannt), 78 % (rauschen) und E2B und E4B bei 83 %, 85 %, 78 %, vorher E2B bei 85 %, 83 %, 75 % und E2B und E4B bei 85 %, 88 %, 75 %. Weitere Änderungen am Gold gab es nicht.
+
+### Ergebnis
+
+Anteil der Arbeiten ohne ein einziges durchgerutschtes Vorkommen einer Kennung (95-%-Intervall), 40 Arbeiten:
+
+| Kette       | Stand   |               sauber |     erkannt (GLM-OCR) |             rauschen |
+| ----------- | ------- | -------------------: | --------------------: | -------------------: |
+| E2B         | vorher  | **95 %** (83 bis 99) |  **93 %** (80 bis 97) | **85 %** (71 bis 93) |
+| E2B         | nachher | **93 %** (80 bis 97) |  **90 %** (77 bis 96) | **88 %** (74 bis 95) |
+| E2B und E4B | vorher  | **95 %** (83 bis 99) | **98 %** (87 bis 100) | **85 %** (71 bis 93) |
+| E2B und E4B | nachher | **93 %** (80 bis 97) |  **95 %** (83 bis 99) | **88 %** (74 bis 95) |
+
+Weitere Maße (Reihenfolge sauber, erkannt, rauschen):
+
+| Kette       | Stand   | Vorkommen gefunden | Überersetzung (Wörter) |     Figuren ersetzt | sensibel gefunden | sensible Fehlalarme je Arbeit |
+| ----------- | ------- | -----------------: | ---------------------: | ------------------: | ----------------: | ----------------------------: |
+| E2B         | vorher  |   99 %, 98 %, 96 % |   6,4 %, 6,6 %, 10,7 % | 61/73, 60/73, 63/73 |  71 %, 57 %, 21 % |              0,28, 0,28, 0,17 |
+| E2B         | nachher |   98 %, 97 %, 97 % |    2,7 %, 2,9 %, 8,8 % | 19/73, 19/73, 36/73 |  71 %, 57 %, 21 % |              0,28, 0,28, 0,17 |
+| E2B und E4B | vorher  |   99 %, 99 %, 96 % |   6,5 %, 6,8 %, 11,0 % | 63/73, 62/73, 65/73 |  86 %, 86 %, 79 % |              0,95, 1,00, 1,32 |
+| E2B und E4B | nachher |   98 %, 99 %, 97 % |    2,9 %, 3,1 %, 9,0 % | 20/73, 21/73, 36/73 |  86 %, 86 %, 79 % |              0,95, 1,00, 1,32 |
+
+Recall je Kategorie (Anzahl in Klammern), nachher, E2B, sauber, erkannt, rauschen: `person` (81) 99 %, 98 %, 98 %. `place` (40) 98 %, 95 %, 100 %. `institution` (33) 100 %, 100 %, 97 %. `contact` (12) 100 %, 100 %, 92 %. `date` (14) 93 %, 93 %, 86 %. `number` (2) 100 % in allen drei Texten.
+
+### Lecks einzeln
+
+Nachher, Arbeiten mit Leck (E2B und E2B und E4B, wo nicht anders vermerkt):
+
+- **`sauber`:** h08 „3. und 4. Februar“ (`date`, zwei Tage mit „und“), h21 „Essen“ (`place`, Stadt, die wie ein Verb aussieht), h38 „Rüdiger“ (`person`, Vorname nach „Mein Vater“).
+- **`erkannt`:** dieselben, dazu bei E2B h23 „Neuss“ (`place`) und „Samuel Katz“ (`person`). E2B und E4B verpasst im Transkript nur h08 und h38.
+- **`rauschen`:** h08 (Datum und E-Mail-Adresse zerlesen), h20 „Anton Wieczorek“ zerlesen zu „A(notn Wieczorek“, h22 „12. Dezember“ zerlesen, h29 „Städtischen Gymnasium Rheine“ zerlesen, h38 „Rüdiger“.
+
+Ein Fall ist eine Verschlechterung durch #90: **„Rüdiger“ (h38)** wurde vorher gefunden und bleibt nachher stehen. Vermutlich trifft ihn der neue Filter für großgeschriebene Wörter, die das Modell als Person oder Einrichtung meldet (der Name hat sieben Buchstaben, steht nicht in der Vornamenliste, und davor steht „Vater“ statt einer Anrede). Das ist eine Vermutung aus dem Diff, nicht geprüft. Die Lecks „Essen“ und „Neuss“ sowie das Datum „3. und 4. Februar“ gab es schon vorher. Vorher durchgerutscht, nachher gefunden: „ThhKaiu“ (h06) und „Lal(“ (h21) auf `rauschen`.
+
+Namen, die stehen bleiben müssten und ersetzt werden (nachher, sauber, E2B, 19 von 73): zehn Orte und Länder (Schweden, Rimini, Hamburg, Valencia, Barcelona, Paris, Gelsenkirchen, Manchester, Norwegen und der Schauplatz Güllen) und neun Personen und Organisationen (Simba, Ole Bischof, Roth, Jane Goodall, Albert Schweitzer, Gaudí, Mirko Czentovic, Dr. B., Ärzte ohne Grenzen). Die Figuren und Autoren der übrigen Lektüre (Faust, Woyzeck, Werther, Kabale und Liebe, Nathan, Tschick, Der Vorleser) blieben stehen. Vorher waren es 61 von 73. Die Überersetzung von Orten und Ländern ohne Wohnbezug ist die größte Lücke geblieben.
+
+### Einordnung
+
+- **Bei den Lecks ist kein Unterschied messbar.** Die Anteile ohne Leck liegen nachher bei `sauber` und `erkannt` 2 bis 3 Prozentpunkte unter vorher (je eine Arbeit, „Rüdiger“), bei `rauschen` 3 Punkte darüber (eine Arbeit mehr). Die Intervalle von vorher und nachher überlappen fast vollständig, bei 40 Arbeiten ist ein Unterschied von einer Arbeit Rauschen.
+- **Die Überersetzung fällt deutlich**, wie auf den Entwicklungssätzen: von 6,4 auf 2,7 % (sauber), von 6,6 auf 2,9 % (erkannt) und von 10,7 auf 8,8 % (rauschen). Figuren und Autoren der Lektüre bleiben stehen, nur Orte und einzelne Prominente werden noch ersetzt.
+- **Die Erwartung aus dem Nachtrag zur Lektüreliste trifft ein:** Die 100 % bei `sauber` halten sich nicht, auf neuen Texten sind es 93 %. Gegenüber dem blinden Holdout 2 (94, 88 und 75 %) ist das Bild dasselbe: Rund 9 von 10 Arbeiten ohne Leck bei `sauber` und `erkannt`, 85 bis 88 % bei `rauschen`.
+- **Die Lecks sind Einzelfälle**, kein Muster außer zerlesenen Namen. Vorkommen gefunden liegt bei 97 bis 99 %.
+- **Sensible Angaben** sind unverändert (nur Modell): E2B findet 71 %, 57 % und 21 % der 14 Angaben, E2B und E4B 86 %, 86 % und 79 %, bei 0,17 bis 0,28 und 0,95 bis 1,32 Fehlalarmen je Arbeit.
+
+### Grenzen
+
+- **Kleine Zahlen.** 40 Arbeiten, 182 Vorkommen, 14 sensible Angaben, ein Unterschied von einer Arbeit liegt innerhalb des Rauschens.
+- **Dieselbe Autorenfamilie** wie bei den anderen Sätzen: Blind gegenüber den Detektoren, nicht gegenüber dem Stil.
+- **Metal statt CPU** für Modelle und OCR (siehe Verfahren), und `b11537` statt `b11551`.
+- **Der Satz ist jetzt verbraucht.** Wer „Rüdiger“, die Reiseziele oder die anderen Lecks oben in die Regeln übernimmt, braucht einen vierten Satz.
+
+```bash
+R=~/.cache/rotstift/eval/privacy/runs
+node --experimental-transform-types eval/privacy-chain-run.ts --set eval/samples/privacy-holdout3 --threads 4 --out $R/chain-holdout3
+node --experimental-transform-types eval/privacy-score.ts --set eval/samples/privacy-holdout3 --categories --examples E2B \
+  --detector "E2B=$R/chain-holdout3-e2b.json:app" \
+  --detector "E2B und E4B=$R/chain-holdout3-e2b.json+$R/chain-holdout3-e4b.json:app"
+```
+
+Das Transkript muss als `ocr-privacy-holdout3.json` in `~/.cache/rotstift/eval/privacy` liegen (`ocr-run.ts` mit `glm-ocr-q8` auf den mit `render.py --heft --one-page` gerenderten Seiten).
+
 ## Nachstellen
 
 Die Befehle stehen in [eval/README.md](../../eval/README.md#personenbezug-erkennen). Transkripte und Läufe liegen in `~/.cache/rotstift/eval/privacy` und sind nicht eingecheckt, die Heftbilder erzeugt `render.py` bei Bedarf neu. Für die Holdout-Tabelle:

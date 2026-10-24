@@ -1,0 +1,17 @@
+arbeit: Werther Analyse.pdf
+klasse: 12
+form: Interpretation
+fach: Deutsch
+aufgabe: Analysiere den Brief vom 16. Juni aus Goethes "Die Leiden des jungen Werther".
+---
+Im Brief vom 16. Juni berichtet [Werther]{keep} seinem Freund
+[Wilhelm]{keep} vom Ball, auf dem er [Lotte]{keep} zum ersten Mal sah. Die
+Sprache ist emotional, geprägt von Ausrufen und Naturbildern,
+wie es typisch für den Sturm und Drang ist. [Goethe]{keep} schildert
+Werthers Begeisterung für das Mädchen, das ihren Geschwistern
+Brot schneidet. Für mich ist das nachvollziehbar, weil ich selbst
+unglücklich verliebt war, und zwar [in ein Mädchen aus meiner
+Klasse]{sexuality}. Das habe ich nur meiner Schwester [Katharina]{person}
+erzählt. Unsere Lehrerin Frau [Brückner]{person} sagt, Werther sei
+kein Vorbild, aber ein Spiegel seiner Zeit. Dem stimme ich
+zu, auch wenn ich ihn manchmal zu gefühlsduselig finde.

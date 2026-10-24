@@ -1,0 +1,27 @@
+arbeit: Bewerbung Schnupperwoche.pdf
+klasse: 8
+form: Bewerbungsschreiben
+fach: Deutsch
+aufgabe: Bewirb dich um einen Platz für ein Schülerpraktikum in einer Bäckerei.
+---
+[Ahmad Karimi]{person}
+[Bahnhofsweg 9]{place}
+[48143 Münster]{place}
+
+[Bäckerei Overbeck]{institution}
+Frau [Overbeck]{person}
+
+[Münster]{place}, [2. Oktober]{date}
+
+Bewerbung um einen Praktikumsplatz
+
+Sehr geehrte Frau [Overbeck]{person},
+
+ich besuche die achte Klasse der [Friedensschule Münster]{institution}
+und suche für den Februar einen Praktikumsplatz. Ich stehe gern
+früh auf und backe schon lange mit meinem Onkel [Hamid]{person}
+zu Hause. Sie erreichen mich unter [0251 / 74 33 12]{contact}. Über eine
+Einladung zum Vorstellungsgespräch würde ich mich freuen.
+
+Mit freundlichen Grüßen
+[Ahmad Karimi]{person}

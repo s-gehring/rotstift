@@ -1,0 +1,17 @@
+arbeit: Austausch Spanien Bericht.jpg
+klasse: 10
+form: Reisebericht
+fach: Spanisch
+aufgabe: Berichte über deinen Schüleraustausch.
+---
+Im März war ich zwei Wochen bei meiner Austauschpartnerin
+[Lucía Fernández]{person} in [Valencia]{keep}. Ihre Familie wohnt in einem
+Hochhaus in der [Calle Colón 45]{place}, und ihre Mutter
+[Carmen]{person} kocht fast jeden Tag Paella. Die Schule, die
+[Escuela Santa Ana]{institution}, beginnt schon um acht. Der Unterricht
+war streng, aber die Lehrer waren nett. Am Wochenende sind
+wir zusammen nach [Barcelona]{keep} gefahren und haben die
+Sagrada Família von [Gaudí]{keep} besichtigt. Meine Gastfamilie
+hat mir ihre Nummer [+34 612 55 90 14]{contact} gegeben, falls ich
+Probleme habe. Im Mai kommt Lucía dann zu uns nach
+[Paderborn]{place}, und ich bin gespannt, was sie sagt.

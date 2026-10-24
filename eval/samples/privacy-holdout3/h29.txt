@@ -1,0 +1,17 @@
+arbeit: Kabale und Liebe Szene.pdf
+klasse: 11
+form: Szenenanalyse
+fach: Deutsch
+aufgabe: Analysiere die Szene II,3 aus Schillers "Kabale und Liebe".
+---
+In der Szene II,3 stellt [Ferdinand]{keep} seinen Vater, den
+Präsidenten [von Walter]{keep}, zur Rede. Er liebt [Luise Miller]{keep},
+eine Bürgerliche, und will sich über die Standesgrenzen
+hinwegsetzen. Der Präsident hingegen plant, ihn mit [Lady Milford]{keep}
+zu verheiraten. [Friedrich Schiller]{keep} zeigt damit den Konflikt
+zwischen Liebe und gesellschaftlichem Druck. Die Sprache ist
+voller Pathos, Ferdinand spricht von der Natur und vom Herzen.
+Wir haben die Szene in unserem Kurs bei Herrn [Schäfer]{person}
+am [Städtischen Gymnasium Rheine]{institution} szenisch gelesen. Ich
+durfte den Präsidenten spielen und fand ihn eigentlich
+ganz überzeugend.

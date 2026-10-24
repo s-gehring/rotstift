@@ -1,0 +1,20 @@
+arbeit: Motivationsschreiben Medizin.pdf
+klasse: 13
+form: Motivationsschreiben
+fach: Deutsch
+aufgabe: Schreibe ein Motivationsschreiben für ein Studium der Humanmedizin.
+---
+Sehr geehrte Damen und Herren,
+
+seit meiner Kindheit interessiert mich die Medizin. Als
+mein Vater [Ioannis]{person} an Krebs erkrankte, habe ich im
+[Universitätsklinikum Heidelberg]{institution} erlebt, wie wichtig
+Ärztinnen und Ärzte sind, die zuhören. [Seine Chemotherapie und die
+Zeit danach]{health} haben unsere Familie verändert. Meine Mutter
+musste ihre Stelle bei der [Volksbank Mannheim]{institution} aufgeben,
+und ich habe mit meinem Bruder [Dimitris]{person} den Haushalt
+geführt. Im Sanitätsdienst beim [DRK Ortsverein Schwetzingen]{institution}
+sammle ich seit drei Jahren Erfahrung. Vorbilder sind für mich
+[Albert Schweitzer]{keep} und [Charlotte Heinemann]{person}, meine
+frühere Hausärztin. Ich bin überzeugt, dass ich als
+Studentin einen Beitrag leisten kann.

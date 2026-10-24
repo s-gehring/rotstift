@@ -1,0 +1,17 @@
+arbeit: Krankenhaus Bericht.pdf
+klasse: 6
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem Erlebnis, bei dem du Angst hattest.
+---
+Letzten Winter bin ich beim Schlittenfahren gegen einen Baum
+gefahren und habe mir den Arm gebrochen. Meine Mutter ist
+sofort mit mir ins [Marienhospital Osnabrück]{institution} gefahren.
+Dort musste ich lange warten, und ich hatte große Angst
+vor der Spritze. Eine Ärztin, Dr. [Okafor]{person}, hat mir den Arm
+geröntgt und gesagt, dass er glatt gebrochen ist. Ich
+bekam einen Gips in Blau. Mein bester Freund [Emre Aksoy]{person}
+hat als Erster darauf unterschrieben. In der Schule durfte
+ich eine Woche nicht Sport machen, [weil ich eine Knochenbruch-
+Verletzung hatte]{health}. Heute lache ich darüber, aber damals
+habe ich geweint.

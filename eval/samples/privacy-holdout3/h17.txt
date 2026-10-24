@@ -1,0 +1,17 @@
+arbeit: Faust Gretchenfrage.pdf
+klasse: 11
+form: Interpretation
+fach: Deutsch
+aufgabe: Interpretiere die Szene "Marthens Garten" aus Goethes "Faust I".
+---
+In der Szene "Marthens Garten" fragt [Gretchen]{keep} den
+Gelehrten [Faust]{keep}, wie er es mit der Religion hält. Faust
+weicht aus und sagt, Gefühl sei alles, Name sei Schall und
+Rauch. Damit zeigt [Goethe]{keep}, dass Faust sich nicht auf die Kirche
+festlegen will. Gretchen spürt, dass etwas nicht stimmt, vor
+allem weil Faust mit [Mephisto]{keep} verkehrt. Ich sehe darin auch
+meine eigene Lage. Ich bin in einer evangelischen Familie
+aufgewachsen und gehe in [Lemgo]{place} in den Konfirmandenkreis,
+[obwohl ich eigentlich nicht mehr glaube]{religion}. Meine Lehrerin
+Frau Dr. [Wehrmann]{person} hat im Unterricht gesagt, dass diese Frage
+bis heute aktuell ist.

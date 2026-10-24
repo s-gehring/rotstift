@@ -1,0 +1,21 @@
+arbeit: English Letter Exchange.pdf
+klasse: 8
+form: Brief
+fach: Englisch
+aufgabe: Write a letter to your pen friend Emily about your school.
+---
+[Dortmund]{place}, [9th November]{date}
+
+Dear [Emily]{keep},
+
+thank you for your letter. I live in [Dortmund]{place} with my mum,
+my little brother [Taylan]{person} and our cat. My school is the
+[Ostwall-Gymnasium]{institution}. We have English with Mr [Bennett]{person}.
+He is from [Manchester]{keep}, but he has lived here for ten years.
+My favourite subject is art. On Fridays I go to the
+[Jugendzentrum Nordstadt]{institution} and play table tennis. Please send
+me a photo of your family. You can write to my email
+[defne.arslan@school.example]{contact} or call me on [0231 118 45 67]{contact}.
+
+Best wishes,
+[Defne]{person}

@@ -1,0 +1,15 @@
+arbeit: Bericht Elternabend Notiz.jpg
+klasse: 6
+form: Bericht
+fach: Deutsch
+aufgabe: Berichte über die Projektwoche an deiner Schule.
+---
+In der Projektwoche habe ich beim Zirkusprojekt mitgemacht.
+Unser Leiter war der Zirkusdirektor Herr [Santos]{person} vom
+[Zirkus Piccolo]{institution}, der extra für uns angereist ist.
+Wir haben Jonglieren, Seiltanz und Zaubern geübt. Ich war in
+der Gruppe von [Liam]{person} und [Fatima Haddad]{person}. Am Freitag
+um 17 Uhr durften unsere Eltern kommen und zuschauen. Meine
+Eltern haben sich gefreut, obwohl sie [gerade in Scheidung
+leben]{circumstances}. Mama hat danach Frau [Neumann]{person} noch
+Danke gesagt. Es war die schönste Woche des Jahres.

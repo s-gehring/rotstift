@@ -1,0 +1,18 @@
+arbeit: Brief Austausch Frankreich.jpg
+klasse: 7
+form: Brief
+fach: Französisch
+aufgabe: Schreibe einen Brief an deinen Brieffreund Julien in Frankreich.
+---
+Hannover, den [11. September]{date}
+
+Lieber [Julien]{keep},
+vielen Dank für deinen Brief! Ich wohne in der [Eilenriede-
+straße 18]{place} in [Hannover]{place}, in einem Haus mit Garten. Mein
+Hund heißt Bruno, und ich gehe mit ihm jeden Tag spazieren.
+In der Schule habe ich Französisch bei Madame [Leclerc]{person}.
+Sie sagt, dass mein Akzent besser wird. Am liebsten spiele
+ich Fußball im [FC Niedersachsen Nord]{institution}, und ich verehre
+[Kylian Mbappé]{keep}. Kennst du ihn auch? Vielleicht können wir
+uns mal in [Paris]{keep} treffen. Schreib mir bald,
+dein [Noah]{person}

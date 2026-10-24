@@ -1,0 +1,16 @@
+arbeit: Nathan Ringparabel Klausur.pdf
+klasse: 11
+form: Interpretation
+fach: Deutsch
+aufgabe: Interpretiere die Ringparabel aus Lessings "Nathan der Weise".
+---
+In der Ringparabel erzählt [Nathan]{keep} dem Sultan [Saladin]{keep}, wie
+ein Vater seinen Ring an drei Söhne verteilen will. Der echte
+Ring macht beliebt bei Gott und den Menschen. Weil der Vater
+alle drei liebt, lässt er zwei Kopien machen. Ein Richter rät
+den Söhnen, durch gute Taten zu zeigen, wer den echten Ring
+trägt. [Gotthold Ephraim Lessing]{keep} will damit sagen, dass keine
+Religion die einzig wahre ist. Das passt zu meiner Erfahrung.
+Meine Mutter ist [Christin]{religion}, mein Vater [Muslim]{religion}, und wir
+feiern beides zu Hause in [Neuss]{place}. Mein bester Freund
+[Samuel Katz]{person} ist [Jude]{religion}, und auch mit ihm gibt es nie Streit.

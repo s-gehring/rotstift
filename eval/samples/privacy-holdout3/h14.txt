@@ -1,0 +1,17 @@
+arbeit: Interpretation Kurzgeschichte.pdf
+klasse: 9
+form: Interpretation
+fach: Deutsch
+aufgabe: Interpretiere die Kurzgeschichte "Das Brot" von Wolfgang Borchert.
+---
+In der Kurzgeschichte "Das Brot" von [Wolfgang Borchert]{keep} geht es
+um ein altes Ehepaar nach dem Krieg. Mitten in der Nacht hört
+die Frau ein Geräusch in der Küche und findet ihren Mann dort
+vor, der heimlich ein Stück Brot gegessen hat. Beide tun so, als
+wäre nichts gewesen. Am nächsten Abend gibt die Frau ihm
+eine ihrer Scheiben und sagt, sie vertrage das Brot abends
+nicht. Dadurch zeigt sie Liebe, ohne ein Wort über seine Lüge
+zu verlieren. Die Sprache ist einfach und kurz, was zur Not
+der Nachkriegszeit passt. Meine Oma [Gertrud]{person} hat mir erzählt,
+dass sie als Kind in [Hannover]{place} ebenfalls gehungert hat.
+Darum berührt mich der Text besonders.

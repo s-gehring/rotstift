@@ -1,0 +1,24 @@
+arbeit: Lebenslauf Praktikum.docx
+klasse: 9
+form: Lebenslauf
+fach: Deutsch
+aufgabe: Schreibe einen tabellarischen Lebenslauf für eine Bewerbung um einen Praktikumsplatz.
+---
+Lebenslauf
+
+Persönliche Daten
+Name: [Marie-Louise
+Schulze-Brandt]{person}
+Geburtsdatum: [17.09.2010]{date}
+Geburtsort: [Mönchengladbach]{place}
+Anschrift: [Rosenstraße 24]{place}, [41061 Mönchengladbach]{place}
+Telefon: [02161 / 55 80 91]{contact}
+E-Mail: [marie.schulzebrandt@mail.example]{contact}
+
+Schulbildung
+2016 bis 2020: [Katholische Grundschule Rheindahlen]{institution}
+seit 2020: [Franz-Meyers-Gymnasium]{institution}
+
+Kenntnisse und Interessen
+Englisch (gut), Französisch (Grundkenntnisse)
+Hobbys: Klavier, Volleyball im [TV Eintracht 08]{institution}

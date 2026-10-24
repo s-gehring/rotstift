@@ -1,0 +1,17 @@
+arbeit: Vorleser Hanna.pdf
+klasse: 12
+form: Charakterisierung
+fach: Deutsch
+aufgabe: Charakterisiere Hanna Schmitz aus Bernhard Schlinks Roman "Der Vorleser".
+---
+Hanna Schmitz ist eine der zentralen Figuren in dem Roman
+"Der Vorleser" von [Bernhard Schlink]{keep}. Sie arbeitet als Straßen-
+bahnschaffnerin und beginnt eine Beziehung mit dem fünfzehn-
+jährigen [Michael Berg]{keep}. Sie wirkt streng und verschlossen, will
+aber, dass er ihr vorliest. Später stellt sich heraus, dass sie
+nicht lesen und schreiben kann, was sie aus Scham verbirgt.
+Vor Gericht gibt sie lieber ihre Schuld zu, als ihr Geheimnis
+preiszugeben. Das erinnert mich an meinen Großvater [Jürgen
+Mahnke]{person}, der aus Scham nie zugegeben hat, dass er mit
+der Rente in [Cuxhaven]{place} nicht über die Runden kommt. Schlink
+zeigt damit, wie Stolz Menschen unfrei machen kann.

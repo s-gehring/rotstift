@@ -1,0 +1,19 @@
+arbeit: Erörterung Handyverbot.pdf
+klasse: 8
+form: Erörterung
+fach: Deutsch
+aufgabe: Sollte an Schulen ein generelles Handyverbot gelten?
+---
+In [Frankreich]{keep} dürfen Handys an Schulen schon seit Jahren
+nicht mehr benutzt werden. Auch bei uns an der
+[Anne-Frank-Realschule]{institution} wird darüber diskutiert. Unsere
+Schulleiterin, Frau Doktor [Paulsen]{person}, hat in der Versammlung
+gesagt, dass sie ein Verbot erwägt. Dafür spricht, dass
+sich die Schüler in den Pausen mehr unterhalten würden.
+Dagegen spricht, dass viele ihre Eltern anrufen müssen,
+zum Beispiel wenn der Bus ausfällt. Ich fahre jeden Morgen
+von [Wesel-Büderich]{place} mit dem Bus, und wenn er nicht kommt,
+muss meine Mutter mich abholen. Mein Mitschüler [Kerem]{person}
+meint, ein Verbot sei wie bei [Harry Potter]{keep} in Hogwarts: Da gibt
+es auch keine Handys. Ich finde, man sollte die Geräte
+nur im Unterricht wegpacken.

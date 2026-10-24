@@ -1,0 +1,17 @@
+arbeit: Inhaltsangabe Emil.pdf
+klasse: 6
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse den Anfang von "Emil und die Detektive" von Erich Kästner zusammen.
+---
+In dem Roman "Emil und die Detektive" von [Erich Kästner]{keep}
+geht es um einen Jungen, dem im Zug Geld gestohlen wird.
+[Emil Tischbein]{keep} fährt allein von seiner Heimatstadt nach
+Berlin zu seiner Großmutter. Seine Mutter hat ihm 140 Mark
+mitgegeben, die er bei seiner Tante abgeben soll. Im Abteil
+sitzt ein Mann mit einem steifen Hut, Herr [Grundeis]{keep}, der
+Emil Süßigkeiten gibt. Als Emil einschläft, stiehlt der Mann
+das Geld. In Berlin verfolgt Emil den Dieb und lernt den
+Jungen [Gustav]{keep} mit der Hupe kennen. Gemeinsam mit vielen
+Kindern bilden sie eine Gruppe von Detektiven.
+Am Schluss wird der Dieb gefasst.
