@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createDictionaryDetector, wordForms } from '../src/privacy/dictionary.ts';
+import { compoundForms, createDictionaryDetector, wordForms } from '../src/privacy/dictionary.ts';
 import { createModelDetector, type AskModel } from '../src/privacy/model-detector.ts';
+import { createNamesDetector, namesFromWorkName } from '../src/privacy/names.ts';
 import { createDetectWork, DETECTORS } from '../src/privacy-review/detect.ts';
 import type { PrivacySpan as AppSpan } from '../src/privacy/types.ts';
 import { privacyCache } from './privacy-inputs.ts';
@@ -43,11 +44,20 @@ export function spellbook(allForms: readonly string[]): (word: string) => boolea
 }
 
 export function candidateForms(inputs: readonly WorkInput[]): string[] {
-  return inputs.flatMap((input) =>
-    [...input.lines.join('\n').matchAll(/\p{Lu}[\p{L}'’]*/gu)].flatMap((match) =>
-      wordForms(match[0]),
+  return inputs.flatMap((input) => [
+    ...[...input.lines.join('\n').matchAll(/\p{Lu}[\p{L}'’]*/gu)].flatMap((match) => [
+      ...wordForms(match[0]),
+      ...compoundForms(match[0]),
+    ]),
+    ...namesFromWorkName(input.context.workName).flatMap((part) =>
+      [part, part.replaceAll('ae', 'ä').replaceAll('oe', 'ö').replaceAll('ue', 'ü')].flatMap(
+        (word) => {
+          const lower = word.toLocaleLowerCase('de');
+          return [word, lower, lower.charAt(0).toLocaleUpperCase('de') + lower.slice(1)];
+        },
+      ),
     ),
-  );
+  ]);
 }
 
 export interface ChainOptions {
@@ -61,6 +71,7 @@ export async function runChain(input: WorkInput, options: ChainOptions): Promise
   const { models, ask, isWord, loaded } = options;
   const detectors = [
     ...DETECTORS,
+    createNamesDetector(async (words) => new Set(words.filter((word) => !isWord(word)))),
     createDictionaryDetector(async (words) => new Set(words.filter((word) => !isWord(word)))),
     ...(models.length === 0
       ? []
@@ -69,6 +80,7 @@ export async function runChain(input: WorkInput, options: ChainOptions): Promise
             models,
             sensitiveModel: models.includes(E4B) ? E4B : E2B,
             ask,
+            unknownWords: async (words) => new Set(words.filter((word) => !isWord(word))),
             ...(loaded && { loaded }),
           }),
         ]),

@@ -273,6 +273,54 @@ node --experimental-transform-types eval/privacy-score.ts --set eval/samples/pri
 
 Das Transkript muss als `ocr-privacy-holdout2.json` in `~/.cache/rotstift/eval/privacy` liegen (`ocr-run.ts` mit `glm-ocr-q8` auf den mit `render.py --heft --one-page` gerenderten Seiten, wie für dev und Holdout).
 
+## Nachtrag: Lektüreliste und Lesefehler
+
+Der blinde Holdout zeigte drei Arten von Lecks (Einrichtungen mit Eigennamen, zerlesene Namen, Daten im Briefkopf) und eine hohe Überersetzung bei Figuren und Prominenten. Die Kette bekam dafür neue Regeln und eine Liste der Schullektüre, beschrieben in [ADR 0011](../adr/0011-personenbezug-entfernen.md#schichten). Das Modell und sein Prompt blieben unverändert.
+
+**Satz:** Alle drei bisherigen Sätze zusammen als dev, also `privacy/dev` (46), `privacy/holdout` (23) und `privacy-holdout2` (32), 101 Arbeiten mit 523 Vorkommen von Kennungen und 180 zu behaltenden Namen. Keiner dieser Sätze ist mehr blind, die Zahlen unten sind Entwicklungszahlen. Gemessen wird blind auf einem dritten Satz, der hier nicht vorkommt.
+
+**Verfahren:** Iteriert wurde auf der GPU von simon-pc (llama.cpp-Image `server-cuda-b11552`, das sich von b11551 nur im Umgang mit parallelen Anfragen unterscheidet). Die Schlussmessung lief auf simon-pc nur auf der CPU (Ryzen 7 5700X, 4 Threads, `-ngl 0 --device none`) mit dem llama-server der App, b11551 (Commit 69f201a20, wie in `scripts/runtime/manifest.ts`). Da der Prompt gleich bleibt, bekommt das Modell vorher und nachher dieselben Eingaben. Ein Lauf liefert die Antworten, `privacy-score.ts` spielt daraus die Kette von main (vorher) und die neue Kette (nachher) nach. 163 von 165 Antworten stimmten mit einem älteren CPU-Lauf von main überein.
+
+### Ergebnis
+
+Anteil der Arbeiten ohne ein einziges durchgerutschtes Vorkommen einer Kennung (95-%-Intervall), E2B, 101 Arbeiten:
+
+| Kette   |                 sauber |     erkannt (GLM-OCR) |             rauschen |
+| ------- | ---------------------: | --------------------: | -------------------: |
+| vorher  |   **97 %** (92 bis 99) |  **95 %** (89 bis 98) | **74 %** (65 bis 82) |
+| nachher | **100 %** (96 bis 100) | **99 %** (95 bis 100) | **85 %** (77 bis 91) |
+
+Weitere Maße (Reihenfolge sauber, erkannt, rauschen):
+
+| Kette   | Vorkommen gefunden | Überersetzung (Wörter) |           Figuren ersetzt | sensibel gefunden | Kette ohne Modell (CPU) |
+| ------- | -----------------: | ---------------------: | ------------------------: | ----------------: | ----------------------: |
+| vorher  |   99 %, 99 %, 94 % |    4,9 %, 5,2 %, 9,6 % | 136/180, 140/180, 148/180 |  51 %, 51 %, 31 % |                 0,42 ms |
+| nachher | 100 %, 100 %, 97 % |    1,2 %, 1,4 %, 7,8 % |      6/180, 6/180, 53/180 |  51 %, 51 %, 31 % |                  9,6 ms |
+
+- **Lecks:** Bei `sauber` bleibt keines, bei `erkannt` eines („Samstag, 15.03.“, das Gold markiert hier den Wochentag mit). Bei `rauschen` bleiben 15 Arbeiten mit Leck, fast alle durch stark zerlesene Namen („ksieiouon“, „fdldiöx“, „Zey(nep“, „lllly“), die weder Liste noch Wörterbuch noch Modell als Namen erkennen können. Dazu kommen Namen, die zugleich Wörter sind, ohne einen Hinweis im Satz („Sonne“, „Paris“).
+- **Überersetzung:** Bei `sauber` und `erkannt` sinkt sie auf rund ein Viertel. Figuren und Prominente bleiben fast alle stehen. Ersetzt werden noch Namen mit Partikel ohne Vornamen („von Walter“, „van Pels“) und ein Café, das in der Aufgabe steht. Bei `rauschen` werden Figuren weiter in rund einem Drittel der Fälle ersetzt, weil ihr Name zerlesen nicht mehr in der Liste steht.
+- **Recall je Kategorie** (`rauschen`): Person 92 → 94 %, Ort 96 → 100 %, Einrichtung 92 → 100 %, Datum 95 → 98 %.
+- **Sensible Angaben** sind unverändert, sie kommen nur vom Modell.
+- **Last:** Kein neues Modell, kein zusätzlicher Arbeitsspeicher (Peak-RSS 3,2 GB). Modell und Prompt sind unverändert, die Zeit des Modells also auch. Neu ist nur die Verarbeitung in TypeScript. Ihre CPU-Zeit (`process.cpuUsage()`, Median je Arbeit über 303 Texte und 5 Durchgänge nach dem Aufwärmen, Antworten des Modells aus dem Lauf wiedergegeben, auf dem Mac ohne laufendes llama) steigt von 0,42 ms auf 9,6 ms. Gegenüber 8,0 s für E2B je Arbeit auf simon-pc mit 4 Threads (blinder Holdout) sind das rund 0,1 % mehr. Die Zeit des Modells selbst ließ sich in diesem Lauf nicht sauber messen, weil simon-pc ab etwa der Hälfte fremd ausgelastet war.
+
+### Überanpassung
+
+Die Zahlen sind auf denselben 101 Arbeiten entstanden, an denen die Regeln geschrieben wurden, und sind darum eine Obergrenze.
+
+- **Die Lektüreliste deckt alle Werke der Proben ab.** Rund hundert Werke sind mehr als die Proben brauchen, aber jedes Werk der Proben steht darin. Eine Inhaltsangabe zu einem Werk, das fehlt, wird wie vorher überersetzt. Ein zu Unrecht behaltener Name geht dagegen nur hinaus, wenn das Werk genannt ist und der Name zufällig wie eine Figur heißt.
+- **Die Liste der Nachnamen, die zugleich Wörter sind** (rund 250), enthält alle solchen Namen der Proben. Die Proben wurden nach einer Vorgabe geschrieben, die genau diese Art Namen verlangt.
+- **Mehrere Regeln zielen auf einzelne Lecks** des blinden Holdouts (Praxis mit „Dr.“, Friedhof mit Ortsnamen, Firma über einen Zeilenumbruch, „St. Marien“ mit Lesefehlern). Sie sind allgemein formuliert, der Gewinn auf neuen Texten ist aber kleiner als hier.
+- **Am wenigsten angepasst** sind die Verbesserungen bei `rauschen`: Lesefehler-Präfixe, Lücken in Namen und Komposita folgen aus der Verteilung von `ocr-noise.ts`, nicht aus einzelnen Fällen.
+
+Ehrlich erwartet wird auf neuen Texten ein Gewinn bei `rauschen` von einigen Prozentpunkten und eine deutlich kleinere Überersetzung bei bekannter Lektüre. Die 100 % bei `sauber` werden sich nicht halten.
+
+```bash
+R=~/.cache/rotstift/eval/privacy/runs
+node --experimental-transform-types eval/privacy-chain-run.ts --set dev,holdout,eval/samples/privacy-holdout2 --models gemma-4-e2b-q4 --threads 4 --out $R/chain-all
+node --experimental-transform-types eval/privacy-score.ts --set dev,holdout,eval/samples/privacy-holdout2 --categories \
+  --detector "E2B=$R/chain-all-e2b.json:app"
+```
+
 ## Nachstellen
 
 Die Befehle stehen in [eval/README.md](../../eval/README.md#personenbezug-erkennen). Transkripte und Läufe liegen in `~/.cache/rotstift/eval/privacy` und sind nicht eingecheckt, die Heftbilder erzeugt `render.py` bei Bedarf neu. Für die Holdout-Tabelle:

@@ -944,3 +944,76 @@ describe('createModelDetector', () => {
     await expect(result).rejects.toThrow('Modell abgestürzt');
   });
 });
+
+const quotes = (items: readonly QuoteItem[]) =>
+  cleanItems(items, undefined).map((item) => item.quote);
+
+describe('cleanItems identifier filters', () => {
+  it.each(['Mama', 'Samstag', 'Ukraine', 'SPD', 'Oktober'])('drops the plain word %j', (word) => {
+    expect(quotes([identifier(word)])).toEqual([]);
+  });
+
+  it('drops class labels', () => {
+    expect(
+      quotes([identifier('8c', 'institution'), identifier('Klasse 7b', 'institution')]),
+    ).toEqual([]);
+  });
+
+  it('drops bare numbers and times for person and date', () => {
+    expect(quotes([identifier('1981', 'date'), identifier('7:40 Uhr', 'date')])).toEqual([]);
+    expect(quotes([identifier('1981', 'person')])).toEqual([]);
+  });
+
+  it('drops amounts as number', () => {
+    expect(quotes([identifier('340 Euro', 'number')])).toEqual([]);
+  });
+
+  it('keeps day-month dates', () => {
+    expect(quotes([identifier('15.03.', 'date')])).toEqual(['15.03.']);
+  });
+
+  it('keeps five-digit postcodes as place', () => {
+    expect(quotes([identifier('34117', 'place')])).toEqual(['34117']);
+  });
+
+  it('keeps phone numbers as contact', () => {
+    expect(quotes([identifier('0171 2345678', 'contact')])).toEqual(['0171 2345678']);
+  });
+});
+
+describe('createModelDetector with an unknownWords option', () => {
+  const lines = ['Die Hausaufgaben von Lena Becker und Zorbekmeier, Hahn und Finn.'];
+
+  async function quotesFor(items: readonly [string, string][], known: readonly string[]) {
+    const { ask } = scripted({ e2b: answer(items) });
+    const unknownWords = async (words: readonly string[]) =>
+      new Set(words.filter((word) => !known.includes(word)));
+    const spans = await run(
+      createModelDetector({ models: ['e2b'], sensitiveModel: 'e2b', ask, unknownWords }),
+      lines,
+    );
+    return covered(lines, spans).map(([, text]) => text);
+  }
+
+  it('drops a single long capitalized word the dictionary knows', async () => {
+    expect(await quotesFor([['Hausaufgaben', 'Person']], ['Hausaufgaben'])).toEqual([]);
+    expect(await quotesFor([['Hausaufgaben', 'Einrichtung']], ['Hausaufgaben'])).toEqual([]);
+  });
+
+  it('keeps unknown words', async () => {
+    expect(await quotesFor([['Zorbekmeier', 'Person']], [])).toEqual(['Zorbekmeier']);
+  });
+
+  it('keeps first names and word surnames even when the dictionary knows them', async () => {
+    expect(await quotesFor([['Finn', 'Person']], ['Finn'])).toEqual(['Finn']);
+    expect(await quotesFor([['Hahn', 'Person']], ['Hahn'])).toEqual(['Hahn']);
+  });
+
+  it('keeps known words that are not a single capitalized word of 7+ letters', async () => {
+    expect(await quotesFor([['Lena Becker', 'Person']], ['Lena Becker'])).toEqual(['Lena Becker']);
+  });
+
+  it('keeps a known word in other categories', async () => {
+    expect(await quotesFor([['Hausaufgaben', 'Ort']], ['Hausaufgaben'])).toEqual(['Hausaufgaben']);
+  });
+});

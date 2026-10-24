@@ -112,13 +112,13 @@ describe('privacy review work', () => {
       source: 'model',
       line: 1,
       offset: 0,
-      length: 16,
+      length: 14,
     };
     const pages = await createDetectWork([async () => [figure]])(
       [
         {
           pageId: 'p1',
-          lines: ['Maik Klingenberg trifft Tschick.', 'Maik und Klingenbergs Vater.'],
+          lines: ['Lena Brockmann trifft Jonte.', 'Lena und Brockmanns Vater.'],
         },
       ],
       { workName: 'Aufsatz.pdf', language: 'de' },
@@ -133,17 +133,14 @@ describe('privacy review work', () => {
       message: null,
     };
     expect(shown(before)).toEqual([
-      '<Maik Klingenberg=[Person 1]> trifft Tschick.',
-      '<Maik=[Person 2]> und <Klingenberg=[Person 3]>s Vater.',
+      '<Lena Brockmann=[Person 1]> trifft Jonte.',
+      '<Lena=[Person 2]> und <Brockmann=[Person 3]>s Vater.',
     ]);
 
-    const removed = removeIdentifier(before, 'p1', { line: 1, offset: 0, length: 16 });
-    expect(shown(removed)).toEqual([
-      'Maik Klingenberg trifft Tschick.',
-      'Maik und Klingenbergs Vater.',
-    ]);
+    const removed = removeIdentifier(before, 'p1', { line: 1, offset: 0, length: 14 });
+    expect(shown(removed)).toEqual(['Lena Brockmann trifft Jonte.', 'Lena und Brockmanns Vater.']);
 
-    const again = addIdentifier(removed, 'p1', { line: 1, offset: 0, length: 16 }, 'person');
+    const again = addIdentifier(removed, 'p1', { line: 1, offset: 0, length: 14 }, 'person');
     expect(again.removed).toEqual([]);
     expect(shown(again)).toEqual(shown(before));
   });

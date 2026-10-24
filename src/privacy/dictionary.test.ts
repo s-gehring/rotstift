@@ -123,3 +123,78 @@ describe('createDictionaryDetector', () => {
     await expect(detector(['Zorbek'], context, controller.signal)).rejects.toThrow(/abort/i);
   });
 });
+
+const everything: UnknownWords = async (words) => new Set(words);
+const onlyMathelehrer: UnknownWords = async (words) =>
+  new Set(words.filter((word) => /^mathelehrer$/iu.test(word)));
+const nameEndings: UnknownWords = async (words) =>
+  new Set(words.filter((word) => /(?:mann|berg)$/iu.test(word) && word.length > 8));
+
+function unknownExcept(...known: string[]): UnknownWords {
+  return async (asked) => new Set(asked.filter((word) => !known.includes(word)));
+}
+
+describe('findUnknownWordSpans with context', () => {
+  it('marks an unknown word followed by a house number as place including the number', async () => {
+    const lines = ['Wir wohnen in der AhortnalleK 21 seit Jahren.'];
+    const spans = await findUnknownWordSpans(
+      lines,
+      undefined,
+      unknownExcept('Wir', 'wir', 'Jahren', 'jahren'),
+      signal,
+    );
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.category).toBe('place');
+    expect(
+      lines[0]?.slice(spans[0]?.offset, (spans[0]?.offset ?? 0) + (spans[0]?.length ?? 0)),
+    ).toBe('AhortnalleK 21');
+  });
+
+  it('marks an unknown word after a facility noun as institution including the facility', async () => {
+    const lines = ['Mein Vater arbeitet im Autohaus Kleinschmidt seit zwei Jahren.'];
+    const spans = await findUnknownWordSpans(
+      lines,
+      undefined,
+      unknownExcept('Mein', 'mein', 'Vater', 'vater', 'Autohaus', 'autohaus', 'Jahren', 'jahren'),
+      signal,
+    );
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.category).toBe('institution');
+    expect(
+      lines[0]?.slice(spans[0]?.offset, (spans[0]?.offset ?? 0) + (spans[0]?.length ?? 0)),
+    ).toBe('Autohaus Kleinschmidt');
+  });
+
+  it('checks a token with lowercase junk by its uppercase part and flags the whole token', async () => {
+    const lines = ['Heute kam ocSelin zu Besuch.'];
+    const asked: string[][] = [];
+    const unknown: UnknownWords = async (words) => {
+      asked.push([...words]);
+      return new Set(['Selin', 'selin']);
+    };
+    expect(await found(lines, unknown)).toEqual(['ocSelin']);
+    expect(asked[0]).toContain('Selin');
+    expect(asked[0]).not.toContain('ocSelin');
+  });
+
+  it('never flags allowlisted words', async () => {
+    const result = await found(['Ich nutze Instagram und feiere Ramadan.'], everything);
+    expect(result).not.toContain('Instagram');
+    expect(result).not.toContain('Ramadan');
+  });
+
+  it('does not flag an unknown compound whose parts are both known', async () => {
+    expect(await found(['Mein Mathelehrer ist nett.'], onlyMathelehrer)).toEqual([]);
+  });
+
+  it('flags an unknown compound when one part is unknown too', async () => {
+    expect(await found(['Mein Mathelehrer ist nett.'], everything)).toContain('Mathelehrer');
+  });
+
+  it('does not split words that end in a name ending', async () => {
+    expect(await found(['Dort wohnt Hausermann und Sonnenberg.'], nameEndings)).toEqual([
+      'Hausermann',
+      'Sonnenberg',
+    ]);
+  });
+});

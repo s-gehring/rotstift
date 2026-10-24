@@ -1,4 +1,6 @@
 import { editDistance } from '../correction/edit-distance.ts';
+import type { UnknownWords } from './dictionary.ts';
+import { isFirstName } from './first-names.ts';
 import type { ChatMessage, ChatRequest } from '../llm/types.ts';
 import type {
   Detector,
@@ -7,6 +9,7 @@ import type {
   PrivacySpan,
   SensitiveCategory,
 } from './types.ts';
+import { WORD_SURNAMES } from './word-surnames.ts';
 
 const IDENTIFIER_LABELS: Readonly<Record<string, IdentifierCategory>> = {
   Person: 'person',
@@ -157,6 +160,42 @@ export function parseAnswer(content: string): QuoteItem[] {
 const ROLE_WORDS =
   /^(?:(?:frau|herr|herrn|fr\.|hr\.|dr\.|onkel|tante|oma|opa|cousin|cousine|bruder|schwester|freund|freundin|mitschüler|mitschülerin|lehrer|lehrerin|trainer|trainerin|liebe|lieber|hallo|mein|meine|meinem|meiner|dein|deine)\s+)+/iu;
 
+const NOT_IDENTIFIER_WORDS: ReadonlySet<string> = new Set(
+  `mama mami mutti papa papi vati oma omi opa opi mutter vater eltern großeltern familie geschwister
+  bruder schwester tante onkel cousin cousine nichte neffe sohn tochter enkel baby freund freundin
+  lehrer lehrerin klasse schule montag dienstag mittwoch donnerstag freitag samstag sonntag wochenende
+  januar februar märz april mai juni juli august september oktober november dezember deutschland
+  österreich schweiz europa afrika asien amerika usa türkei ukraine russland polen syrien italien
+  spanien frankreich griechenland kroatien england spd cdu csu afd fdp grüne grünen linke bsw verdi ver.di
+  gew ngg`
+    .split(/\s+/u)
+    .filter(Boolean),
+);
+
+const CLASS_LABEL = /^(?:klasse\s?)?\d{1,2}\s?[a-f]\.?$/iu;
+const BARE_NUMBER =
+  /^[\d\s.,:]*\d[\d\s.,:]*(?:\s?(?:uhr|euro|€|cent|jahre|jahren|jahre alt|prozent|%|km|meter|punkte))?\.?$/iu;
+const AMOUNT =
+  /^\d[\d.,]*\s?(?:euro|€|cent|jahre|jahren|jahre alt|prozent|%|km|meter|punkte)\.?$/iu;
+const DAY_MONTH = /\d\s?\.\s?\d/u;
+
+function notAnIdentifier(quote: string, category: IdentifierCategory): boolean {
+  const words = quote
+    .toLocaleLowerCase('de')
+    .split(/[^\p{L}]+/u)
+    .filter(Boolean);
+  if (words.length > 0 && words.every((word) => NOT_IDENTIFIER_WORDS.has(word))) {
+    return !/\d/u.test(quote);
+  }
+  if (category === 'number' && (AMOUNT.test(quote) || /^\d{1,3}$/u.test(quote))) return true;
+  if (category === 'contact' || category === 'number') return false;
+  if (CLASS_LABEL.test(quote)) return true;
+  if (!BARE_NUMBER.test(quote)) return false;
+  if (/uhr|:/iu.test(quote)) return true;
+  if (category === 'date') return !DAY_MONTH.test(quote);
+  return category !== 'place' || quote.replaceAll(/\D/gu, '').length < 5;
+}
+
 const WORD_LIMIT: Readonly<Record<IdentifierCategory, number>> = {
   person: 4,
   place: 8,
@@ -197,6 +236,7 @@ export function cleanItems(items: readonly QuoteItem[], task: string | undefined
     const quote = item.quote.replace(ROLE_WORDS, '').trim();
     const words = quote.split(/\s+/u).filter(Boolean);
     if (words.length === 0 || words.length > WORD_LIMIT[item.category]) return [];
+    if (notAnIdentifier(quote, item.category)) return [];
     const letters = words
       .map((word) => word.toLocaleLowerCase('de').replaceAll(/[^\p{L}]/gu, ''))
       .filter(Boolean);
@@ -340,6 +380,51 @@ export interface ModelDetectorOptions {
   readonly sensitiveModel: string;
   readonly ask: AskModel;
   readonly loaded?: () => string | null;
+  readonly unknownWords?: UnknownWords;
+}
+
+const MIN_NOUN_LENGTH = 7;
+
+const NAME_CUE =
+  /(?:^|[^\p{L}])(?:frau|herr|herrn|familie|fam\.|dr\.|prof\.|bei|liebe|lieber|geehrte|geehrter)\s+$/iu;
+
+function surnameWord(word: string): boolean {
+  const lower = word.toLocaleLowerCase('de');
+  return WORD_SURNAMES.has(lower) || (lower.endsWith('s') && WORD_SURNAMES.has(lower.slice(0, -1)));
+}
+
+function namedInText(quote: string, text: string): boolean {
+  for (const match of text.matchAll(new RegExp(`(?<![\\p{L}])${quote}(?![\\p{L}])`, 'gu'))) {
+    const before = text.slice(Math.max(0, match.index - 40), match.index);
+    if (NAME_CUE.test(before)) return true;
+    const previous = /(\p{L}+)\s+$/u.exec(before)?.[1];
+    if (previous !== undefined && isFirstName(previous)) return true;
+  }
+  return false;
+}
+
+function nounCandidate(item: QuoteItem, text: string): boolean {
+  return (
+    (item.category === 'person' || item.category === 'institution') &&
+    /^\p{Lu}\p{Ll}+$/u.test(item.quote) &&
+    item.quote.length >= MIN_NOUN_LENGTH &&
+    !isFirstName(item.quote) &&
+    !surnameWord(item.quote) &&
+    !namedInText(item.quote, text)
+  );
+}
+
+async function withoutNouns(
+  items: readonly QuoteItem[],
+  lines: readonly string[],
+  unknownWords: UnknownWords | undefined,
+  signal: AbortSignal,
+): Promise<QuoteItem[]> {
+  const text = lines.join('\n');
+  const candidates = items.filter((item) => nounCandidate(item, text)).map((item) => item.quote);
+  if (unknownWords === undefined || candidates.length === 0) return [...items];
+  const unknown = await unknownWords([...new Set(candidates)], signal);
+  return items.filter((item) => !nounCandidate(item, text) || unknown.has(item.quote));
 }
 
 function shift(spans: readonly PrivacySpan[], by: number): PrivacySpan[] {
@@ -347,7 +432,7 @@ function shift(spans: readonly PrivacySpan[], by: number): PrivacySpan[] {
 }
 
 export function createModelDetector(options: ModelDetectorOptions): Detector {
-  const { models, sensitiveModel, ask, loaded } = options;
+  const { models, sensitiveModel, ask, loaded, unknownWords } = options;
   return async (lines, context, signal) => {
     const current = loaded?.() ?? null;
     const order =
@@ -365,8 +450,13 @@ export function createModelDetector(options: ModelDetectorOptions): Detector {
           parseAnswer(await ask(model, privacyRequest(chunk.lines, context), signal)),
         );
       }
-      const identifiers = cleanItems([...answers.values()].flat(), context.task).filter(
-        (item) => item.kind === 'identifier',
+      const identifiers = await withoutNouns(
+        cleanItems([...answers.values()].flat(), context.task).filter(
+          (item) => item.kind === 'identifier',
+        ),
+        chunk.lines,
+        unknownWords,
+        signal,
       );
       const shown = (answers.get(sensitiveModel) ?? []).filter((item) => item.kind === 'sensitive');
       const items = [...identifiers, ...shown];

@@ -260,7 +260,7 @@ describe('localDetectors', () => {
     await expect(prepare()).rejects.toBeInstanceOf(DetectSetupError);
   });
 
-  it('returns the rule detectors followed by the dictionary and the model detector', async () => {
+  it('returns the rule detectors followed by the work name, dictionary and model detectors', async () => {
     const client = fakeModelClient({ states: { [E2B]: 'ready' } });
     const prepare = localDetectors({
       client,
@@ -269,7 +269,7 @@ describe('localDetectors', () => {
       engine: unusedEngine,
     });
     const detectors = await prepare();
-    expect(detectors).toHaveLength(DETECTORS.length + 2);
+    expect(detectors).toHaveLength(DETECTORS.length + 3);
     expect(detectors.slice(0, DETECTORS.length)).toEqual(DETECTORS);
   });
 
@@ -279,7 +279,7 @@ describe('localDetectors', () => {
     const prepare = localDetectors({ client, unknownWords: noWords, engine: unusedEngine });
     await expect(prepare()).rejects.toBeInstanceOf(DetectSetupError);
     states[E2B] = 'ready';
-    await expect(prepare()).resolves.toHaveLength(DETECTORS.length + 2);
+    await expect(prepare()).resolves.toHaveLength(DETECTORS.length + 3);
   });
 
   it('asks only E2B for the default level', async () => {

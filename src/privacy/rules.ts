@@ -1,3 +1,4 @@
+import { taskWords } from './first-names.ts';
 import {
   buildSearchText,
   mergeRanges,
@@ -245,6 +246,9 @@ function partialDate(match: RegExpExecArray, search: SearchText): boolean {
   return nearBirth(match, search) || letterDate(match, search);
 }
 
+const WEEKDAYS = 'Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonnabend|Sonntag';
+const STREET_START = 'Am|An der|An den|Auf dem|Auf der|Im|In der|Zum|Zur|Unter den|Hinter dem';
+
 const RULES: readonly Rule[] = [
   rule(
     'contact',
@@ -291,6 +295,15 @@ const RULES: readonly Rule[] = [
     'place',
     String.raw`${B}(?:${STREET_PREPOSITIONS})\s(?!(?:${NOT_STREET_NOUNS})${E})[A-ZÄÖÜ][\p{L}\-]+\s\d{1,3}(?:\s?[a-z](?![\p{L}]))?(?![\d.,]?\d)`,
   ),
+  rule(
+    'place',
+    String.raw`(?<=^|\n)(?!(?:${WEEKDAYS}|${STREET_START}|Vom|Bis|Seit|Heute|Datum)${E})(?:(?:Bad|Sankt|St\.)\s)?\p{Lu}[\p{L}\-]+(?:\s(?:am|an der|im|bei|ob der)\s\p{Lu}[\p{L}\-]+)?(?=,\s?(?:den\s)?\d{1,2}\s?\.)`,
+  ),
+  rule(
+    'place',
+    String.raw`${B}\p{Lu}[\p{L}\-]+\s+(?:${STREET_START})\s(?!(?:${NOT_STREET_NOUNS})${E})\p{Lu}[\p{L}\-]+${E}`,
+  ),
+  rule('person', String.raw`${B}(?:Dr|Prof)\.\s?(?:med\.\s?)?(?<v>\p{Lu}[\p{L}\-]+)`),
   rule(
     'date',
     String.raw`${B}(?<d>${DAY})${DOT}(?<m>\d{1,2})${DOT}(?:\d{4}|\d{2})(?!\d)`,
@@ -340,7 +353,17 @@ export function findRuleSpans(lines: readonly string[]): IdentifierSpan[] {
   return rangesOf(search).flatMap((range) => toSpans(search, range, 'rule'));
 }
 
-export const detectRules: Detector = async (lines, _context, signal) => {
+export const detectRules: Detector = async (lines, context, signal) => {
   signal.throwIfAborted();
-  return findRuleSpans(lines);
+  const fromTask = taskWords(context.task);
+  return findRuleSpans(lines).filter(
+    (span) =>
+      span.category !== 'person' ||
+      !fromTask.has(
+        (lines[span.line - 1] ?? '')
+          .slice(span.offset, span.offset + span.length)
+          .toLocaleLowerCase('de')
+          .replaceAll(/[^\p{L}]/gu, ''),
+      ),
+  );
 };
