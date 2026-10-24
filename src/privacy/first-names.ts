@@ -51,6 +51,20 @@ Tuncay Tunde Tyler Ulrike Umut Uwe Valentin Valentina Valentino Valerie Vanessa 
 Victoria Viktor Vincent Viola Vitus Vivien Vlad Vladislav Volkan Vuk Wiebke Wiktor Wiktoria Wilhelm
 Wilma Wojciech Xenia Yannick Yannis Yara Yaren Yasemin Yasin Yasmin Yigit Yonas Youssef Yulia Yunus
 Yusuf Zain Zara Zehra Zeynep Zilan Zoe Zoey Zofia Zuzanna
+Achim Adelheid Albrecht Alfred Almut Angelika Anke Annegret Anneliese Annemarie Antje Armin Arno
+Axel Barbara Beate Berthold Bodo Brigitte Brunhilde Burkhard Burkhardt Bärbel Christa Christel
+Cornelia Dagmar Detlef Detlev Dieter Dietmar Dietrich Doris Dorothea Eberhard Eckhard Edeltraud
+Edeltraut Edgar Edith Egon Ekkehard Elfi Elfriede Elke Elsbeth Engelbert Erhard Erich Erika Erna
+Erwin Friedhelm Gabriele Gerd Gerhard Gerlinde Gernot Gert Gertrud Gesine Gisela Gitte Gottfried
+Gudrun Gundula Gunter Günter Günther Hanne Hannelore Harald Hartmut Hartwig Hedwig Heidemarie Heidi
+Heidrun Heinrich Heinz Helene Helga Helmut Helmuth Henriette Herbert Hermann Herta Hertha Herwig
+Hilde Hildegard Hildegund Hiltrud Holger Horst Hubert Inge Ingeborg Ingo Ingrid Irene Irma Irmgard
+Joachim Jutta Jörg Jürgen Kerstin Käthe Lieselotte Liselotte Lore Lothar Luise Lutz Manfred
+Margarete Margit Margot Marianne Marlies Martina Mechthild Monika Norbert Ottilie Otto Petra Rainer
+Ralph Regina Reinhard Reinhold Renate Rita Roland Rolf Rosemarie Rosi Roswitha Rotraud Rotraut Rudi
+Rudolf Rüdiger Siegfried Sieglinde Siegmund Sigrid Silke Susanne Traudl Trude Ulla Ulrich Ursula Uta
+Ute Vera Volker Walburga Waldemar Walter Walther Waltraud Waltraut Werner Wilfried Willi Willy
+Winfried Wolfgang Wolfram
 `
     .split(/\s+/u)
     .filter(Boolean)
