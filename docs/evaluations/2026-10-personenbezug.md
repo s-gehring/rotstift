@@ -292,16 +292,16 @@ Anteil der Arbeiten ohne ein einziges durchgerutschtes Vorkommen einer Kennung (
 
 Weitere Maße (Reihenfolge sauber, erkannt, rauschen):
 
-| Kette   | Vorkommen gefunden | Überersetzung (Wörter) |           Figuren ersetzt | sensibel gefunden | Zeit je Arbeit (Mittel) |
+| Kette   | Vorkommen gefunden | Überersetzung (Wörter) |           Figuren ersetzt | sensibel gefunden | Kette ohne Modell (CPU) |
 | ------- | -----------------: | ---------------------: | ------------------------: | ----------------: | ----------------------: |
-| vorher  |   99 %, 99 %, 94 % |    4,9 %, 5,2 %, 9,6 % | 136/180, 140/180, 148/180 |  51 %, 51 %, 31 % |                    ZEIT |
-| nachher | 100 %, 100 %, 97 % |    1,2 %, 1,4 %, 7,8 % |      6/180, 6/180, 53/180 |  51 %, 51 %, 31 % |                    ZEIT |
+| vorher  |   99 %, 99 %, 94 % |    4,9 %, 5,2 %, 9,6 % | 136/180, 140/180, 148/180 |  51 %, 51 %, 31 % |                 0,42 ms |
+| nachher | 100 %, 100 %, 97 % |    1,2 %, 1,4 %, 7,8 % |      6/180, 6/180, 53/180 |  51 %, 51 %, 31 % |                  9,6 ms |
 
 - **Lecks:** Bei `sauber` bleibt keines, bei `erkannt` eines („Samstag, 15.03.“, das Gold markiert hier den Wochentag mit). Bei `rauschen` bleiben 15 Arbeiten mit Leck, fast alle durch stark zerlesene Namen („ksieiouon“, „fdldiöx“, „Zey(nep“, „lllly“), die weder Liste noch Wörterbuch noch Modell als Namen erkennen können. Dazu kommen Namen, die zugleich Wörter sind, ohne einen Hinweis im Satz („Sonne“, „Paris“).
 - **Überersetzung:** Bei `sauber` und `erkannt` sinkt sie auf rund ein Viertel. Figuren und Prominente bleiben fast alle stehen. Ersetzt werden noch Namen mit Partikel ohne Vornamen („von Walter“, „van Pels“) und ein Café, das in der Aufgabe steht. Bei `rauschen` werden Figuren weiter in rund einem Drittel der Fälle ersetzt, weil ihr Name zerlesen nicht mehr in der Liste steht.
 - **Recall je Kategorie** (`rauschen`): Person 92 → 94 %, Ort 96 → 100 %, Einrichtung 92 → 100 %, Datum 95 → 98 %.
 - **Sensible Angaben** sind unverändert, sie kommen nur vom Modell.
-- **Last:** Kein neues Modell, kein zusätzlicher Arbeitsspeicher (Peak-RSS 3,2 GB). Die Kette ohne Modell braucht auf simon-pc ZEITKETTE je Arbeit, das zählt gegenüber dem Modell nicht.
+- **Last:** Kein neues Modell, kein zusätzlicher Arbeitsspeicher (Peak-RSS 3,2 GB). Modell und Prompt sind unverändert, die Zeit des Modells also auch. Neu ist nur die Verarbeitung in TypeScript. Ihre CPU-Zeit (`process.cpuUsage()`, Median je Arbeit über 303 Texte und 5 Durchgänge nach dem Aufwärmen, Antworten des Modells aus dem Lauf wiedergegeben, auf dem Mac ohne laufendes llama) steigt von 0,42 ms auf 9,6 ms. Gegenüber 8,0 s für E2B je Arbeit auf simon-pc mit 4 Threads (blinder Holdout) sind das rund 0,1 % mehr. Die Zeit des Modells selbst ließ sich in diesem Lauf nicht sauber messen, weil simon-pc ab etwa der Hälfte fremd ausgelastet war.
 
 ### Überanpassung
 
