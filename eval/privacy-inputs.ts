@@ -44,6 +44,7 @@ function ocrPages(set: string): Map<string, string[]> {
 }
 
 export function loadInputs(set: string, conditions: readonly Condition[]): WorkInput[] {
+  if (set.includes(',')) return set.split(',').flatMap((part) => loadInputs(part, conditions));
   const samples = readSamples(set.includes('/') ? set : join(samplesDir, 'privacy', set));
   const ocr = ocrPages(set);
   const noiseFile = join(privacyCache(), 'noise.json');

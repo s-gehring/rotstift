@@ -19,6 +19,7 @@ import {
 } from '../models/thoroughness.ts';
 import { createDictionaryDetector, type UnknownWords } from '../privacy/dictionary.ts';
 import { createModelDetector, type AskModel } from '../privacy/model-detector.ts';
+import { createNamesDetector } from '../privacy/names.ts';
 import type { Detector } from '../privacy/types.ts';
 import { DetectSetupError } from './detect-error.ts';
 import { createDetectWork, DETECTORS, type DetectWork } from './detect.ts';
@@ -147,8 +148,14 @@ export function localDetectors(deps: LocalDetectorDeps): () => Promise<readonly 
     if (chosen === null) throw new DetectSetupError(PRIVACY_MODEL_MISSING);
     return [
       ...DETECTORS,
+      createNamesDetector(deps.unknownWords),
       createDictionaryDetector(deps.unknownWords),
-      createModelDetector({ ...chosen, ask, loaded: () => engine.loadedModel() }),
+      createModelDetector({
+        ...chosen,
+        ask,
+        loaded: () => engine.loadedModel(),
+        unknownWords: deps.unknownWords,
+      }),
     ];
   };
 }

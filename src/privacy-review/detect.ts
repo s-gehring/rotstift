@@ -1,17 +1,13 @@
 import { detectFirstNames } from '../privacy/first-names.ts';
-import { detectNames } from '../privacy/names.ts';
+import { joinNames, withoutNounUses } from '../privacy/join-names.ts';
+import { findKeptNames, withoutKept } from '../privacy/known-names.ts';
 import { detectPatterns } from '../privacy/patterns.ts';
 import { propagateSpans } from '../privacy/propagate.ts';
 import type { PrivacyWorkPage } from '../privacy/pseudonymizing-corrector.ts';
 import { detectRules } from '../privacy/rules.ts';
 import type { Detector, DetectorContext, PrivacySpan } from '../privacy/types.ts';
 
-export const DETECTORS: readonly Detector[] = [
-  detectRules,
-  detectPatterns,
-  detectNames,
-  detectFirstNames,
-];
+export const DETECTORS: readonly Detector[] = [detectRules, detectPatterns, detectFirstNames];
 
 export interface DetectPage {
   readonly pageId: string;
@@ -51,9 +47,20 @@ export function createDetectWork(
       spans.push(...(await detector(lines, context, signal)));
     }
     signal.throwIfAborted();
-    const found = splitByPage(pages, spans);
+    const keptNames = findKeptNames(lines, context);
+    const kept = splitByPage(pages, keptNames);
+    const found = splitByPage(
+      pages,
+      withoutNounUses(lines, withoutKept(joinNames(lines, spans), keptNames, lines)),
+    );
     const propagated = propagateSpans(found);
-    return found.map((page, index) => ({ ...page, spans: propagated[index] ?? page.spans }));
+    return found.map((page, index) => ({
+      ...page,
+      spans: withoutNounUses(
+        page.lines,
+        withoutKept(propagated[index] ?? page.spans, kept[index]?.spans ?? [], page.lines),
+      ),
+    }));
   };
 }
 

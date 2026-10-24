@@ -1,7 +1,10 @@
 import { editDistance } from '../correction/edit-distance.ts';
 import { COMMON_WORDS } from './common-words.ts';
+import type { UnknownWords } from './dictionary.ts';
+import { isFirstName } from './first-names.ts';
 import { buildSearchText, toSpans, type CategorizedRange } from './search-text.ts';
 import type { Detector, IdentifierSpan } from './types.ts';
+import { WORD_SURNAMES } from './word-surnames.ts';
 
 const NOT_NAMES: ReadonlySet<string> = new Set(
   `
@@ -107,3 +110,41 @@ export const detectNames: Detector = async (lines, context, signal) => {
   signal.throwIfAborted();
   return findNameSpans(lines, namesFromWorkName(context.workName));
 };
+
+function spellings(part: string): string[] {
+  const umlauts = part.replaceAll('ae', 'ä').replaceAll('oe', 'ö').replaceAll('ue', 'ü');
+  return [
+    ...new Set(
+      [part, umlauts].flatMap((word) => {
+        const lower = word.toLocaleLowerCase('de');
+        return [word, lower, lower.charAt(0).toLocaleUpperCase('de') + lower.slice(1)];
+      }),
+    ),
+  ];
+}
+
+export async function topicWords(
+  parts: readonly string[],
+  unknownWords: UnknownWords,
+  signal: AbortSignal,
+): Promise<Set<string>> {
+  const candidates = parts.filter(
+    (part) =>
+      part.length >= 3 && !isFirstName(part) && !WORD_SURNAMES.has(part.toLocaleLowerCase('de')),
+  );
+  if (candidates.length === 0) return new Set();
+  const unknown = await unknownWords([...new Set(candidates.flatMap(spellings))], signal);
+  return new Set(candidates.filter((part) => spellings(part).some((form) => !unknown.has(form))));
+}
+
+export function createNamesDetector(unknownWords: UnknownWords): Detector {
+  return async (lines, context, signal) => {
+    signal.throwIfAborted();
+    const names = namesFromWorkName(context.workName);
+    const topics = await topicWords(names, unknownWords, signal);
+    return findNameSpans(
+      lines,
+      names.filter((name) => !topics.has(name)),
+    );
+  };
+}
