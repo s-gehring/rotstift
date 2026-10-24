@@ -1,0 +1,19 @@
+arbeit: Praktikumsbericht Tischlerei.pdf
+klasse: 8
+form: Praktikumsbericht
+fach: Deutsch
+aufgabe: Schreibe einen Bericht über dein einwöchiges Betriebspraktikum.
+---
+Mein Praktikum habe ich vom [10. bis 14. Mai]{date} in der Tischlerei
+[Möbelbau Hartmann GmbH]{institution} in [Detmold]{place} gemacht. Am
+ersten Tag hat mich der Meister, Herr [Hartmann]{person}, begrüßt und
+mir die Werkstatt gezeigt. Ich musste Schutzbrille und Gehörschutz
+tragen. Der Geselle [Aleksandar Petrović]{person} hat mir gezeigt, wie
+man ein Brett abhobelt und Zapfen sägt. Am Mittwoch durfte
+ich ein kleines Regal für mich selbst bauen. Die Arbeitszeit
+war von sieben bis halb vier, und die Mittagspause haben wir
+immer in der Werkstatt gemacht. Mein Betreuer in der Schule,
+Herr [Lindemann]{person}, hat mich am Donnerstag besucht und
+mit Herrn Hartmann gesprochen. Insgesamt hat mir das
+Praktikum gut gefallen, und ich überlege jetzt, Tischler
+zu werden. Das Handwerk macht mir mehr Spaß als Büro.

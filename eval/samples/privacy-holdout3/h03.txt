@@ -1,0 +1,17 @@
+arbeit: Mein Hobby Judo.pdf
+klasse: 5
+form: Beschreibung
+fach: Deutsch
+aufgabe: Beschreibe dein liebstes Hobby.
+---
+Mein liebstes Hobby ist Judo. Ich gehe zweimal in der Woche
+zum [Judoclub Kaiserslautern 1958]{institution}, immer dienstags
+und freitags um halb fünf. Unser Trainer heißt Herr [Nguyen]{person}
+und ist sehr streng, aber auch lustig. Zuerst machen wir
+uns warm und rennen durch die Halle. Dann üben wir Würfe
+und Haltegriffe. Mein Partner ist meistens [Jonas Petri]{person},
+weil wir gleich schwer sind. Ich habe schon den gelben
+Gürtel und will bald den orangen machen. Die Prüfung ist
+am [23. November]{date}. Im Fernsehen habe ich gesehen, dass
+[Ole Bischof]{keep} bei Olympia Gold gewonnen hat. Das will ich
+auch einmal schaffen.

@@ -1,0 +1,20 @@
+arbeit: Protokoll Versuch Säuren.pdf
+klasse: 9
+form: Versuchsprotokoll
+fach: Chemie
+aufgabe: Protokolliere den Versuch zur Neutralisation von Säuren und Laugen.
+---
+Datum: [28. Januar]{date}
+Versuchsleiter: [Philipp Voss]{person}, Partnerin: [Elif Çelik]{person}
+Ort: Chemieraum 2, [Gymnasium am Kaiserdom]{institution}
+
+Material: Becherglas, Salzsäure, Natronlauge, Universalindikator,
+Pipette. Durchführung: Wir gaben 20 ml Salzsäure in ein
+Becherglas und tropften den Indikator hinzu. Die Lösung
+färbte sich rot. Danach gaben wir tropfenweise Natronlauge zu,
+bis die Farbe auf grün umschlug. Beobachtung: Bei Neutralisation
+steigt der pH-Wert auf sieben, und die Lösung erwärmt sich
+leicht. Fazit: Es entsteht Salz und Wasser. Unser Lehrer
+Herr [Okonkwo]{person} hat das Ergebnis bestätigt. Die Sicherheits-
+regeln nach [Marie Curie]{keep} haben wir beachtet, Schutzbrille und
+Kittel waren Pflicht.

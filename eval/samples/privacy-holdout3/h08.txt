@@ -1,0 +1,21 @@
+arbeit: E-Mail an Herrn Roth.pdf
+klasse: 7
+form: E-Mail
+fach: Deutsch
+aufgabe: Schreibe eine E-Mail an Herrn Roth, deinen Mathelehrer, und entschuldige dich für ein Fehlen.
+---
+Betreff: Entschuldigung für den [3. und 4. Februar]{date}
+
+Sehr geehrter Herr [Roth]{keep},
+
+leider konnte ich am Montag und Dienstag nicht zum
+Unterricht kommen, weil ich mit einer Grippe im Bett lag.
+Mein Hausarzt, Dr. [Brinkmann]{person}, hat mich krankgeschrieben.
+Die Hausaufgaben für Mathe habe ich von meiner Banknachbarin
+[Anna-Lena Kruse]{person} bekommen. Falls Sie noch eine Entschuldigung
+von meinen Eltern brauchen, erreichen Sie meine Mutter unter
+[05241 / 887 3140]{contact}. Ich schreibe Ihnen auch noch einmal von
+meiner Mailadresse [yusuf.demir07@web.example]{contact}.
+
+Mit freundlichen Grüßen
+[Yusuf Demir]{person}, Klasse 7b, [Gymnasium Gütersloh Mitte]{institution}

@@ -1,0 +1,17 @@
+arbeit: Erörterung Schuluniform.pdf
+klasse: 9
+form: Erörterung
+fach: Deutsch
+aufgabe: Sollen an deutschen Schulen Schuluniformen eingeführt werden?
+---
+Immer wieder wird gefordert, auch in Deutschland Uniformen
+einzuführen, wie es sie in [England]{keep} längst gibt. Befürworter
+meinen, dadurch gebe es weniger Mobbing wegen Marken. Gegner
+sagen, dass man sich dann nicht mehr ausdrücken kann. Meine
+Cousine [Chiamaka]{person}, die an der [Sacred Heart School]{institution} in
+[Lagos]{place} war, trug jeden Tag Uniform und fand das praktisch.
+Ich selbst bin in [Nigeria]{origin} geboren und vor sechs Jahren nach
+[Essen]{place} gezogen. Hier wird manchmal über meine Kleidung
+gelacht. Trotzdem bin ich dagegen, weil Vielfalt zu einer
+Schule gehört. [Malala Yousafzai]{keep} hat gesagt, dass Bildung
+für alle Kinder da sein muss, nicht Kleidung.

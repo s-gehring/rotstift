@@ -1,0 +1,17 @@
+arbeit: Besuch der alten Dame.pdf
+klasse: 10
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Gib den Inhalt von Dürrenmatts Drama "Der Besuch der alten Dame" wieder.
+---
+Das Drama "Der Besuch der alten Dame" von [Friedrich Dürrenmatt]{keep}
+spielt in der verarmten Kleinstadt [Güllen]{keep}. Die reiche
+[Claire Zachanassian]{keep} kehrt dorthin zurück und bietet den Bürgern
+eine Milliarde, wenn sie dafür [Alfred Ill]{keep} töten, der sie früher
+im Stich gelassen hat. Zuerst lehnen die Güllener ab. Doch
+sie kaufen auf Kredit immer mehr ein und geraten in Schulden.
+Am Ende stimmen sie in einer Versammlung zu, und Ill wird
+getötet. Unser Deutschlehrer Herr [Baumgärtner]{person} sagt, die
+Geschichte zeige, wie Geld die Moral verdirbt. Für die
+Klassenarbeit am [12. Dezember]{date} habe ich das Stück
+zweimal gelesen.

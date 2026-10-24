@@ -1,0 +1,25 @@
+arbeit: Lebenslauf Abitur.pdf
+klasse: 13
+form: Lebenslauf
+fach: Deutsch
+aufgabe: Verfasse einen tabellarischen Lebenslauf für die Bewerbung um einen Studienplatz.
+---
+Lebenslauf
+
+Name:                [Thi Linh Nguyen]{person}
+Geboren am:          [04.02.2007]{date} in [Chemnitz]{place}
+Wohnort:             [Reichenhainer Straße 88]{place}, [09126 Chemnitz]{place}
+Telefon:             [0371 / 29 41 77]{contact}
+Mobil:               [0176 / 3849 2210]{contact}
+E-Mail:              [linh.nguyen.abi@posteo.example]{contact}
+
+Schule:
+2013 bis 2017        [Grundschule Altchemnitz]{institution}
+2017 bis 2025        [Johannes-Kepler-Gymnasium Chemnitz]{institution}
+Abitur-Prüfung:      Mai 2025, Note 1,4
+
+Praktika:
+2022                 [Klinikum Chemnitz]{institution}, Station Kinderheilkunde
+2024                 [Sparkasse Chemnitz]{institution}, Kundenberatung
+
+Sprachen:            Deutsch, Vietnamesisch (Muttersprache), Englisch

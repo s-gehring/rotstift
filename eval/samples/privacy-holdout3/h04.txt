@@ -1,0 +1,16 @@
+arbeit: Wir fahren nach Italien.jpg
+klasse: 5
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von deinem schönsten Ferienerlebnis.
+---
+In den Sommerferien waren wir zwei Wochen in [Italien]{keep}. Wir
+sind von unserem Haus in [Vaihingen]{place} aus mit dem Auto bis
+nach [Rimini]{keep} gefahren, das hat zehn Stunden gedauert. Mein
+kleiner Bruder [Luka]{person} hat die ganze Zeit gefragt, wann wir
+endlich da sind. Im Hotel haben wir ein Mädchen aus
+[Hamburg]{keep} kennengelernt, sie hieß [Fenja]{person}. Wir haben jeden
+Tag Sandburgen gebaut und Eis gegessen. Einmal ist Papa
+fast mit seinem Handy ins Wasser gegangen. Zum Glück
+hat Mama noch gerufen. Am letzten Abend gab es ein
+Feuerwerk am Strand. Ich wäre gern noch länger geblieben.

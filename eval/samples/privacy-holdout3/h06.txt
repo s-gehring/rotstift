@@ -1,0 +1,18 @@
+arbeit: Bildergeschichte 6a.pdf
+klasse: 6
+form: Bildergeschichte
+fach: Deutsch
+aufgabe: Schreibe zu den Bildern eine Geschichte mit Überschrift.
+---
+Der verschwundene Pausenbrot-Dieb
+
+In der großen Pause bemerkte [Tobias]{person}, dass sein Brot weg
+war. Er suchte in seinem Ranzen, aber da war nur noch die
+Banane. Da rief er seine Freundin [Aylin]{person}, und gemeinsam
+gingen sie los, um den Dieb zu finden. Hinter der Turnhalle
+sahen sie einen Hund, der gerade den letzten Bissen schluckte.
+Der Hausmeister Herr [Winkelmann]{person} kam dazu und lachte. Er
+sagte, der Hund gehöre der Nachbarin, die in der
+[Goethestraße 7]{place} wohnt. Am Ende schenkte Aylin ihm die Hälfte
+von ihrem Brot. So wurden sie alle drei satt, und der
+Hund bekam eine Wurst von der Nachbarin.

@@ -1,0 +1,19 @@
+arbeit: Facharbeit Einleitung.pdf
+klasse: 12
+form: Facharbeit
+fach: Physik
+aufgabe: Schreibe die Einleitung einer Facharbeit zu erneuerbaren Energien.
+---
+Einleitung
+
+Die Energiewende gehört zu den größten Aufgaben unserer Zeit.
+Schon [Albert Einstein]{keep} erkannte, dass Energie nicht verloren
+geht, sondern nur umgewandelt wird. In meiner Facharbeit
+untersuche ich, wie viel Strom eine Photovoltaikanlage auf dem
+Dach der [Max-Planck-Schule Rüsselsheim]{institution} im Jahr erzeugt.
+Mein Betreuer war Herr [Kaltenbach]{person}, der mir die Messdaten
+vom [1. März bis 30. September]{date} zur Verfügung gestellt hat. Auf
+unserem Hausdach in der [Mainzer Straße 6]{place} habe ich zusätzlich
+ein Mini-Modul angebracht. Die Frage lautet, ob sich eine
+Anlage für Familien wie meine lohnt, die [von Bürgergeld
+leben]{circumstances}. Die Arbeit gliedert sich in vier Teile.

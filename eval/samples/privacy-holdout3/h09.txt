@@ -1,0 +1,17 @@
+arbeit: Tagebuch Klassenfahrt.jpg
+klasse: 7
+form: Tagebucheintrag
+fach: Deutsch
+aufgabe: Schreibe einen Tagebucheintrag über den ersten Tag einer Klassenfahrt.
+---
+Liebes Tagebuch,
+heute ging unsere Klassenfahrt nach [Sylt]{keep} los. Um sechs Uhr
+morgens standen wir am Bahnhof in [Dortmund]{place}, wo ich seit
+meiner Geburt wohne. Frau [Schwarz]{person} hat alle durchgezählt,
+und Herr [Wolkow]{person} hat die Fahrkarten verteilt. Ich saß mit
+[Nikolai]{person} und [Hatice]{person} im Abteil, und wir haben die ganze
+Fahrt Karten gespielt. In der Jugendherberge teile ich mir
+ein Zimmer mit vier Mädchen. Leider schnarcht [Josefine
+Radke]{person} ziemlich laut. Abends sind wir zum Strand gelaufen,
+und das Meer war riesig und grau. Ich glaube, die
+Woche wird gut. Jetzt bin ich aber todmüde.

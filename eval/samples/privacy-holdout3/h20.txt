@@ -1,0 +1,26 @@
+arbeit: Brief an die Stadtverwaltung.pdf
+klasse: 10
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Beschwerdebrief an die Stadtverwaltung wegen eines Missstands.
+---
+[Anton Wieczorek]{person}
+[Lerchenweg 31]{place}
+[34117 Kassel]{place}
+[Kassel]{place}, den [5. Juni 2025]{date}
+
+An das Tiefbauamt der [Stadt Kassel]{institution}
+
+Beschwerde wegen der Straßenbeleuchtung
+
+Sehr geehrte Damen und Herren,
+
+seit drei Monaten ist die Laterne vor unserem Haus kaputt.
+Gerade im Winter ist es dort sehr dunkel, und meine kleine
+Schwester geht nach dem Flötenunterricht allein nach Hause.
+Ich habe schon unter der Nummer [0561 / 70 95 24]{contact} angerufen,
+aber niemand ist drangegangen. Mein Aktenzeichen lautet
+[TB-2025-04471]{number}. Bitte beheben Sie den Schaden bald.
+
+Mit freundlichen Grüßen
+[Anton Wieczorek]{person}

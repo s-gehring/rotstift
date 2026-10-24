@@ -1,0 +1,17 @@
+arbeit: Erlebnis Konzert.jpg
+klasse: 9
+form: Erlebniserzählung
+fach: Deutsch
+aufgabe: Erzähle von einem besonderen Ereignis, das du nicht vergessen wirst.
+---
+Das Konzert von [Taylor Swift]{keep} werde ich nie vergessen. Meine
+beste Freundin [Svenja Lorenz]{person} und ich hatten monatelang
+gespart, und im Sommer war es endlich so weit. Mit dem
+Zug sind wir von [Hagen]{place} nach [Gelsenkirchen]{keep} gefahren,
+wo die Arena lag. Vor dem Eingang standen
+tausende Fans mit Freundschaftsarmbändern. Meine Tante
+[Grazyna]{person} hatte uns die Tickets für zusammen 280 Euro
+besorgt. Wir haben jedes Lied mitgesungen, und am Ende
+hat Svenja geweint. Auf dem Heimweg haben wir unsere
+Mütter angerufen, die sich Sorgen gemacht hatten. Ich
+habe noch heute Gänsehaut, wenn ich daran denke.

@@ -1,0 +1,18 @@
+arbeit: Praktikum Pflegeheim.pdf
+klasse: 9
+form: Praktikumsbericht
+fach: Deutsch
+aufgabe: Schreibe einen Praktikumsbericht über deine Woche in einer sozialen Einrichtung.
+---
+Meine Woche im Pflegeheim [Haus Abendsonne]{institution} in [Hildesheim]{place}
+war anstrengend, aber ich habe viel gelernt. Am Montag, dem
+[6. Oktober]{date}, hat mich die Pflegedienstleiterin Frau [Zielinski]{person}
+durch das Haus geführt. Ich habe dann vor allem mit den
+Bewohnern gespielt und vorgelesen. Die Bewohnerin
+Frau [Henschel]{person} ist fast hundert und erzählt gern vom Krieg.
+Einmal habe ich ihr aus "Heidi" vorgelesen, das mochte sie sehr.
+Der Pfleger [Stefan]{person} hat mir erklärt, wie man jemanden
+richtig umlagert. Dabei habe ich mir den Rücken verzerrt,
+weil ich [wegen meines Bandscheibenvorfalls letztes Jahr]{health}
+eigentlich nicht schwer heben soll. Ich würde das Praktikum
+trotzdem jedem empfehlen, der gern mit Menschen arbeitet.

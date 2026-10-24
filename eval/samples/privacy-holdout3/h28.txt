@@ -1,0 +1,17 @@
+arbeit: Referat Geschichte DDR.pdf
+klasse: 9
+form: Referat
+fach: Geschichte
+aufgabe: Berichte über das Leben in der DDR.
+---
+Die DDR wurde 1949 gegründet und bestand bis zur Wende
+1990. Die Grenze zur Bundesrepublik wurde 1961 durch die Berliner
+Mauer abgeriegelt. Mein Urgroßvater [Walter Seidel]{person} hat
+in [Jena]{place} bei Zeiss gearbeitet und erzählte oft, dass die
+Leute vor den Läden Schlange standen. Viele Menschen wollten
+ausreisen, auch [Erich Honecker]{keep} konnte das nicht verhindern.
+Meine Oma [Ingrid]{person} war [bei den Montagsdemonstrationen]{politics}
+dabei und hatte Angst vor der Stasi. Nach dem 9. November 1989
+war die Mauer offen. Ich habe für das Referat unsere Familien-
+chronik benutzt, die in meinem Elternhaus in der [Saalstraße 3]{place}
+im Schrank liegt.

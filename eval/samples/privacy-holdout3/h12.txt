@@ -1,0 +1,18 @@
+arbeit: Tschick Inhaltsangabe.pdf
+klasse: 9
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Handlung des Romans "Tschick" von Wolfgang Herrndorf zusammen.
+---
+Der Roman "Tschick" von [Wolfgang Herrndorf]{keep} erzählt von
+zwei Jungen, die in den Sommerferien mit einem gestohlenen
+Lada quer durch Ostdeutschland fahren. Der Ich-Erzähler
+[Maik Klingenberg]{keep} ist vierzehn und wird in der Schule kaum
+beachtet. Eines Tages kommt ein neuer Schüler in die Klasse,
+[Andrej Tschichatschow]{keep}, den alle nur [Tschick]{keep} nennen. Er stammt
+aus [Russland]{keep} und fällt durch seinen Auftritt auf. Als Maiks
+Mutter in eine Klinik geht und sein Vater verreist, beschließen
+die beiden, ohne Karte und Plan Richtung Walachei zu fahren.
+Unterwegs treffen sie [Isa]{keep}, ein Mädchen von einer Müllhalde,
+und eine Familie, die sie freundlich aufnimmt. Am Ende baut
+Tschick einen Unfall, und beide müssen vor Gericht.

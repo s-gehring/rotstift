@@ -1,0 +1,18 @@
+arbeit: Schachnovelle.pdf
+klasse: 10
+form: Inhaltsangabe
+fach: Deutsch
+aufgabe: Fasse die Novelle "Schachnovelle" von Stefan Zweig zusammen.
+---
+Die "Schachnovelle" von [Stefan Zweig]{keep} spielt auf einem
+Passagierdampfer von New York nach Buenos Aires. An Bord ist
+der Schachweltmeister [Mirko Czentovic]{keep}, der gegen die Passagiere
+spielt. Plötzlich mischt sich ein Mann ein, [Dr. B.]{keep}, und
+verhilft den Gegnern zu einem Remis. Er erzählt, dass er von den
+Nationalsozialisten monatelang in einem Hotelzimmer
+eingesperrt war. Dort hat er sich ein Schachbuch gestohlen und
+Partien auswendig gelernt, bis er fast verrückt wurde. Im
+Spiel gegen Czentovic bricht er die Partie ab, weil er
+merkt, dass er wieder in den Wahn gerät. Mein Opa
+[Heinz Rübsam]{person} sagt, dass er das Buch in [Kiel]{place} in
+der Stadtbücherei zum ersten Mal gelesen hat.

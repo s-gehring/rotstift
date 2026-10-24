@@ -1,0 +1,18 @@
+arbeit: Referat Tierschutz.pdf
+klasse: 7
+form: Bericht
+fach: Biologie
+aufgabe: Berichte über ein Projekt zum Tierschutz, an dem du beteiligt warst.
+---
+Im Herbst haben wir mit der AG Umwelt das Tierheim in
+unserer Stadt besucht. Es heißt [Tierheim Lüneburg e.V.]{institution}
+und liegt am Stadtrand. Die Leiterin, Frau Dr. [Amsel]{person}, hat
+uns durch die Räume geführt und erklärt, wie viele Tiere
+im Jahr abgegeben werden. Wir haben Hunde ausgeführt und
+Katzen gestreichelt. Meine Mitschülerin [Pauline Sauer]{person}
+wollte am liebsten sofort einen Kater mitnehmen. Danach
+haben wir Spenden gesammelt. Auf dem Konto
+[DE45 2405 0110 0034 2210 17]{number} sind inzwischen
+über 400 Euro eingegangen. [Jane Goodall]{keep}, die berühmte
+Forscherin, sagte einmal, dass jeder Einzelne etwas ändern
+kann. Das wollen wir im nächsten Jahr wiederholen.

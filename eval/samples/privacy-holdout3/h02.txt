@@ -1,0 +1,21 @@
+arbeit: Brief an Oma.jpg
+klasse: 5
+form: Brief
+fach: Deutsch
+aufgabe: Schreibe einen Brief an eine Person, die weit weg wohnt.
+---
+[Bielefeld]{place}, den [14. März 2025]{date}
+
+Liebe Oma,
+ich hoffe, es geht dir gut. Bei uns in der [Teutoburger
+Straße 12]{place} ist viel los. Papa hat endlich mein Fahrrad
+repariert, und ich darf jetzt allein zur [Realschule
+Stieghorst]{institution} fahren. Letzte Woche habe ich eine Eins im
+Diktat geschrieben. Onkel [Piotr]{person} hat mir dafür zehn Euro
+geschenkt. In den Sommerferien kommen wir dich in [Danzig]{place}
+besuchen, wo du wohnst. Ich freue mich schon aufs Meer
+und auf deine Pierogi. Vielleicht fahren wir auch mal
+nach [Schweden]{keep}, wie [Pippi Langstrumpf]{keep} es immer wollte.
+Schreib bald zurück!
+
+Deine [Zofia]{person}

@@ -1,0 +1,17 @@
+arbeit: Praktikum Krankenhaus.pdf
+klasse: 10
+form: Praktikumsbericht
+fach: Biologie
+aufgabe: Beschreibe einen Tag in deinem Praktikum.
+---
+An meinem zweiten Praktikumstag im [Evangelischen Krankenhaus
+Lippstadt]{institution} durfte ich auf der Kinderstation mithelfen.
+Die Stationsleiterin Schwester [Renate]{person} hat mir die Handschuhe
+und den Kittel gegeben. Zuerst habe ich Frühstück verteilt und
+Fieber gemessen. Ein Junge, [Marlon]{person}, hat sich vor der
+Impfung gefürchtet, und ich habe ihm einen Comic von
+[Asterix]{keep} vorgelesen. Später war ich bei einer Besprechung
+dabei. Der Oberarzt Dr. [Hassan Farouk]{person} hat erklärt, wie man
+Blutwerte liest. In der Mittagspause bin ich mit der
+Praktikantin [Nele]{person} in die Cafeteria gegangen. Zum Schluss
+musste ich noch mein Berichtsheft unterschreiben lassen.
