@@ -164,13 +164,22 @@ Grundlage ist die Messung [Personenbezug lokal erkennen](../evaluations/2026-10-
 
 ### Schichten
 
-1. **Regeln** (`src/privacy/rules.ts`, `src/privacy/patterns.ts`): Kontaktdaten, Konten, Kennzeichen und Ziffernfolgen, Datumsangaben („12.03.2012“, „12. Mai“), Straßen mit Hausnummer, Schulen, Vereine und Kirchengemeinden nach ihrer Form („Käthe-Kollwitz-Realschule“, „TSV Eintracht“, „Gemeinde St. Johannes“).
-2. **Namen der Arbeit** (`src/privacy/names.ts`): Die Wörter aus dem Namen der Arbeit werden im Text gesucht.
-3. **Vornamen** (`src/privacy/first-names.ts`): Eine Liste häufiger Vornamen, auch türkischer, arabischer und osteuropäischer, dazu Auslöser wie „Frau“, „Onkel“, „mein Freund“, „Liebe“ oder „Grüße“ vor einem großgeschriebenen Wort. Nach „heiße“ und „Name ist“ zählt auch ein kleingeschriebenes Wort. Kurze Namen unter vier Buchstaben zählen nur großgeschrieben, Wörter der Aufgabenstellung nie.
+1. **Regeln** (`src/privacy/rules.ts`, `src/privacy/patterns.ts`): Kontaktdaten, Konten, Kennzeichen und Ziffernfolgen, Datumsangaben („12.03.2012“, „12. Mai“), Straßen mit Hausnummer, Schulen, Vereine und Kirchengemeinden nach ihrer Form („Käthe-Kollwitz-Realschule“, „TSV Eintracht“, „Gemeinde St. Johannes“). Dazu Praxen und Kanzleien mit Namen („Hausarztpraxis Dr. Berger“), Firmen mit Rechtsform („Technikwelt Hartmann GmbH“), Orte nach einem Ortswort wie Friedhof, Freibad oder Bäckerei („Friedhof Altenbochum“), Namen nach „St.“ oder „Sankt“, Schulwörter auch mit Lesefehlern („Gesamtchale Weststadt“), Orte nach „Am“ oder „An der“ („Sporthalle Am Hang“) und der Ort im Briefkopf vor dem Datum („Bad Homburg, 03.05.2025“).
+2. **Namen der Arbeit** (`src/privacy/names.ts`): Die Wörter aus dem Namen der Arbeit werden im Text gesucht. Kennt das Wörterbuch ein Wort, gilt es als Thema der Arbeit und wird übergangen („Erlebnis Opa“), außer es ist ein Vorname oder ein Nachname, der zugleich ein Wort ist.
+3. **Vornamen** (`src/privacy/first-names.ts`): Eine Liste häufiger Vornamen, auch türkischer, arabischer und osteuropäischer, dazu Auslöser wie „Frau“, „Onkel“, „mein Freund“, „Liebe“ oder „Grüße“ vor einem großgeschriebenen Wort. Nach „heiße“ und „Name ist“ zählt auch ein kleingeschriebenes Wort. Kurze Namen unter vier Buchstaben zählen nur großgeschrieben, Wörter der Aufgabenstellung nie. Monatsnamen wie Juli oder August zählen nicht, wenn sie als Monat stehen („im Juli“, „3. Mai“, „August 2025“).
 4. **Wörterbuch** (`src/privacy/dictionary.ts`, `src-tauri/src/spelling.rs`): Großgeschriebene Wörter ab drei Buchstaben, die das deutsche Wörterbuch in keiner Form kennt (auch kleingeschrieben und ohne Genitiv-s), gelten als Name. Das Wörterbuch ist `dictionary-de` (igerman98, GPL-2.0 oder GPL-3.0, 1,1 MB) und wird mit `spellbook` (MPL-2.0, reines Rust) in die App eingebaut. Es braucht kein Netz.
+   - Steht davor ein Einrichtungswort (Autohaus, Praxis), wird es eine Einrichtung, steht danach eine Hausnummer, ein Ort.
+   - Bis zu drei Kleinbuchstaben vor einem Großbuchstaben gelten als Lesefehler („ocSelin“), geprüft wird der Rest.
+   - Lange Wörter, die sich in zwei bekannte Teile zerlegen lassen, gelten als Komposita, nicht als Name, außer sie enden auf eine Namensendung wie -mann, -berg oder -hausen.
+   - Eine kleine Liste bekannter Fremdwörter (Instagram, Ramadan) zählt nie.
 5. **Lokales Modell** (`src/privacy/model-detector.ts`): Gemma 4 E2B mit dem Prompt `beispiele` aus der Messung, Temperatur 0, Antwort per JSON-Schema als Listen aus Zitat (höchstens 48 Zeichen) und Kategorie, getrennt nach Kennungen und sensiblen Angaben. Längere Arbeiten gehen in Stücken von höchstens 3000 Zeichen an das Modell.
 
 Vor der Suche fügen alle Schichten Wörter zusammen, die am Zeilenende getrennt sind und klein weitergehen („Bau-⏎er“).
+
+Nach den Schichten, vor und nach der Weitergabe:
+
+- **Zusammenführen** (`src/privacy/join-names.ts`): Ein Nachname, der zugleich ein Wort ist (`src/privacy/word-surnames.ts`, „Lilly Jung“), wird nach einem Personennamen mit ersetzt. Ebenso eine kurze kleingeschriebene Lücke zwischen zwei Namensteilen („Max vot Wettstein“) und ein kurzes Großwort direkt davor („Bn Wilhelm“). Ein Name, der zugleich ein Wort ist, bleibt stehen, wenn ein Artikel davorsteht („der Wolf“, „ein schlauer Fuchs“).
+- **Behalten** (`src/privacy/known-names.ts`, `src/privacy/known-works.ts`): Eine kuratierte Liste mit rund hundert Werken der Schullektüre samt Autoren und Figuren. Ein Werk gilt, wenn sein Titel in der Aufgabe, im Namen der Arbeit oder im Text steht. Titel, die auch Alltagswörter sind („Die Welle“, „Faust“, „Momo“), zählen im Text nur in Anführungszeichen. Dann bleiben seine Figuren und Autoren stehen, nicht aber ein Name direkt nach „meine Schwester“ oder „mein Banknachbar“ und nicht in Zusammensetzungen wie „Goethe-Gymnasium“. Dazu rund 300 Prominente mit vollem Namen (danach auch der Nachname allein) und Einzelnamen wie Goethe oder Merkel. Ohne genanntes Werk bleibt ein Freund namens Maik eine Kennung.
 
 ### Modellwahl
 
@@ -183,6 +192,8 @@ Vor der Suche fügen alle Schichten Wörter zusammen, die am Zeilenende getrennt
 - Rollenwörter am Anfang („Frau“, „Onkel“, „mein Freund“) werden abgeschnitten.
 - Zitate über der Wortgrenze je Kategorie werden verworfen (Person 4 Wörter, Ort und Einrichtung 8, sonst 12). Längere Zitate sind meist ganze Sätze.
 - Personennamen, deren Wörter alle in der Aufgabenstellung stehen, werden verworfen (Entscheidung 2).
+- Zitate, die keine Kennung sein können, werden verworfen: Verwandtschaftswörter, Wochentage, Monate, Länder, Parteien und Gewerkschaften, Klassen wie „7b“, Uhrzeiten, Jahreszahlen ohne Tag und Monat, Beträge und kurze Zahlen.
+- Einzelne großgeschriebene Wörter ab sieben Buchstaben als Person oder Einrichtung, die das Wörterbuch kennt und die kein Vorname sind, werden verworfen („Hausaufgaben“).
 - Jedes Zitat wird im Text gesucht, erst genau, dann mit kleinen Abweichungen, auch über Zeilenumbrüche. Jedes Vorkommen wird ersetzt. Ein Zitat, das nicht im Text steht, fällt weg.
 - Sensible Angaben werden nicht zusätzlich als Kennung ersetzt (Entscheidung 3): Liegt eine Kennung in einem sensiblen Zitat, fällt sie weg, wenn die Kennung Kontaktdaten sind, ein Ort bei Herkunft oder eine Einrichtung bei Gewerkschaft oder politischer Meinung. Personen, Daten und Nummern bleiben immer ersetzt.
 
@@ -213,7 +224,7 @@ Die Regelschicht wurde an den Lecks des Holdouts nachgeschärft, die 100 % sind 
 ## Folgen und Grenzen
 
 - Kein Detektor ist vollständig. Eine übersehene Kennung geht hinaus. Am häufigsten sind das zerlesene Namen auf schlecht gelesener Handschrift und einzelne Vorkommen in langen Arbeiten.
-- Die Erkennung ersetzt zu viel, vor allem Figuren, Autoren und Prominente in Inhaltsangaben. Die Prüfansicht ist dafür die Schwelle: Die Lehrkraft nimmt sie dort mit einem Klick je Name zurück. Eine Liste bekannter Figuren gibt es nicht.
+- Die Erkennung ersetzt zu viel, vor allem auf Text mit Lesefehlern. Figuren, Autoren und Prominente behält sie nur, wenn sie in der Liste stehen, sonst nimmt die Lehrkraft sie in der Prüfansicht mit einem Klick je Name zurück. Die Liste ist an den Proben der Messung entstanden und deckt nicht jede Lektüre ab.
 - Sensible Angaben sind ein Hinweis „möglicherweise sensibel“ ohne Anspruch auf Vollständigkeit. Mit E2B allein findet die Erkennung laut Messung etwa die Hälfte.
 - Die Erkennung braucht E2B auch dann, wenn alle Textschritte in der Cloud laufen, also rund 3 GB Platte und Arbeitsspeicher und 10 bis 20 s je Arbeit auf einem Rechner ohne GPU. Deshalb bestätigt die Lehrkraft in der Prüfansicht je Arbeit den geschwärzten Text, und die Hinweise sprechen von „pseudonymisiert“, nicht von „anonym“. Die Verantwortung bleibt bei der Lehrkraft.
 - Auch der geschwärzte Text ist personenbezogen (C-434/16): Der Inhalt der Antworten, der Schreibstil und seltene Umstände können eine Person bestimmbar machen. Das Schwärzen verkleinert das Risiko, es beseitigt es nicht.

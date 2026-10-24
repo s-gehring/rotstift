@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { detectNames, findNameSpans, namesFromWorkName } from './names.ts';
+import type { UnknownWords } from './dictionary.ts';
+import { createNamesDetector, detectNames, findNameSpans, namesFromWorkName } from './names.ts';
 
 function found(lines: readonly string[], names: readonly string[]) {
   return findNameSpans(lines, names).map((span) =>
@@ -149,5 +150,40 @@ describe('findNameSpans', () => {
         length: 3,
       },
     ]);
+  });
+});
+
+describe('createNamesDetector', () => {
+  const signal = new AbortController().signal;
+  const lines = ['Opa Hahn und Finn kochen. Die Kuendigung kam von Zorbek.'];
+
+  function detect(workName: string, known: readonly string[]) {
+    const unknownWords: UnknownWords = async (words) =>
+      new Set(words.filter((word) => !known.includes(word.toLocaleLowerCase('de'))));
+    return createNamesDetector(unknownWords)(lines, { workName, language: 'de' }, signal).then(
+      (spans) =>
+        spans.map((span) =>
+          (lines[span.line - 1] ?? '').slice(span.offset, span.offset + span.length),
+        ),
+    );
+  }
+
+  it('ignores work name parts that are dictionary words', async () => {
+    expect(await detect('Erlebnis Opa 7c.pdf', ['opa'])).toEqual([]);
+  });
+
+  it('ignores a dictionary word written with ae, oe or ue', async () => {
+    expect(await detect('Kuendigung Schreiben.pdf', ['kündigung', 'schreiben'])).toEqual([]);
+  });
+
+  it('keeps first names and word surnames even when the dictionary knows them', async () => {
+    expect(await detect('Praktikumsbericht Hahn Finn 9d.pdf', ['hahn', 'finn'])).toEqual([
+      'Hahn',
+      'Finn',
+    ]);
+  });
+
+  it('keeps work name parts the dictionary does not know', async () => {
+    expect(await detect('Aufsatz Zorbek 7a.pdf', [])).toEqual(['Zorbek']);
   });
 });

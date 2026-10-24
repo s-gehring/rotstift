@@ -42,7 +42,6 @@ describe('findRuleSpans', () => {
     ['Konrad-Adenauer-Straße 1-3', 'Konrad-Adenauer-Straße 1-3', 'place'],
     ['Wir wohnen Am Lindenhof 3.', 'Am Lindenhof 3', 'place'],
     ['Berliner Straße 15 b', 'Berliner Straße 15 b', 'place'],
-    ['Mühlheim, den 14.08.2025', '14.08.2025', 'date'],
     ['am 1.3.10 war das', '1.3.10', 'date'],
     ['Am 14. August 2025 war der Unfall.', '14. August 2025', 'date'],
     ['Am 3 Okt. 2024 ging es los.', '3 Okt. 2024', 'date'],
@@ -50,10 +49,27 @@ describe('findRuleSpans', () => {
     ['Ich bin am 12.03. geboren.', '12.03.', 'date'],
     ['Mein Geburtstag ist am 12. März.', '12. März', 'date'],
     ['geboren im März 2012', 'März 2012', 'date'],
-    ['Kassel, den 14.08.', '14.08.', 'date'],
   ])('finds %j', (line, text, category) => {
     expect(found([line])).toEqual([[text, category]]);
   });
+
+  it.each([
+    ['Mühlheim, den 14.08.2025', 'Mühlheim', '14.08.2025'],
+    ['Kassel, den 14.08.', 'Kassel', '14.08.'],
+    ['Bad Homburg, 03.05.2025', 'Bad Homburg', '03.05.2025'],
+  ])('finds place and date of the letter head %j', (line, place, date) => {
+    expect(found([line])).toEqual([
+      [place, 'place'],
+      [date, 'date'],
+    ]);
+  });
+
+  it.each(['Montag, den 12.03.2024', 'Am 14.03.2025 war es kalt.'])(
+    'finds no letter head place in %j',
+    (line) => {
+      expect(found([line]).filter(([, category]) => category === 'place')).toEqual([]);
+    },
+  );
 
   it.each([
     'Im Jahr 1989 fiel die Mauer.',
@@ -116,5 +132,43 @@ describe('findRuleSpans', () => {
     const aborted = new AbortController();
     aborted.abort();
     await expect(detectRules(['mia@web.de'], context, aborted.signal)).rejects.toThrow('aborted');
+  });
+});
+
+describe('findRuleSpans for doctors and halls', () => {
+  it('marks the surname after Dr. as person', () => {
+    expect(found(['Ich war bei Dr. Berger gestern.'])).toEqual([['Berger', 'person']]);
+  });
+
+  it('marks a named sports hall as place', () => {
+    expect(found(['Wir trainieren in der Sporthalle Am Hang jeden Tag.'])).toEqual([
+      ['Sporthalle Am Hang', 'place'],
+    ]);
+  });
+
+  it('marks a named sports hall across a line break as place', () => {
+    const lines = ['Wir trainieren in der Sporthalle', 'Am Hang jeden Tag.'];
+    const spans = findRuleSpans(lines);
+    expect(spans.map((span) => [span.line, span.category])).toEqual([
+      [1, 'place'],
+      [2, 'place'],
+    ]);
+  });
+});
+
+describe('detectRules with a task', () => {
+  const signal = new AbortController().signal;
+  const context = { workName: 'x', language: 'de', task: 'Schreibe an Dr. Hoffmann' };
+
+  it('drops person spans whose word is part of the task', async () => {
+    const lines = ['Sehr geehrter Dr. Hoffmann, ich war bei Dr. Berger.'];
+    const spans = await detectRules(lines, context, signal);
+    expect(found(lines, spans)).toEqual([['Berger', 'person']]);
+  });
+
+  it('keeps person spans when the task does not mention them', async () => {
+    const lines = ['Ich war bei Dr. Hoffmann.'];
+    const spans = await detectRules(lines, { workName: 'x', language: 'de' }, signal);
+    expect(found(lines, spans)).toEqual([['Hoffmann', 'person']]);
   });
 });

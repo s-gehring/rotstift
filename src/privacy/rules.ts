@@ -297,7 +297,7 @@ const RULES: readonly Rule[] = [
   ),
   rule(
     'place',
-    String.raw`(?<=^|\n)(?!(?:${WEEKDAYS}|${STREET_START}|Vom|Bis|Seit|Heute|Datum)${E})\p{Lu}[\p{L}\-]+(?:\s(?:am|an der|im|bei|ob der)\s\p{Lu}[\p{L}\-]+)?(?=,\s?(?:den\s)?\d{1,2}\s?\.)`,
+    String.raw`(?<=^|\n)(?!(?:${WEEKDAYS}|${STREET_START}|Vom|Bis|Seit|Heute|Datum)${E})(?:(?:Bad|Sankt|St\.)\s)?\p{Lu}[\p{L}\-]+(?:\s(?:am|an der|im|bei|ob der)\s\p{Lu}[\p{L}\-]+)?(?=,\s?(?:den\s)?\d{1,2}\s?\.)`,
   ),
   rule(
     'place',

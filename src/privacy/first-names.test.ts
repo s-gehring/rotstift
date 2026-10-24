@@ -107,3 +107,24 @@ describe('detectFirstNames', () => {
     await expect(detectFirstNames(['Lukas'], context, controller.signal)).rejects.toThrow(/abort/i);
   });
 });
+
+describe('findFirstNameSpans for months and new names', () => {
+  it.each([
+    ['Wir fahren im Juli weg.'],
+    ['Anfang August ist es heiß.'],
+    ['Im Juli 2025 war ich dort.'],
+    ['Am 3. Mai war ich dort.'],
+    ['Im Mai regnet es oft.'],
+  ])('does not treat the month in %j as a name', (line) => {
+    expect(found([line])).toEqual([]);
+  });
+
+  it('treats a month word as a name when it is used like one', () => {
+    expect(found(['Juli hat angerufen.'])).toEqual(['Juli']);
+  });
+
+  it('finds a newly listed name in lowercase', () => {
+    expect(found(['gestern kam kilian vorbei.'])).toEqual(['kilian']);
+    expect(found(['Gestern kam Kilian vorbei.'])).toEqual(['Kilian']);
+  });
+});

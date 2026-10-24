@@ -1,6 +1,7 @@
 import { detectFirstNames } from '../privacy/first-names.ts';
 import { joinNames, withoutNounUses } from '../privacy/join-names.ts';
 import { findKeptNames, withoutKept } from '../privacy/known-names.ts';
+import { detectNames } from '../privacy/names.ts';
 import { detectPatterns } from '../privacy/patterns.ts';
 import { propagateSpans } from '../privacy/propagate.ts';
 import type { PrivacyWorkPage } from '../privacy/pseudonymizing-corrector.ts';
@@ -64,4 +65,4 @@ export function createDetectWork(
   };
 }
 
-export const detectWork: DetectWork = createDetectWork();
+export const detectWork: DetectWork = createDetectWork([...DETECTORS, detectNames]);

@@ -105,3 +105,55 @@ describe('detectPatterns', () => {
     await expect(detectPatterns(['x'], context, controller.signal)).rejects.toThrow(/abort/i);
   });
 });
+
+describe('findPatternSpans for practices, companies, schools and cemeteries', () => {
+  it('marks a practice with a doctor title as one institution', () => {
+    expect(found(['Ich war in der Hausarztpraxis Dr. Berger heute.'])).toEqual([
+      ['Hausarztpraxis Dr. Berger', 'institution'],
+    ]);
+  });
+
+  it('covers a company name that spans two lines', () => {
+    const lines = ['Ich arbeite bei der Technikwelt', 'Hartmann GmbH in der Stadt.'];
+    const spans = findPatternSpans(lines);
+    expect(spans.map((span) => [span.line, span.category])).toEqual([
+      [1, 'institution'],
+      [2, 'institution'],
+    ]);
+    expect(
+      lines[1]?.slice(spans[1]?.offset, (spans[1]?.offset ?? 0) + (spans[1]?.length ?? 0)),
+    ).toBe('Hartmann GmbH');
+  });
+
+  it('marks a parish with a lowercase prefix as institution', () => {
+    expect(found(['Wir gehen in die iKirchengemeinde St. Marien jeden Sonntag.'])).toEqual([
+      ['iKirchengemeinde St. Marien', 'institution'],
+    ]);
+  });
+
+  it('marks a misspelled school word followed by a name as institution', () => {
+    expect(found(['Ich gehe auf die Gesamtchale Weststadt seit Jahren.'])).toEqual([
+      ['Gesamtchale Weststadt', 'institution'],
+    ]);
+  });
+
+  it('marks a named cemetery as place', () => {
+    expect(found(['Wir gingen zum Friedhof Altenbochum und blieben lange.'])).toEqual([
+      ['Friedhof Altenbochum', 'place'],
+    ]);
+  });
+
+  it('does not mark a cemetery followed by a common word', () => {
+    expect(
+      found(['Wir gingen zum Friedhof Morgen früh.']).filter(([, c]) => c === 'place'),
+    ).toEqual([]);
+  });
+
+  it('covers a date with noise characters completely', () => {
+    expect(found(['Am 21.03.202o5 war es kalt.'])).toEqual([['21.03.202o5', 'date']]);
+  });
+
+  it('recognizes a date with a missing dot after the day', () => {
+    expect(found(['Am 2802.2012 war es kalt.'])).toEqual([['2802.2012', 'date']]);
+  });
+});
