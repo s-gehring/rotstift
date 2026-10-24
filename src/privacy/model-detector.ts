@@ -385,25 +385,46 @@ export interface ModelDetectorOptions {
 
 const MIN_NOUN_LENGTH = 7;
 
-function nounCandidate(item: QuoteItem): boolean {
+const NAME_CUE =
+  /(?:^|[^\p{L}])(?:frau|herr|herrn|familie|fam\.|dr\.|prof\.|bei|liebe|lieber|geehrte|geehrter)\s+$/iu;
+
+function surnameWord(word: string): boolean {
+  const lower = word.toLocaleLowerCase('de');
+  return WORD_SURNAMES.has(lower) || (lower.endsWith('s') && WORD_SURNAMES.has(lower.slice(0, -1)));
+}
+
+function namedInText(quote: string, text: string): boolean {
+  for (const match of text.matchAll(new RegExp(`(?<![\\p{L}])${quote}(?![\\p{L}])`, 'gu'))) {
+    const before = text.slice(Math.max(0, match.index - 40), match.index);
+    if (NAME_CUE.test(before)) return true;
+    const previous = /(\p{L}+)\s+$/u.exec(before)?.[1];
+    if (previous !== undefined && isFirstName(previous)) return true;
+  }
+  return false;
+}
+
+function nounCandidate(item: QuoteItem, text: string): boolean {
   return (
     (item.category === 'person' || item.category === 'institution') &&
     /^\p{Lu}\p{Ll}+$/u.test(item.quote) &&
     item.quote.length >= MIN_NOUN_LENGTH &&
     !isFirstName(item.quote) &&
-    !WORD_SURNAMES.has(item.quote.toLocaleLowerCase('de'))
+    !surnameWord(item.quote) &&
+    !namedInText(item.quote, text)
   );
 }
 
 async function withoutNouns(
   items: readonly QuoteItem[],
+  lines: readonly string[],
   unknownWords: UnknownWords | undefined,
   signal: AbortSignal,
 ): Promise<QuoteItem[]> {
-  const candidates = items.filter(nounCandidate).map((item) => item.quote);
+  const text = lines.join('\n');
+  const candidates = items.filter((item) => nounCandidate(item, text)).map((item) => item.quote);
   if (unknownWords === undefined || candidates.length === 0) return [...items];
   const unknown = await unknownWords([...new Set(candidates)], signal);
-  return items.filter((item) => !nounCandidate(item) || unknown.has(item.quote));
+  return items.filter((item) => !nounCandidate(item, text) || unknown.has(item.quote));
 }
 
 function shift(spans: readonly PrivacySpan[], by: number): PrivacySpan[] {
@@ -433,6 +454,7 @@ export function createModelDetector(options: ModelDetectorOptions): Detector {
         cleanItems([...answers.values()].flat(), context.task).filter(
           (item) => item.kind === 'identifier',
         ),
+        chunk.lines,
         unknownWords,
         signal,
       );

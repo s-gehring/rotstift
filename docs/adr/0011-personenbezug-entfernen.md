@@ -193,7 +193,7 @@ Nach den Schichten, vor und nach der Weitergabe:
 - Zitate über der Wortgrenze je Kategorie werden verworfen (Person 4 Wörter, Ort und Einrichtung 8, sonst 12). Längere Zitate sind meist ganze Sätze.
 - Personennamen, deren Wörter alle in der Aufgabenstellung stehen, werden verworfen (Entscheidung 2).
 - Zitate, die keine Kennung sein können, werden verworfen: Verwandtschaftswörter, Wochentage, Monate, Länder, Parteien und Gewerkschaften, Klassen wie „7b“, Uhrzeiten, Jahreszahlen ohne Tag und Monat, Beträge und kurze Zahlen.
-- Einzelne großgeschriebene Wörter ab sieben Buchstaben als Person oder Einrichtung, die das Wörterbuch kennt und die kein Vorname sind, werden verworfen („Hausaufgaben“).
+- Einzelne großgeschriebene Wörter ab sieben Buchstaben als Person oder Einrichtung, die das Wörterbuch kennt und die kein Vorname sind, werden verworfen („Hausaufgaben“). Das gilt nicht, wenn das Wort im Text nach einer Anrede, einem Familienwort oder einem Vornamen steht („Frau Schneider“, „bei Neumanns“, „Tim Richter“), und nicht für Nachnamen der Liste, auch mit End-s.
 - Jedes Zitat wird im Text gesucht, erst genau, dann mit kleinen Abweichungen, auch über Zeilenumbrüche. Jedes Vorkommen wird ersetzt. Ein Zitat, das nicht im Text steht, fällt weg.
 - Sensible Angaben werden nicht zusätzlich als Kennung ersetzt (Entscheidung 3): Liegt eine Kennung in einem sensiblen Zitat, fällt sie weg, wenn die Kennung Kontaktdaten sind, ein Ort bei Herkunft oder eine Einrichtung bei Gewerkschaft oder politischer Meinung. Personen, Daten und Nummern bleiben immer ersetzt.
 
